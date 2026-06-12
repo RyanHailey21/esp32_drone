@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Quad Tuner</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0d0d;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    padding: 20px 16px 40px;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+  }
+
+  h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #fff; }
+
+  #status-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #333; transition: background 0.3s; flex-shrink: 0;
+  }
+  #status-dot.connecting { background: #f5a623; }
+  #status-dot.connected  { background: #4caf50; }
+  #status-dot.error      { background: #f44336; }
+
+  #status-text { font-size: 11px; color: #555; text-align: right; margin-left: 8px; flex: 1; }
+
+  #connect-btn {
+    display: block; width: 100%; padding: 14px;
+    background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px;
+    color: #e0e0e0; font-family: 'Courier New', monospace; font-size: 13px;
+    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+    transition: border-color 0.2s, color 0.2s; margin-bottom: 28px;
+  }
+  #connect-btn:hover  { border-color: #444; color: #fff; }
+  #connect-btn.active { border-color: #f44336; color: #f44336; }
+
+  .section-label {
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: #333; margin-bottom: 16px; margin-top: 8px;
+    border-bottom: 1px solid #1a1a1a; padding-bottom: 6px;
+  }
+
+  .param {
+    margin-bottom: 24px; opacity: 0.3;
+    transition: opacity 0.3s; pointer-events: none;
+  }
+  .param.enabled { opacity: 1; pointer-events: all; }
+
+  .param-header {
+    display: flex; justify-content: space-between;
+    align-items: baseline; margin-bottom: 10px;
+  }
+  .param-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #777; }
+  .param-value { font-size: 22px; font-weight: 700; color: #fff; min-width: 60px; text-align: right; }
+  .param-unit  { font-size: 11px; color: #444; margin-left: 4px; }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 2px; background: #2a2a2a; outline: none; border-radius: 2px;
+  }
+  input[type=range].sprint::-webkit-slider-thumb  { background: #f5a623; }
+  input[type=range].hold::-webkit-slider-thumb    { background: #4caf50; }
+  input[type=range].punch::-webkit-slider-thumb   { background: #f44336; }
+  input[type=range].hover-t::-webkit-slider-thumb { background: #fff; }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 22px; height: 22px;
+    border-radius: 50%; cursor: pointer; border: none;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: none; background: #fff;
+  }
+
+  .param-bounds { display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; color: #333; }
+  .param-desc   { margin-top: 8px; font-size: 11px; color: #444; line-height: 1.5; }
+
+  .divider { border: none; border-top: 1px solid #1a1a1a; margin: 24px 0 20px; }
+
+  #log {
+    background: #111; border: 1px solid #1a1a1a; border-radius: 6px;
+    padding: 12px; font-size: 11px; color: #444; height: 130px;
+    overflow-y: auto; line-height: 1.8;
+  }
+  #log .ok  { color: #4caf50; }
+  #log .err { color: #f44336; }
+  #log .info { color: #666; }
+
+  #ble-warning {
+    background: #1a1100; border: 1px solid #3a2a00; border-radius: 6px;
+    padding: 12px 14px; font-size: 11px; color: #888; line-height: 1.6;
+    margin-bottom: 20px; display: none;
+  }
+  #ble-warning.show { display: block; }
+
+  .phase-badge {
+    display: inline-block; font-size: 9px; letter-spacing: 0.15em;
+    text-transform: uppercase; padding: 2px 6px; border-radius: 3px;
+    margin-left: 8px; vertical-align: middle;
+  }
+  .badge-sprint { background: #2a1f00; color: #f5a623; }
+  .badge-hold   { background: #001a00; color: #4caf50; }
+  .badge-punch  { background: #1a0000; color: #f44336; }
+  .badge-hover  { background: #1a1a1a; color: #888; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Quad Tuner</h1>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span id="status-text">disconnected</span>
+    <div id="status-dot"></div>
+  </div>
+</header>
+
+<div id="ble-warning">
+  Web BLE requires Chrome on Android or Chrome desktop.<br>
+  Not supported on iOS Safari or Firefox.
+</div>
+
+<button id="connect-btn">Connect to Quad-Tuner</button>
+
+<!-- HOVER TEST -->
+<div class="section-label">Hover Test <span class="phase-badge badge-hover">test only</span></div>
+
+<div class="param" id="param-hover">
+  <div class="param-header">
+    <span class="param-label">Hover Throttle</span>
+    <span><span class="param-value" id="val-hover">1420</span><span class="param-unit">µs</span></span>
+  </div>
+  <input type="range" class="hover-t" id="slider-hover" min="1200" max="1600" value="1420" step="5">
+  <div class="param-bounds"><span>1200</span><span>1600</span></div>
+  <div class="param-desc">Find this first in hover test mode. Everything else is relative to this number.</div>
+</div>
+
+<hr class="divider">
+
+<!-- SPRINT -->
+<div class="section-label">Sprint Phase <span class="phase-badge badge-sprint">full power to 60ft</span></div>
+
+<div class="param" id="param-sprint">
+  <div class="param-header">
+    <span class="param-label">Sprint Throttle</span>
+    <span><span class="param-value" id="val-sprint">1850</span><span class="param-unit">µs</span></span>
+  </div>
+  <input type="range" class="sprint" id="slider-sprint" min="1500" max="2000" value="1850" step="10">
+  <div class="param-bounds"><span>1500</span><span>2000</span></div>
+  <div class="param-desc">Full climb throttle. Higher = faster to 60ft = more clock time for punch.</div>
+</div>
+
+<div class="param" id="param-cutoff">
+  <div class="param-header">
+    <span class="param-label">Sprint Cutoff</span>
+    <span><span class="param-value" id="val-cutoff">17.0</span><span class="param-unit">m</span></span>
+  </div>
+  <input type="range" class="sprint" id="slider-cutoff" min="1400" max="1820" value="1700" step="10">
+  <div class="param-bounds"><span>14m (~46ft)</span><span>18.2m (~60ft)</span></div>
+  <div class="param-desc">Altitude to stop sprinting and begin hold. Keep below 60ft to absorb baro lag and avoid overshoot.</div>
+</div>
+
+<hr class="divider">
+
+<!-- HOLD -->
+<div class="section-label">Hold Phase <span class="phase-badge badge-hold">station-keep at 60ft</span></div>
+
+<div class="param" id="param-kp">
+  <div class="param-header">
+    <span class="param-label">Hold P-Gain (Kp)</span>
+    <span><span class="param-value" id="val-kp">120</span></span>
+  </div>
+  <input type="range" class="hold" id="slider-kp" min="200" max="3000" value="1200" step="50">
+  <div class="param-bounds"><span>20</span><span>300</span></div>
+  <div class="param-desc">Throttle correction per metre of altitude error. Too low = drifts. Too high = oscillates.</div>
+</div>
+
+<hr class="divider">
+
+<!-- PUNCH -->
+<div class="section-label">Punch Phase <span class="phase-badge badge-punch">max velocity before cut</span></div>
+
+<div class="param" id="param-punch-start">
+  <div class="param-header">
+    <span class="param-label">Punch Start</span>
+    <span><span class="param-value" id="val-punch-start">7.5</span><span class="param-unit">s</span></span>
+  </div>
+  <input type="range" class="punch" id="slider-punch-start" min="6000" max="7800" value="7500" step="100">
+  <div class="param-bounds"><span>6.0s</span><span>7.8s</span></div>
+  <div class="param-desc">When to begin final burst. Later = more velocity at cut. Must leave time to build speed before 8s.</div>
+</div>
+
+<div class="param" id="param-punch-throt">
+  <div class="param-header">
+    <span class="param-label">Punch Throttle</span>
+    <span><span class="param-value" id="val-punch-throt">2000</span><span class="param-unit">µs</span></span>
+  </div>
+  <input type="range" class="punch" id="slider-punch-throt" min="1600" max="2000" value="2000" step="10">
+  <div class="param-bounds"><span>1600</span><span>2000 (max)</span></div>
+  <div class="param-desc">Max throttle for the final burst. Leave at 2000 unless there's a reason to reduce.</div>
+</div>
+
+<hr class="divider">
+
+<div id="log"><span class="info">— ready —</span></div>
+
+<script>
+  const SERVICE_UUID       = 'ab0828b1-198e-4351-b779-901fa0e0371e';
+  const HOVER_UUID         = 'ab0828b2-198e-4351-b779-901fa0e0371e';
+  const SPRINT_THROT_UUID  = 'ab0828b5-198e-4351-b779-901fa0e0371e';
+  const SPRINT_CUTOFF_UUID = 'ab0828b6-198e-4351-b779-901fa0e0371e';
+  const HOLD_KP_UUID       = 'ab0828b7-198e-4351-b779-901fa0e0371e';
+  const PUNCH_START_UUID   = 'ab0828b8-198e-4351-b779-901fa0e0371e';
+  const PUNCH_THROT_UUID   = 'ab0828b9-198e-4351-b779-901fa0e0371e';
+
+  let chars = {};
+  let device = null, connected = false;
+
+  const connectBtn = document.getElementById('connect-btn');
+  const statusDot  = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+  const logEl      = document.getElementById('log');
+
+  if (!navigator.bluetooth) {
+    document.getElementById('ble-warning').classList.add('show');
+    connectBtn.disabled = true;
+    connectBtn.style.opacity = '0.3';
+    connectBtn.textContent = 'Web BLE not supported in this browser';
+  }
+
+  function log(msg, type='info') {
+    const el = document.createElement('div');
+    el.className = type;
+    el.textContent = new Date().toTimeString().slice(0,8) + '  ' + msg;
+    logEl.appendChild(el);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setStatus(s, t) { statusDot.className = s; statusText.textContent = t; }
+
+  function enableAll(on) {
+    ['hover','sprint','cutoff','kp','punch-start','punch-throt'].forEach(id => {
+      const el = document.getElementById('param-' + id);
+      if (el) el.classList.toggle('enabled', on);
+    });
+  }
+
+  connectBtn.addEventListener('click', () => connected ? disconnect() : connect());
+
+  async function connect() {
+    try {
+      setStatus('connecting', 'scanning...');
+      log('Scanning for Quad-Tuner...');
+      device = await navigator.bluetooth.requestDevice({
+        filters: [{ name: 'Quad-Tuner' }],
+        optionalServices: [SERVICE_UUID]
+      });
+      device.addEventListener('gattserverdisconnected', onDisconnected);
+      const server  = await device.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+
+      chars.hover       = await service.getCharacteristic(HOVER_UUID);
+      chars.sprint      = await service.getCharacteristic(SPRINT_THROT_UUID);
+      chars.cutoff      = await service.getCharacteristic(SPRINT_CUTOFF_UUID);
+      chars.kp          = await service.getCharacteristic(HOLD_KP_UUID);
+      chars.punchStart  = await service.getCharacteristic(PUNCH_START_UUID);
+      chars.punchThrot  = await service.getCharacteristic(PUNCH_THROT_UUID);
+
+      await readAll();
+
+      connected = true;
+      setStatus('connected', device.name);
+      connectBtn.textContent = 'Disconnect';
+      connectBtn.classList.add('active');
+      enableAll(true);
+      log('Connected to ' + device.name, 'ok');
+    } catch(e) {
+      setStatus('error', 'failed');
+      log('Error: ' + e.message, 'err');
+      setTimeout(() => setStatus('','disconnected'), 2000);
+    }
+  }
+
+  function disconnect() {
+    if (device && device.gatt.connected) device.gatt.disconnect();
+    onDisconnected();
+  }
+
+  function onDisconnected() {
+    connected = false; chars = {};
+    setStatus('','disconnected');
+    connectBtn.textContent = 'Connect to Quad-Tuner';
+    connectBtn.classList.remove('active');
+    enableAll(false);
+    log('Disconnected','err');
+  }
+
+  async function readAll() {
+    try {
+      const hover      = new DataView((await chars.hover.readValue()).buffer).getUint16(0,true);
+      const sprint     = new DataView((await chars.sprint.readValue()).buffer).getUint16(0,true);
+      const cutoffRaw  = new DataView((await chars.cutoff.readValue()).buffer).getUint16(0,true);
+      const kpRaw      = new DataView((await chars.kp.readValue()).buffer).getUint16(0,true);
+      const punchStart = new DataView((await chars.punchStart.readValue()).buffer).getUint32(0,true);
+      const punchThrot = new DataView((await chars.punchThrot.readValue()).buffer).getUint16(0,true);
+
+      setSlider('hover',       hover,      v => v);
+      setSlider('sprint',      sprint,     v => v);
+      setSlider('cutoff',      cutoffRaw,  v => (v/100).toFixed(1));  // raw is x100
+      setSlider('kp',          kpRaw,      v => (v/10).toFixed(0));   // raw is x10
+      setSlider('punch-start', punchStart, v => (v/1000).toFixed(1));
+      setSlider('punch-throt', punchThrot, v => v);
+
+      // sync slider positions
+      document.getElementById('slider-hover').value       = hover;
+      document.getElementById('slider-sprint').value      = sprint;
+      document.getElementById('slider-cutoff').value      = cutoffRaw;
+      document.getElementById('slider-kp').value          = kpRaw;
+      document.getElementById('slider-punch-start').value = punchStart;
+      document.getElementById('slider-punch-throt').value = punchThrot;
+
+      log('Values read from ESP32', 'ok');
+    } catch(e) { log('Read failed: ' + e.message, 'err'); }
+  }
+
+  function setSlider(id, raw, fmt) {
+    const el = document.getElementById('val-' + id);
+    if (el) el.textContent = fmt(raw);
+  }
+
+  function u16buf(v) { const b=new ArrayBuffer(2); new DataView(b).setUint16(0,v,true); return b; }
+  function u32buf(v) { const b=new ArrayBuffer(4); new DataView(b).setUint32(0,v,true); return b; }
+
+  const timers = {};
+  function debounce(key, fn, delay=150) {
+    clearTimeout(timers[key]);
+    timers[key] = setTimeout(fn, delay);
+  }
+
+  // hover throttle — uint16 direct
+  document.getElementById('slider-hover').addEventListener('input', function() {
+    const v = parseInt(this.value);
+    document.getElementById('val-hover').textContent = v;
+    debounce('hover', async () => {
+      if (!connected) return;
+      try { await chars.hover.writeValue(u16buf(v)); log('HOVER_THROTTLE → '+v,'ok'); }
+      catch(e) { log('Write failed: '+e.message,'err'); }
+    });
+  });
+
+  // sprint throttle — uint16 direct
+  document.getElementById('slider-sprint').addEventListener('input', function() {
+    const v = parseInt(this.value);
+    document.getElementById('val-sprint').textContent = v;
+    debounce('sprint', async () => {
+      if (!connected) return;
+      try { await chars.sprint.writeValue(u16buf(v)); log('SPRINT_THROTTLE → '+v,'ok'); }
+      catch(e) { log('Write failed: '+e.message,'err'); }
+    });
+  });
+
+  // sprint cutoff — float x100 as uint16
+  document.getElementById('slider-cutoff').addEventListener('input', function() {
+    const raw = parseInt(this.value);
+    document.getElementById('val-cutoff').textContent = (raw/100).toFixed(1);
+    debounce('cutoff', async () => {
+      if (!connected) return;
+      try { await chars.cutoff.writeValue(u16buf(raw)); log('SPRINT_CUTOFF → '+(raw/100).toFixed(1)+'m','ok'); }
+      catch(e) { log('Write failed: '+e.message,'err'); }
+    });
+  });
+
+  // hold Kp — float x10 as uint16
+  document.getElementById('slider-kp').addEventListener('input', function() {
+    const raw = parseInt(this.value);
+    document.getElementById('val-kp').textContent = (raw/10).toFixed(0);
+    debounce('kp', async () => {
+      if (!connected) return;
+      try { await chars.kp.writeValue(u16buf(raw)); log('HOLD_KP → '+(raw/10).toFixed(1),'ok'); }
+      catch(e) { log('Write failed: '+e.message,'err'); }
+    });
+  });
+
+  // punch start — uint32 ms
+  document.getElementById('slider-punch-start').addEventListener('input', function() {
+    const v = parseInt(this.value);
+    document.getElementById('val-punch-start').textContent = (v/1000).toFixed(1);
+    debounce('punchStart', async () => {
+      if (!connected) return;
+      try { await chars.punchStart.writeValue(u32buf(v)); log('PUNCH_START → '+(v/1000).toFixed(1)+'s','ok'); }
+      catch(e) { log('Write failed: '+e.message,'err'); }
+    });
+  });
+
+  // punch throttle — uint16 direct
+  document.getElementById('slider-punch-throt').addEventListener('input', function() {
+    const v = parseInt(this.value);
+    document.getElementById('val-punch-throt').textContent = v;
+    debounce('punchThrot', async () => {
+      if (!connected) return;
+      try { await chars.punchThrot.writeValue(u16buf(v)); log('PUNCH_THROTTLE → '+v,'ok'); }
+      catch(e) { log('Write failed: '+e.message,'err'); }
+    });
+  });
+</script>
+</body>
+</html>
