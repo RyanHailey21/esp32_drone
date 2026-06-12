@@ -121,6 +121,10 @@ save
 
 All parameters are writable live over BLE using `quad_tuner.html` in Chrome (Android or desktop). Connect to device named `Quad-Tuner`.
 
+> Open the file directly in Chrome: `start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html`
+> Web BLE requires Chrome — not Firefox, Edge, or iOS Safari.
+> If the device doesn't appear in the scan dialog, check `chrome://bluetooth-internals/#devices` to confirm Chrome can see it.
+
 | Parameter | Default | Description |
 |---|---|---|
 | `HOVER_THROTTLE` | 1420 | Throttle at neutral hover. Find in hover test mode first. |
@@ -149,61 +153,56 @@ All parameters are writable live over BLE using `quad_tuner.html` in Chrome (And
 
 ### Install board support
 
-```bash
+```pwsh
 arduino-cli config init
-arduino-cli config add board_manager.additional_urls \
-  https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+arduino-cli config add board_manager.additional_urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 arduino-cli core update-index
 arduino-cli core install esp32:esp32
 ```
 
 ### Install dependencies
 
-```bash
+```pwsh
 arduino-cli lib install "NimBLE-Arduino"
 ```
 
 ### Compile
 
-```bash
-arduino-cli compile \
-  --fqbn esp32:esp32:esp32c3 \
-  --build-property "build.extra_flags=-DARDUINO_USB_CDC_ON_BOOT=1" \
-  quad_mission
+```pwsh
+arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc .
 ```
+
+> `CDCOnBoot=cdc` is required — without it `Serial` does not map to the USB port and the serial monitor shows nothing.
 
 ### Upload
 
 Find your port first:
-```bash
+```pwsh
 arduino-cli board list
 ```
 
 Then upload:
-```bash
-arduino-cli upload \
-  --fqbn esp32:esp32:esp32c3 \
-  --port /dev/ttyUSB0 \
-  --build-property "build.extra_flags=-DARDUINO_USB_CDC_ON_BOOT=1" \
-  quad_mission
+```pwsh
+arduino-cli upload --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc --port COM11 .
 ```
 
 ### Monitor serial output
 
-```bash
-arduino-cli monitor --port /dev/ttyUSB0 --config baudrate=115200
+```pwsh
+arduino-cli monitor --port COM11 --config baudrate=115200
 ```
 
-> On Windows replace `/dev/ttyUSB0` with `COM3` (or whichever port appears in `board list`).
-> On macOS it will be something like `/dev/cu.usbmodem101`.
+> On Windows, use the `COM` port reported by `arduino-cli board list`.
+> On macOS, use something like `/dev/cu.usbmodem101`.
+> The ESP32-C3 Super Mini uses USB CDC — no separate USB-UART chip. If the port disappears after flashing, re-run `arduino-cli board list` as it may re-enumerate on a new COM number.
 
 ---
 
 ## Files
 
 ```
-quad_mission/
-  quad_mission.ino   — ESP32-C3 mission controller firmware
+esp32_drone/
+  esp32_drone.ino    — ESP32-C3 mission controller firmware
   quad_tuner.html    — BLE live tuning page (open in Chrome)
   README.md          — this file
 ```

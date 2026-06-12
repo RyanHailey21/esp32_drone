@@ -35,7 +35,6 @@
 #define STATUS_LED      8
 
 // ── Brushed Motor PWM ────────────────────────────────────────
-#define PWM_CHANNEL     0
 #define PWM_FREQ        25000
 #define PWM_RESOLUTION  8
 #define MOTOR_DUTY      255
@@ -104,7 +103,7 @@ class CBu16 : public NimBLECharacteristicCallbacks {
     volatile uint16_t* t; const char* n;
 public:
     CBu16(volatile uint16_t* t, const char* n) : t(t), n(n) {}
-    void onWrite(NimBLECharacteristic* c) override {
+    void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
         if (c->getValue().length() >= 2) {
             *t = *(uint16_t*)c->getValue().data();
             Serial.printf("[BLE] %s = %d\n", n, *t);
@@ -116,7 +115,7 @@ class CBu32 : public NimBLECharacteristicCallbacks {
     volatile uint32_t* t; const char* n;
 public:
     CBu32(volatile uint32_t* t, const char* n) : t(t), n(n) {}
-    void onWrite(NimBLECharacteristic* c) override {
+    void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
         if (c->getValue().length() >= 4) {
             *t = *(uint32_t*)c->getValue().data();
             Serial.printf("[BLE] %s = %d\n", n, *t);
@@ -129,7 +128,7 @@ class CBfloat : public NimBLECharacteristicCallbacks {
     volatile float* t; const char* n; float scale;
 public:
     CBfloat(volatile float* t, const char* n, float scale) : t(t), n(n), scale(scale) {}
-    void onWrite(NimBLECharacteristic* c) override {
+    void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
         if (c->getValue().length() >= 2) {
             uint16_t raw = *(uint16_t*)c->getValue().data();
             *t = raw / scale;
@@ -182,7 +181,12 @@ void setupBLE() {
         (uint8_t*)&PUNCH_THROTTLE, 2);
 
     svc->start();
-    NimBLEDevice::getAdvertising()->start();
+
+    NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+    adv->addServiceUUID(SERVICE_UUID);
+    adv->enableScanResponse(true);
+    adv->setName("Quad-Tuner");
+    adv->start();
     Serial.println("[BLE] Advertising as 'Quad-Tuner'");
 }
 
@@ -256,9 +260,8 @@ void setup() {
     Serial.begin(115200);
     fcSerial.begin(115200, SERIAL_8N1, FC_RX_PIN, FC_TX_PIN);
 
-    ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
-    ledcAttachPin(MOTOR_PWM_PIN, PWM_CHANNEL);
-    ledcWrite(PWM_CHANNEL, 0);
+    ledcAttach(MOTOR_PWM_PIN, PWM_FREQ, PWM_RESOLUTION);
+    ledcWrite(MOTOR_PWM_PIN, 0);
 
     pinMode(LAUNCH_PIN, INPUT_PULLUP);
     pinMode(STATUS_LED, OUTPUT);
@@ -334,7 +337,7 @@ void loop() {
 
             if (altitude >= SPRINT_CUTOFF_M) {
                 // Kick autorotation motor on entry to hold
-                ledcWrite(PWM_CHANNEL, MOTOR_DUTY);
+                ledcWrite(MOTOR_PWM_PIN, MOTOR_DUTY);
                 prespunUp = true;
                 state     = HOLDING;
                 Serial.printf("[STATE] → HOLDING at %.2fm (target %.2fm)\n",
