@@ -21,6 +21,58 @@ The quad sprints to 60ft as fast as possible, holds altitude while the clock run
 
 ---
 
+## Wiring Diagram
+
+```mermaid
+flowchart LR
+    BAT["GNB 3S LiHV\nXT30"]
+
+    subgraph FC ["SpeedyBee F405 Mini BLS 35A"]
+        direction TB
+        VBAT_IN["VBAT+ / GND"]
+        BEC5["5V BEC"]
+        BEC9["9V BEC"]
+        TX2["UART2 TX"]
+        RX2["UART2 RX"]
+        FCGND["GND"]
+    end
+
+    subgraph ESP ["ESP32-C3 Super Mini"]
+        direction TB
+        VIN["VIN"]
+        G5["GPIO5  RX ←"]
+        G4["GPIO4  TX →"]
+        G6["GPIO6  PWM"]
+        G3["GPIO3  Launch"]
+        G8["GPIO8  LED (built-in)"]
+        ESPGND["GND"]
+    end
+
+    subgraph MFET ["MOSFET Driver  IRLML2502"]
+        direction TB
+        GATE["Gate  ← 100Ω"]
+        DRAIN["Drain  → Motor −"]
+        MSRC["Source  → GND"]
+    end
+
+    BTN(["Launch Button\nSPST NO"])
+    MOTOR[["Brushed DC Motor\nAutorotation Pre-spin"]]
+
+    BAT      -->|"VBAT+ / GND"| VBAT_IN
+    BEC5     -->|"5V"| VIN
+    FCGND    -->|"GND"| ESPGND
+    TX2      -->|"FC TX → ESP RX"| G5
+    G4       -->|"ESP TX → FC RX"| RX2
+    BEC9     -->|"9V +"| MOTOR
+
+    G6       --> GATE
+    DRAIN    --> MOTOR
+    MSRC     --> ESPGND
+
+    G3       --> BTN
+    BTN      -->|"GND"| ESPGND
+```
+
 ## Wiring
 
 ```
