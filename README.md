@@ -24,7 +24,7 @@ The quad sprints to 60ft as fast as possible, holds altitude while the clock run
 ## Wiring Diagram
 
 ```mermaid
-flowchart LR
+graph LR
     BAT["GNB 3S LiHV\nXT30"]
 
     subgraph FC ["SpeedyBee F405 Mini BLS 35A"]
@@ -256,5 +256,6 @@ arduino-cli monitor --port COM11 --config baudrate=115200
 esp32_drone/
   esp32_drone.ino    — ESP32-C3 mission controller firmware
   quad_tuner.html    — BLE live tuning page (open in Chrome)
+  architecture.md    — state machine and variable flow diagrams
   README.md          — this file
 ```
