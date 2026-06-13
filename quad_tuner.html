@@ -44,6 +44,25 @@
   #connect-btn:hover  { border-color: #444; color: #fff; }
   #connect-btn.active { border-color: #f44336; color: #f44336; }
 
+  .controls {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 10px; margin-bottom: 28px; opacity: 0.3;
+    pointer-events: none; transition: opacity 0.3s;
+  }
+  .controls.enabled { opacity: 1; pointer-events: all; }
+
+  .cmd-btn {
+    padding: 13px 10px; background: #151515; border: 1px solid #2a2a2a;
+    border-radius: 6px; color: #e0e0e0; font-family: 'Courier New', monospace;
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    cursor: pointer; min-height: 44px;
+  }
+  .cmd-btn:hover { border-color: #555; color: #fff; }
+  .cmd-btn.primary { border-color: #3a2a00; color: #f5a623; }
+  .cmd-btn.danger { border-color: #3a1010; color: #f44336; }
+  .cmd-btn.wide { grid-column: 1 / -1; }
+  .cmd-btn.bench-on { border-color: #3a1010; color: #f44336; }
+
   .section-label {
     font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
     color: #333; margin-bottom: 16px; margin-top: 8px;
@@ -129,6 +148,14 @@
 </div>
 
 <button id="connect-btn">Connect to Quad-Tuner</button>
+
+<div class="controls" id="mission-controls">
+  <button class="cmd-btn" id="btn-hover-test">Hover Test</button>
+  <button class="cmd-btn" id="btn-auto-hover">Auto Hover Cal</button>
+  <button class="cmd-btn primary" id="btn-start-mission">Start Mission</button>
+  <button class="cmd-btn danger" id="btn-disarm">Disarm</button>
+  <button class="cmd-btn wide" id="btn-bench-mode">Bench Mode: Off</button>
+</div>
 
 <!-- HOVER TEST -->
 <div class="section-label">Hover Test <span class="phase-badge badge-hover">test only</span></div>
@@ -220,6 +247,13 @@
   const HOLD_KP_UUID       = 'ab0828b7-198e-4351-b779-901fa0e0371e';
   const PUNCH_START_UUID   = 'ab0828b8-198e-4351-b779-901fa0e0371e';
   const PUNCH_THROT_UUID   = 'ab0828b9-198e-4351-b779-901fa0e0371e';
+  const COMMAND_UUID       = 'ab0828ba-198e-4351-b779-901fa0e0371e';
+  const BENCH_MODE_UUID    = 'ab0828bb-198e-4351-b779-901fa0e0371e';
+
+  const CMD_HOVER_TEST     = 1;
+  const CMD_START_MISSION  = 2;
+  const CMD_DISARM         = 3;
+  const CMD_AUTO_HOVER_CAL = 4;
 
   let chars = {};
   let device = null, connected = false;
@@ -228,6 +262,8 @@
   const statusDot  = document.getElementById('status-dot');
   const statusText = document.getElementById('status-text');
   const logEl      = document.getElementById('log');
+  const benchBtn   = document.getElementById('btn-bench-mode');
+  let benchMode = 0;
 
   if (!navigator.bluetooth) {
     document.getElementById('ble-warning').classList.add('show');
@@ -251,6 +287,7 @@
       const el = document.getElementById('param-' + id);
       if (el) el.classList.toggle('enabled', on);
     });
+    document.getElementById('mission-controls').classList.toggle('enabled', on);
   }
 
   connectBtn.addEventListener('click', () => connected ? disconnect() : connect());
@@ -273,6 +310,8 @@
       chars.kp          = await service.getCharacteristic(HOLD_KP_UUID);
       chars.punchStart  = await service.getCharacteristic(PUNCH_START_UUID);
       chars.punchThrot  = await service.getCharacteristic(PUNCH_THROT_UUID);
+      chars.command     = await service.getCharacteristic(COMMAND_UUID);
+      chars.benchMode   = await service.getCharacteristic(BENCH_MODE_UUID);
 
       await readAll();
 
@@ -296,6 +335,8 @@
 
   function onDisconnected() {
     connected = false; chars = {};
+    benchMode = 0;
+    setBenchButton();
     setStatus('','disconnected');
     connectBtn.textContent = 'Connect to Quad-Tuner';
     connectBtn.classList.remove('active');
@@ -311,6 +352,7 @@
       const kpRaw      = new DataView((await chars.kp.readValue()).buffer).getUint16(0,true);
       const punchStart = new DataView((await chars.punchStart.readValue()).buffer).getUint32(0,true);
       const punchThrot = new DataView((await chars.punchThrot.readValue()).buffer).getUint16(0,true);
+      benchMode        = new DataView((await chars.benchMode.readValue()).buffer).getUint8(0);
 
       setSlider('hover',       hover,      v => v);
       setSlider('sprint',      sprint,     v => v);
@@ -326,6 +368,7 @@
       document.getElementById('slider-kp').value          = kpRaw;
       document.getElementById('slider-punch-start').value = punchStart;
       document.getElementById('slider-punch-throt').value = punchThrot;
+      setBenchButton();
 
       log('Values read from ESP32', 'ok');
     } catch(e) { log('Read failed: ' + e.message, 'err'); }
@@ -338,6 +381,51 @@
 
   function u16buf(v) { const b=new ArrayBuffer(2); new DataView(b).setUint16(0,v,true); return b; }
   function u32buf(v) { const b=new ArrayBuffer(4); new DataView(b).setUint32(0,v,true); return b; }
+  function u8buf(v)  { const b=new ArrayBuffer(1); new DataView(b).setUint8(0,v); return b; }
+
+  function setBenchButton() {
+    benchBtn.textContent = benchMode ? 'Bench Mode: On' : 'Bench Mode: Off';
+    benchBtn.classList.toggle('bench-on', !!benchMode);
+  }
+
+  async function sendCommand(cmd, label) {
+    if (!connected) return;
+    try {
+      await chars.command.writeValue(u8buf(cmd));
+      log(label, 'ok');
+    } catch(e) {
+      log('Command failed: ' + e.message, 'err');
+    }
+  }
+
+  document.getElementById('btn-hover-test').addEventListener('click', () => {
+    sendCommand(CMD_HOVER_TEST, 'Hover test command sent');
+  });
+
+  document.getElementById('btn-auto-hover').addEventListener('click', () => {
+    sendCommand(CMD_AUTO_HOVER_CAL, 'Auto hover calibration command sent');
+  });
+
+  document.getElementById('btn-start-mission').addEventListener('click', () => {
+    sendCommand(CMD_START_MISSION, 'Mission start command sent');
+  });
+
+  document.getElementById('btn-disarm').addEventListener('click', () => {
+    sendCommand(CMD_DISARM, 'Disarm command sent');
+  });
+
+  benchBtn.addEventListener('click', async () => {
+    if (!connected) return;
+    const next = benchMode ? 0 : 1;
+    try {
+      await chars.benchMode.writeValue(u8buf(next));
+      benchMode = new DataView((await chars.benchMode.readValue()).buffer).getUint8(0);
+      setBenchButton();
+      log(benchMode ? 'Bench mode enabled' : 'Bench mode disabled', benchMode ? 'err' : 'ok');
+    } catch(e) {
+      log('Bench mode write failed: ' + e.message, 'err');
+    }
+  });
 
   const timers = {};
   function debounce(key, fn, delay=150) {

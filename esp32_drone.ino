@@ -1,31 +1,8 @@
-// ============================================================
-//  Quad Mission Controller
-//  Hardware: ESP32-C3 Super Mini
-//
-//  Arduino IDE Board Settings:
-//    Board:             ESP32C3 Dev Module
-//    USB CDC On Boot:   Enabled
-//    CPU Frequency:     160 MHz
-//    Flash Size:        4MB
-//    Partition Scheme:  Default 4MB with spiffs
-//    Upload Speed:      921600
-//
-//  Libraries (install via Library Manager):
-//    - NimBLE-Arduino by h2zero
-//
-//  Note: uses Arduino core 2.x PWM API (ledcSetup/ledcAttachPin)
-//  If on core 3.x replace with: ledcAttach(pin, freq, resolution)
-//                                ledcWrite(pin, duty)
-//
-//  Mission Profile:
-//    SPRINT  → full throttle to 60ft as fast as possible
-//    HOLD    → P-controller holds 60ft, clock runs down
-//    PUNCH   → max throttle final burst before 8s cut
-//    CUT     → motors off, autorotation descent
-// ============================================================
-
-#include <HardwareSerial.h>
 #include <NimBLEDevice.h>
+
+// Runtime BLE-controlled bench mode for desk testing without a flight controller.
+// Defaults off on every boot. Never fly with bench mode enabled.
+volatile uint8_t BENCH_MODE_ENABLED = 0;
 
 // ── Pins ─────────────────────────────────────────────────────
 #define FC_TX_PIN       4
@@ -69,6 +46,26 @@ volatile uint16_t PUNCH_THROTTLE  = 2000;  // max throttle for final burst
 #define HOLD_KP_UUID        "ab0828b7-198e-4351-b779-901fa0e0371e"
 #define PUNCH_START_UUID    "ab0828b8-198e-4351-b779-901fa0e0371e"
 #define PUNCH_THROT_UUID    "ab0828b9-198e-4351-b779-901fa0e0371e"
+#define COMMAND_UUID        "ab0828ba-198e-4351-b779-901fa0e0371e"
+#define BENCH_MODE_UUID     "ab0828bb-198e-4351-b779-901fa0e0371e"
+
+#define CMD_HOVER_TEST      1
+#define CMD_START_MISSION   2
+#define CMD_DISARM          3
+#define CMD_AUTO_HOVER_CAL  4
+
+#define CAL_START_THROTTLE  1150
+#define CAL_MAX_THROTTLE    1650
+#define CAL_STEP_US         5
+#define CAL_STEP_MS         250
+#define CAL_LIFTOFF_M       0.35f
+#define CAL_BACKOFF_US      25
+#define CAL_TIMEOUT_MS      30000
+
+#define BENCH_SPRINT_RATE_MPS     9.0f
+#define BENCH_PUNCH_RATE_MPS      7.0f
+#define BENCH_HOVER_LIFTOFF_US    1325
+#define BENCH_HOVER_CAL_RATE_MPS  0.8f
 
 // ── RC Channels ──────────────────────────────────────────────
 // CH1=Roll CH2=Pitch CH3=Throttle CH4=Yaw CH5=AUX1(Arm) CH6=AUX2(Angle)
@@ -83,16 +80,27 @@ enum MissionState {
     PUNCHING,    // max throttle final burst
     CUT,
     HOVER_TEST,
+    AUTO_HOVER_CAL,
     DONE
 };
 MissionState state = IDLE;
 
 uint32_t launchTime = 0;
 uint32_t armTime    = 0;
+uint32_t calTime    = 0;
+uint32_t calStepTime = 0;
+uint16_t calThrottle = CAL_START_THROTTLE;
 float    launchAlt  = 0;
 bool     prespunUp  = false;
+float    benchAlt = 0;
+uint32_t benchLastMs = 0;
 
 HardwareSerial fcSerial(1);
+
+void startHoverTest();
+void startMission();
+void startAutoHoverCal();
+void disarmToIdle(const char* reason);
 
 
 // ============================================================
@@ -133,6 +141,64 @@ public:
             uint16_t raw = *(uint16_t*)c->getValue().data();
             *t = raw / scale;
             Serial.printf("[BLE] %s = %.2f\n", n, *t);
+        }
+    }
+};
+
+class CBcommand : public NimBLECharacteristicCallbacks {
+public:
+    void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
+        if (c->getValue().length() < 1) return;
+
+        uint8_t cmd = c->getValue()[0];
+        Serial.printf("[BLE] COMMAND = %d\n", cmd);
+
+        switch (cmd) {
+            case CMD_HOVER_TEST:
+                if (state == IDLE || state == DONE) startHoverTest();
+                else Serial.println("[BLE] Ignored hover test command: not idle");
+                break;
+
+            case CMD_START_MISSION:
+                if (state == IDLE || state == DONE) startMission();
+                else Serial.println("[BLE] Ignored mission command: not idle");
+                break;
+
+            case CMD_DISARM:
+                disarmToIdle("[BLE] Disarm command");
+                break;
+
+            case CMD_AUTO_HOVER_CAL:
+                if (state == IDLE || state == DONE) startAutoHoverCal();
+                else Serial.println("[BLE] Ignored auto hover calibration command: not idle");
+                break;
+
+            default:
+                Serial.println("[BLE] Unknown command");
+                break;
+        }
+    }
+};
+
+class CBbenchMode : public NimBLECharacteristicCallbacks {
+public:
+    void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
+        if (c->getValue().length() < 1) return;
+
+        uint8_t requested = c->getValue()[0] ? 1 : 0;
+        if (state != IDLE && state != DONE) {
+            Serial.println("[BLE] Ignored bench mode change: not idle");
+            c->setValue((uint8_t*)&BENCH_MODE_ENABLED, 1);
+            return;
+        }
+
+        BENCH_MODE_ENABLED = requested;
+        benchAlt = 0;
+        benchLastMs = 0;
+        c->setValue((uint8_t*)&BENCH_MODE_ENABLED, 1);
+        Serial.printf("[BLE] BENCH_MODE = %s\n", BENCH_MODE_ENABLED ? "ON" : "OFF");
+        if (BENCH_MODE_ENABLED) {
+            Serial.println("[BLE] WARNING: simulated altitude only. DO NOT FLY.");
         }
     }
 };
@@ -180,6 +246,15 @@ void setupBLE() {
         new CBu16(&PUNCH_THROTTLE, "PUNCH_THROTTLE"),
         (uint8_t*)&PUNCH_THROTTLE, 2);
 
+    uint8_t commandInit = 0;
+    makeChar(svc, COMMAND_UUID,
+        new CBcommand(),
+        (uint8_t*)&commandInit, 1);
+
+    makeChar(svc, BENCH_MODE_UUID,
+        new CBbenchMode(),
+        (uint8_t*)&BENCH_MODE_ENABLED, 1);
+
     svc->start();
 
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
@@ -216,26 +291,70 @@ void sendRC() {
 }
 
 float getAltitude() {
-    while (fcSerial.available()) fcSerial.read();
-    uint8_t empty = 0;
-    sendMSP(MSP_ALTITUDE, &empty, 0);
-    uint32_t timeout = millis() + 20;
-    while (fcSerial.available() < 9 && millis() < timeout);
-    if (fcSerial.available() < 9) return 0;
-    while (fcSerial.available() >= 9) {
-        if (fcSerial.read() != '$') continue;
-        if (fcSerial.read() != 'M') continue;
-        if (fcSerial.read() != '>') continue;
-        fcSerial.read(); fcSerial.read();  // len, cmd
-        int32_t alt_cm = 0;
-        alt_cm  = (uint32_t)fcSerial.read();
-        alt_cm |= (uint32_t)fcSerial.read() << 8;
-        alt_cm |= (uint32_t)fcSerial.read() << 16;
-        alt_cm |= (uint32_t)fcSerial.read() << 24;
-        fcSerial.read();  // checksum
-        return alt_cm / 100.0f;
+    if (!BENCH_MODE_ENABLED) {
+        while (fcSerial.available()) fcSerial.read();
+        uint8_t empty = 0;
+        sendMSP(MSP_ALTITUDE, &empty, 0);
+        uint32_t timeout = millis() + 20;
+        while (fcSerial.available() < 9 && millis() < timeout);
+        if (fcSerial.available() < 9) return 0;
+        while (fcSerial.available() >= 9) {
+            if (fcSerial.read() != '$') continue;
+            if (fcSerial.read() != 'M') continue;
+            if (fcSerial.read() != '>') continue;
+            fcSerial.read(); fcSerial.read();  // len, cmd
+            int32_t alt_cm = 0;
+            alt_cm  = (uint32_t)fcSerial.read();
+            alt_cm |= (uint32_t)fcSerial.read() << 8;
+            alt_cm |= (uint32_t)fcSerial.read() << 16;
+            alt_cm |= (uint32_t)fcSerial.read() << 24;
+            fcSerial.read();  // checksum
+            return alt_cm / 100.0f;
+        }
+        return 0;
     }
-    return 0;
+
+    uint32_t now = millis();
+    if (benchLastMs == 0) benchLastMs = now;
+    float dt = (now - benchLastMs) / 1000.0f;
+    benchLastMs = now;
+
+    switch (state) {
+        case IDLE:
+            benchAlt = 0;
+            break;
+
+        case ARMING:
+        case HOVER_TEST:
+            benchAlt = launchAlt;
+            break;
+
+        case AUTO_HOVER_CAL:
+            if (calThrottle >= BENCH_HOVER_LIFTOFF_US) {
+                benchAlt += BENCH_HOVER_CAL_RATE_MPS * dt;
+            } else {
+                benchAlt = launchAlt;
+            }
+            break;
+
+        case SPRINTING:
+            benchAlt += BENCH_SPRINT_RATE_MPS * dt;
+            break;
+
+        case HOLDING:
+            benchAlt = launchAlt + TARGET_ALT_M;
+            break;
+
+        case PUNCHING:
+            benchAlt += BENCH_PUNCH_RATE_MPS * dt;
+            break;
+
+        case CUT:
+        case DONE:
+            break;
+    }
+
+    return benchAlt;
 }
 
 
@@ -251,6 +370,37 @@ uint16_t holdThrottle(float altitude) {
     return (uint16_t)constrain(HOVER_THROTTLE + correction, 1200, 1700);
 }
 
+void startHoverTest() {
+    launchAlt = getAltitude();
+    state = HOVER_TEST;
+    Serial.println("[STATE] -> HOVER TEST");
+}
+
+void startMission() {
+    launchAlt = getAltitude();
+    armTime = millis();
+    state   = ARMING;
+    Serial.println("[STATE] -> ARMING");
+}
+
+void startAutoHoverCal() {
+    launchAlt = getAltitude();
+    calTime = millis();
+    calStepTime = millis();
+    calThrottle = CAL_START_THROTTLE;
+    state = AUTO_HOVER_CAL;
+    Serial.println("[STATE] -> AUTO HOVER CAL");
+}
+
+void disarmToIdle(const char* reason) {
+    ledcWrite(MOTOR_PWM_PIN, 0);
+    channels[4] = 1000;
+    channels[5] = 1000;
+    channels[2] = 1000;
+    sendRC();
+    state = IDLE;
+    Serial.println(reason);
+}
 
 // ============================================================
 //  SETUP
@@ -269,6 +419,7 @@ void setup() {
     setupBLE();
 
     Serial.println("[BOOT] Ready.");
+    Serial.println("[BOOT] Bench mode defaults OFF. Enable only from BLE for desk testing.");
     Serial.println("[BOOT] Short press = hover test | Long press (1s+) = full mission");
     Serial.println("[BOOT] Mission profile: SPRINT → HOLD → PUNCH → CUT");
 }
@@ -292,15 +443,11 @@ void loop() {
             if (digitalRead(LAUNCH_PIN) == LOW) {
                 uint32_t t = millis();
                 while (digitalRead(LAUNCH_PIN) == LOW);
-                launchAlt = getAltitude();
 
                 if (millis() - t < 1000) {
-                    state = HOVER_TEST;
-                    Serial.println("[STATE] → HOVER TEST");
+                    startHoverTest();
                 } else {
-                    armTime = millis();
-                    state   = ARMING;
-                    Serial.println("[STATE] → ARMING");
+                    startMission();
                 }
             }
             break;
@@ -418,6 +565,46 @@ void loop() {
             break;
 
         // ── DONE ─────────────────────────────────────────────
+        // Auto hover calibration ramps throttle until liftoff is detected,
+        // then backs off slightly and leaves the quad in hover test mode.
+        case AUTO_HOVER_CAL:
+            channels[4] = 1800;
+            channels[5] = 1800;
+            channels[2] = calThrottle;
+            sendRC();
+            digitalWrite(STATUS_LED, millis() % 300 < 150);
+
+            if (millis() - calStepTime >= CAL_STEP_MS) {
+                calStepTime = millis();
+                if (calThrottle < CAL_MAX_THROTTLE) {
+                    calThrottle += CAL_STEP_US;
+                }
+            }
+
+            Serial.printf("[AUTO_HOVER] alt=%.2fm  throttle=%d\n",
+                altitude, calThrottle);
+
+            if (altitude >= CAL_LIFTOFF_M) {
+                HOVER_THROTTLE = constrain(calThrottle - CAL_BACKOFF_US, 1200, 1600);
+                channels[2] = HOVER_THROTTLE;
+                sendRC();
+                state = HOVER_TEST;
+                Serial.printf("[AUTO_HOVER] liftoff detected, HOVER_THROTTLE=%d -> HOVER TEST\n",
+                    HOVER_THROTTLE);
+                break;
+            }
+
+            if (calThrottle >= CAL_MAX_THROTTLE || millis() - calTime >= CAL_TIMEOUT_MS) {
+                disarmToIdle("[AUTO_HOVER] Calibration failed -> IDLE");
+                break;
+            }
+
+            if (digitalRead(LAUNCH_PIN) == LOW) {
+                while (digitalRead(LAUNCH_PIN) == LOW);
+                disarmToIdle("[AUTO_HOVER] Canceled -> IDLE");
+            }
+            break;
+
         case DONE:
             sendRC();
             digitalWrite(STATUS_LED, millis() % 100 < 50);

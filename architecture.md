@@ -6,10 +6,14 @@
 stateDiagram-v2
     [*] --> IDLE
 
-    IDLE --> HOVER_TEST : short press < 1s
+    IDLE --> HOVER_TEST : BLE hover test\nor short press < 1s
     IDLE --> ARMING     : long press ≥ 1s
 
+    IDLE --> AUTO_HOVER_CAL : BLE auto hover cal
+
     HOVER_TEST --> IDLE : press again (disarms)
+    AUTO_HOVER_CAL --> HOVER_TEST : liftoff detected\nHOVER_THROTTLE updated
+    AUTO_HOVER_CAL --> IDLE : timeout, max throttle,\nor cancel/disarm
 
     ARMING --> SPRINTING : 1500ms settle elapsed
 
@@ -35,6 +39,7 @@ flowchart TD
         W1["CBu16.onWrite()\nHOVER_UUID\nSPRINT_THROT_UUID\nPUNCH_THROT_UUID"]
         W2["CBfloat.onWrite()\nSPRINT_CUTOFF_UUID  ÷100\nHOLD_KP_UUID  ÷10"]
         W3["CBu32.onWrite()\nPUNCH_START_UUID"]
+        W4["CBcommand.onWrite()\nCOMMAND_UUID\nhover, mission, disarm, auto cal"]
     end
 
     subgraph PARAMS ["Tunable Parameters  volatile"]
@@ -58,6 +63,7 @@ flowchart TD
         PUN["PUNCHING\nchannels[2] = PUNCH_THROTTLE"]
         CUT["CUT\nchannels[4] = 1000  disarm\nchannels[2] = 1000"]
         HVT["HOVER_TEST\nchannels[2] = HOVER_THROTTLE"]
+        AHC["AUTO_HOVER_CAL\nramp throttle until liftoff\nwrite HOVER_THROTTLE"]
     end
 
     subgraph OUT ["Outputs"]
@@ -72,6 +78,7 @@ flowchart TD
     W2 -->|writes| SC
     W2 -->|writes| KP
     W3 -->|writes| PS
+    W4 -->|starts/stops| SM
 
     ALT -->|altitude m| HLD
     ALT -->|altitude m| SPR
@@ -83,12 +90,14 @@ flowchart TD
     PS --> HLD
     PT --> PUN
     HT --> HVT
+    HT --> AHC
 
     SPR --> MSP
     HLD --> MSP
     PUN --> MSP
     CUT --> MSP
     HVT --> MSP
+    AHC --> MSP
 
     SPR -->|"prespunUp=true\non HOLDING entry"| PWM
     OUT --> LED

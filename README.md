@@ -17,7 +17,7 @@ The quad sprints to 60ft as fast as possible, holds altitude while the clock run
 | ESP32-C3 Super Mini | Mission controller |
 | Brushed DC motor (3–12V) | Autorotation pre-spin |
 | IRLML2502 MOSFET + 1N4148 + 100Ω | Brushed motor driver |
-| Momentary push button (SPST NO) | Launch trigger |
+| Momentary push button (SPST NO) | Backup launch / disarm trigger |
 
 ---
 
@@ -122,7 +122,18 @@ PUNCHING   → Max throttle from PUNCH_START_MS until 8000ms
 CUT        → FC disarmed, motors off, autorotation descent begins
 ```
 
-Short press launch button → **hover test mode** (tune HOVER_THROTTLE)
+Primary control is over BLE from `quad_tuner.html`:
+
+| Command | Behavior |
+|---|---|
+| Hover Test | Arms into fixed `HOVER_THROTTLE` so you can tune it live. |
+| Auto Hover Cal | Arms, slowly ramps throttle until liftoff is detected, writes a first-pass `HOVER_THROTTLE`, then stays in hover test mode. |
+| Start Mission | Arms, waits 1.5s, then runs the full sprint/hold/punch/cut mission. |
+| Disarm | Stops throttle, disarms AUX1, and returns to idle. |
+
+The physical button remains as a backup:
+
+Short press launch button → **hover test mode**
 Long press (1s+) → **full mission**
 
 **LED states**
@@ -135,6 +146,7 @@ Long press (1s+) → **full mission**
 | Solid | HOLDING |
 | Very fast strobe | PUNCHING |
 | Medium blink | HOVER TEST |
+| Medium slow blink | AUTO HOVER CAL |
 | Rapid strobe | DONE |
 
 ---
@@ -171,7 +183,7 @@ save
 
 ## Tunable Parameters
 
-All parameters are writable live over BLE using `quad_tuner.html` in Chrome (Android or desktop). Connect to device named `Quad-Tuner`.
+All parameters are writable live over BLE using `quad_tuner.html` in Chrome (Android or desktop). The same page also has command buttons for hover test, auto hover calibration, mission start, and disarm. Connect to device named `Quad-Tuner`.
 
 > Open the file directly in Chrome: `start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html`
 > Web BLE requires Chrome — not Firefox, Edge, or iOS Safari.
@@ -191,13 +203,31 @@ All parameters are writable live over BLE using `quad_tuner.html` in Chrome (And
 
 ## Tuning Sequence
 
-1. **Find hover throttle** — hover test mode, adjust `HOVER_THROTTLE` via BLE until neutrally buoyant
+1. **Find hover throttle** — run Auto Hover Cal for a first-pass `HOVER_THROTTLE`, then use hover test mode and adjust `HOVER_THROTTLE` via BLE until neutrally buoyant
 2. **Verify MSP** — Betaflight receiver tab should show live channel values with ESP32 powered
 3. **Verify motor directions** — Betaflight motors tab, props-out configuration
 4. **Low-altitude sprint test** — confirm climb rate, adjust `SPRINT_THROTTLE`
 5. **Tune hold** — confirm quad stations at 60ft, adjust `HOLD_KP` if oscillating or drifting
 6. **Tune punch timing** — adjust `PUNCH_START_MS`, later = more exit velocity = more air time
 7. **Verify pre-spin** — autorotation device must be fully spun before motor cut at 8s
+
+---
+
+## Bench Mode
+
+Bench mode is controlled from `quad_tuner.html` and defaults off on every boot. It simulates altitude, so mission flow and auto hover calibration can be tested with only the ESP32-C3 connected.
+
+BLE controls in bench mode:
+
+| Command | Behavior |
+|---|---|
+| Bench Mode | Toggles simulated altitude on or off while idle. |
+| Start Mission | Runs the full mission flow using simulated altitude. |
+| Hover Test | Enters hover test mode. |
+| Auto Hover Cal | Runs auto hover calibration using simulated liftoff. |
+| Disarm | Disarms and returns to idle. |
+
+Leave Bench Mode off for any real flight.
 
 ---
 
