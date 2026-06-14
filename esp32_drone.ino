@@ -8,7 +8,6 @@ volatile uint8_t BENCH_MODE_ENABLED = 0;
 #define FC_TX_PIN       4
 #define FC_RX_PIN       5
 #define MOTOR_PWM_PIN   6
-#define LAUNCH_PIN      3
 #define STATUS_LED      8
 
 // ── Brushed Motor PWM ────────────────────────────────────────
@@ -87,6 +86,8 @@ MissionState state = IDLE;
 
 uint32_t launchTime = 0;
 uint32_t armTime    = 0;
+bool     armingForHover   = false;
+bool     armingForAutoCal = false;
 uint32_t calTime    = 0;
 uint32_t calStepTime = 0;
 uint16_t calThrottle = CAL_START_THROTTLE;
@@ -372,8 +373,10 @@ uint16_t holdThrottle(float altitude) {
 
 void startHoverTest() {
     launchAlt = getAltitude();
-    state = HOVER_TEST;
-    Serial.println("[STATE] -> HOVER TEST");
+    armTime = millis();
+    armingForHover = true;
+    state = ARMING;
+    Serial.println("[STATE] -> ARMING (hover test)");
 }
 
 void startMission() {
@@ -388,8 +391,10 @@ void startAutoHoverCal() {
     calTime = millis();
     calStepTime = millis();
     calThrottle = CAL_START_THROTTLE;
-    state = AUTO_HOVER_CAL;
-    Serial.println("[STATE] -> AUTO HOVER CAL");
+    armTime = millis();
+    armingForAutoCal = true;
+    state = ARMING;
+    Serial.println("[STATE] -> ARMING (auto hover cal)");
 }
 
 void disarmToIdle(const char* reason) {
@@ -413,14 +418,11 @@ void setup() {
     ledcAttach(MOTOR_PWM_PIN, PWM_FREQ, PWM_RESOLUTION);
     ledcWrite(MOTOR_PWM_PIN, 0);
 
-    pinMode(LAUNCH_PIN, INPUT_PULLUP);
     pinMode(STATUS_LED, OUTPUT);
 
     setupBLE();
 
-    Serial.println("[BOOT] Ready.");
-    Serial.println("[BOOT] Bench mode defaults OFF. Enable only from BLE for desk testing.");
-    Serial.println("[BOOT] Short press = hover test | Long press (1s+) = full mission");
+    Serial.println("[BOOT] Ready. Control via BLE — open quad_tuner.html in Chrome.");
     Serial.println("[BOOT] Mission profile: SPRINT → HOLD → PUNCH → CUT");
 }
 
@@ -440,31 +442,33 @@ void loop() {
             sendRC();
             digitalWrite(STATUS_LED, millis() % 1000 < 100);
 
-            if (digitalRead(LAUNCH_PIN) == LOW) {
-                uint32_t t = millis();
-                while (digitalRead(LAUNCH_PIN) == LOW);
-
-                if (millis() - t < 1000) {
-                    startHoverTest();
-                } else {
-                    startMission();
-                }
-            }
             break;
 
         // ── ARMING ───────────────────────────────────────────
         case ARMING:
             channels[4] = 1800;
             channels[5] = 1800;
-            channels[2] = 1050;
+            channels[2] = 1000;
             sendRC();
             digitalWrite(STATUS_LED, millis() % 200 < 100);
 
             if (millis() - armTime > 1500) {
-                launchTime = millis();
-                prespunUp  = false;
-                state      = SPRINTING;
-                Serial.println("[STATE] → SPRINTING");
+                if (armingForHover) {
+                    armingForHover = false;
+                    state = HOVER_TEST;
+                    Serial.println("[STATE] → HOVER TEST");
+                } else if (armingForAutoCal) {
+                    armingForAutoCal = false;
+                    calTime = millis();
+                    calStepTime = millis();
+                    state = AUTO_HOVER_CAL;
+                    Serial.println("[STATE] → AUTO HOVER CAL");
+                } else {
+                    launchTime = millis();
+                    prespunUp  = false;
+                    state      = SPRINTING;
+                    Serial.println("[STATE] → SPRINTING");
+                }
             }
             break;
 
@@ -554,14 +558,6 @@ void loop() {
             Serial.printf("[HOVER] throttle=%d  (tune HOVER_THROTTLE via BLE)\n",
                 HOVER_THROTTLE);
 
-            if (digitalRead(LAUNCH_PIN) == LOW) {
-                while (digitalRead(LAUNCH_PIN) == LOW);
-                channels[4] = 1000;
-                channels[2] = 1000;
-                sendRC();
-                state = IDLE;
-                Serial.println("[HOVER] Disarmed → IDLE");
-            }
             break;
 
         // ── DONE ─────────────────────────────────────────────
@@ -599,10 +595,6 @@ void loop() {
                 break;
             }
 
-            if (digitalRead(LAUNCH_PIN) == LOW) {
-                while (digitalRead(LAUNCH_PIN) == LOW);
-                disarmToIdle("[AUTO_HOVER] Canceled -> IDLE");
-            }
             break;
 
         case DONE:

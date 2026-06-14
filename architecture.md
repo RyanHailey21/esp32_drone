@@ -3,29 +3,43 @@
 ## State Machine
 
 ```mermaid
-stateDiagram-v2
-    [*] --> IDLE
+flowchart LR
+    START(("BOOT"))
+    IDLE["IDLE\nmotors disarmed"]
 
-    IDLE --> HOVER_TEST : BLE hover test\nor short press < 1s
-    IDLE --> ARMING     : long press ≥ 1s
+    subgraph SOFTWARE["SOFTWARE COMMAND INPUTS"]
+        direction TB
+        HOVER_TEST["HOVER_TEST\nfixed hover throttle"]
+        AUTO_HOVER_CAL["AUTO_HOVER_CAL\nramp until liftoff"]
+    end
 
-    IDLE --> AUTO_HOVER_CAL : BLE auto hover cal
+    subgraph MISSION["8 SECOND MISSION SEQUENCE"]
+        direction LR
+        ARMING["ARMING\n1500 ms settle"]
+        SPRINTING["SPRINTING\nfull climb throttle"]
+        HOLDING["HOLDING\naltitude P-control"]
+        PUNCHING["PUNCHING\nfinal full throttle"]
+        CUT["CUT\ndisarm + zero throttle"]
+        DONE["DONE\nmotors off"]
+    end
 
-    HOVER_TEST --> IDLE : press again (disarms)
-    AUTO_HOVER_CAL --> HOVER_TEST : liftoff detected\nHOVER_THROTTLE updated
-    AUTO_HOVER_CAL --> IDLE : timeout, max throttle,\nor cancel/disarm
+    START --> IDLE
+    IDLE -->|software hover test command| HOVER_TEST
+    IDLE -->|software auto hover cal command| AUTO_HOVER_CAL
+    IDLE -->|software start mission command| ARMING
 
-    ARMING --> SPRINTING : 1500ms settle elapsed
+    HOVER_TEST -->|software disarm command| IDLE
+    AUTO_HOVER_CAL -->|liftoff detected\nupdate HOVER_THROTTLE| HOVER_TEST
+    AUTO_HOVER_CAL -->|timeout / max throttle\ncancel / disarm| IDLE
 
-    SPRINTING --> HOLDING : alt ≥ SPRINT_CUTOFF_M\nautorotation motor starts
-    SPRINTING --> CUT     : safety — missionTime ≥ 8s
+    ARMING -->|1500 ms elapsed| SPRINTING
+    SPRINTING -->|alt >= SPRINT_CUTOFF_M\nstart autorotation motor| HOLDING
+    SPRINTING -->|safety: missionTime >= 8s| CUT
+    HOLDING -->|missionTime >= PUNCH_START_MS| PUNCHING
+    HOLDING -->|safety: missionTime >= 8s| CUT
+    PUNCHING -->|missionTime >= 8s| CUT
+    CUT -->|FC disarmed| DONE
 
-    HOLDING --> PUNCHING : missionTime ≥ PUNCH_START_MS
-    HOLDING --> CUT      : safety — missionTime ≥ 8s
-
-    PUNCHING --> CUT : missionTime ≥ 8s
-
-    CUT --> DONE : FC disarmed, motors off
 ```
 
 ---
@@ -33,52 +47,52 @@ stateDiagram-v2
 ## Variable & Data Flow
 
 ```mermaid
-flowchart TD
-    subgraph BLE ["BLE  NimBLE — 'Quad-Tuner'"]
+flowchart LR
+    subgraph BLE["BLE HEADER\nNimBLE Quad-Tuner"]
         direction TB
-        W1["CBu16.onWrite()\nHOVER_UUID\nSPRINT_THROT_UUID\nPUNCH_THROT_UUID"]
-        W2["CBfloat.onWrite()\nSPRINT_CUTOFF_UUID  ÷100\nHOLD_KP_UUID  ÷10"]
-        W3["CBu32.onWrite()\nPUNCH_START_UUID"]
-        W4["CBcommand.onWrite()\nCOMMAND_UUID\nhover, mission, disarm, auto cal"]
+        W1["CBu16.onWrite()\nHOVER / SPRINT / PUNCH throttle"]
+        W2["CBfloat.onWrite()\nSPRINT_CUTOFF / HOLD_KP"]
+        W3["CBu32.onWrite()\nPUNCH_START_MS"]
+        W4["CBcommand.onWrite()\nhover / mission / disarm / auto cal"]
     end
 
-    subgraph PARAMS ["Tunable Parameters  volatile"]
+    subgraph PARAMS["VOLATILE PARAM BUS"]
         direction TB
-        HT["HOVER_THROTTLE\ndefault 1420 µs"]
-        ST["SPRINT_THROTTLE\ndefault 1850 µs"]
+        HT["HOVER_THROTTLE\ndefault 1420 us"]
+        ST["SPRINT_THROTTLE\ndefault 1850 us"]
         SC["SPRINT_CUTOFF_M\ndefault 17.0 m"]
         KP["HOLD_KP\ndefault 120.0"]
         PS["PUNCH_START_MS\ndefault 7500 ms"]
-        PT["PUNCH_THROTTLE\ndefault 2000 µs"]
+        PT["PUNCH_THROTTLE\ndefault 2000 us"]
     end
 
-    subgraph SENSOR ["Sensor  UART1 MSP"]
-        ALT["getAltitude()\nMSP_ALTITUDE req → FC\nreturns alt_cm ÷ 100"]
+    subgraph SENSOR["UART1 MSP SENSOR LINE"]
+        ALT["getAltitude()\nMSP_ALTITUDE request to FC\nalt_cm / 100"]
     end
 
-    subgraph SM ["State Machine  50 Hz loop"]
+    subgraph SM["50 HZ STATE MACHINE"]
         direction TB
         SPR["SPRINTING\nchannels[2] = SPRINT_THROTTLE"]
-        HLD["HOLDING\nholdThrottle(alt)\n= HOVER + KP × error"]
+        HLD["HOLDING\nHOVER + KP * error"]
         PUN["PUNCHING\nchannels[2] = PUNCH_THROTTLE"]
-        CUT["CUT\nchannels[4] = 1000  disarm\nchannels[2] = 1000"]
+        CUT["CUT\nAUX disarm + throttle 1000"]
         HVT["HOVER_TEST\nchannels[2] = HOVER_THROTTLE"]
-        AHC["AUTO_HOVER_CAL\nramp throttle until liftoff\nwrite HOVER_THROTTLE"]
+        AHC["AUTO_HOVER_CAL\nramp throttle until liftoff"]
     end
 
-    subgraph OUT ["Outputs"]
-        MSP["sendRC()\nMSP_SET_RAW_RC\n→ FC via UART1"]
-        PWM["ledcWrite GPIO6\n→ MOSFET → brushed motor"]
-        LED["digitalWrite GPIO8\nstatus LED pattern"]
+    subgraph OUT["OUTPUT CONNECTOR"]
+        MSP["UART1 MSP_SET_RAW_RC\nto flight controller"]
+        PWM["GPIO6 PWM\nto MOSFET motor driver"]
+        LED["GPIO8\nstatus LED"]
     end
 
-    W1 -->|writes| HT
-    W1 -->|writes| ST
-    W1 -->|writes| PT
-    W2 -->|writes| SC
-    W2 -->|writes| KP
-    W3 -->|writes| PS
-    W4 -->|starts/stops| SM
+    W1 -->|write u16| HT
+    W1 -->|write u16| ST
+    W1 -->|write u16| PT
+    W2 -->|write float| SC
+    W2 -->|write float| KP
+    W3 -->|write u32| PS
+    W4 -->|command| SM
 
     ALT -->|altitude m| HLD
     ALT -->|altitude m| SPR
@@ -99,6 +113,7 @@ flowchart TD
     HVT --> MSP
     AHC --> MSP
 
-    SPR -->|"prespunUp=true\non HOLDING entry"| PWM
+    SPR -->|prespunUp = true\non HOLDING entry| PWM
     OUT --> LED
+
 ```

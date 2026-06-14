@@ -16,61 +16,77 @@ The quad sprints to 60ft as fast as possible, holds altitude while the clock run
 | SpeedyBee F405 Mini BLS 35A Stack | FC + ESC |
 | ESP32-C3 Super Mini | Mission controller |
 | Brushed DC motor (3–12V) | Autorotation pre-spin |
-| IRLML2502 MOSFET + 1N4148 + 100Ω | Brushed motor driver |
-| Momentary push button (SPST NO) | Backup launch / disarm trigger |
+| 2N2222 NPN transistor + 1N4148 + 100Ω | Brushed motor driver |
 
 ---
 
 ## Wiring Diagram
 
 ```mermaid
-graph LR
-    BAT["GNB 3S LiHV\nXT30"]
+flowchart LR
+    BAT["BATTERY\nGNB 3S LiHV\nXT30\n11.1V max"]
 
-    subgraph FC ["SpeedyBee F405 Mini BLS 35A"]
+    subgraph POWER["POWER BUS"]
         direction TB
-        VBAT_IN["VBAT+ / GND"]
-        BEC5["5V BEC"]
-        BEC9["9V BEC"]
+        VBAT["VBAT+\nESC input"]
+        GND["GND\nreference"]
+    end
+
+    subgraph FC["FLIGHT CONTROLLER\nSpeedyBee F405 Mini BLS 35A"]
+        direction TB
+        VBAT_IN["VBAT+ / GND pads"]
+        BEC5["5V BEC out"]
+        BEC9["9V BEC out"]
         TX2["UART2 TX"]
         RX2["UART2 RX"]
         FCGND["GND"]
     end
 
-    subgraph ESP ["ESP32-C3 Super Mini"]
+    subgraph ESP["MISSION CONTROLLER\nESP32-C3 Super Mini"]
         direction TB
-        VIN["VIN"]
-        G5["GPIO5  RX ←"]
-        G4["GPIO4  TX →"]
-        G6["GPIO6  PWM"]
-        G3["GPIO3  Launch"]
-        G8["GPIO8  LED (built-in)"]
+        VIN["VIN 5V"]
+        G5["GPIO5 RX"]
+        G4["GPIO4 TX"]
+        G6["GPIO6 PWM"]
+        G8["GPIO8 LED"]
         ESPGND["GND"]
     end
 
-    subgraph MFET ["MOSFET Driver  IRLML2502"]
+    subgraph MOTOR_DRV["LOW-SIDE MOTOR DRIVER\n2N2222 NPN transistor"]
         direction TB
-        GATE["Gate  ← 100Ω"]
-        DRAIN["Drain  → Motor −"]
-        MSRC["Source  → GND"]
+        GATE["Base via 100 ohm"]
+        DRAIN["Collector"]
+        SOURCE["Emitter / GND"]
+        FLYBACK["Flyback 1N4148"]
     end
 
-    BTN(["Launch Button\nSPST NO"])
-    MOTOR[["Brushed DC Motor\nAutorotation Pre-spin"]]
+    subgraph PERIPH["PERIPHERALS"]
+        direction TB
+        MOTOR["Brushed DC motor\nautorotation pre-spin"]
+        CAP1["100 uF cap\nVBAT protection"]
+        CAP2["100 uF cap\n9V rail"]
+    end
 
-    BAT      -->|"VBAT+ / GND"| VBAT_IN
-    BEC5     -->|"5V"| VIN
-    FCGND    -->|"GND"| ESPGND
-    TX2      -->|"FC TX → ESP RX"| G5
-    G4       -->|"ESP TX → FC RX"| RX2
-    BEC9     -->|"9V +"| MOTOR
+    BAT -->|VBAT+ 11.1V| VBAT
+    VBAT -->|unregulated| VBAT_IN
+    BAT -->|GND| GND
+    GND -->|reference| FCGND
+    FCGND -->|GND| ESPGND
 
-    G6       --> GATE
-    DRAIN    --> MOTOR
-    MSRC     --> ESPGND
+    BEC5 -->|5V| VIN
+    BEC9 -->|9V +| MOTOR
 
-    G3       --> BTN
-    BTN      -->|"GND"| ESPGND
+    TX2 -->|FC TX| G5
+    G4 -->|ESP TX| RX2
+
+    G6 -->|PWM| GATE
+    DRAIN -->|motor -| MOTOR
+    SOURCE -->|GND| ESPGND
+    FLYBACK -->|clamp| MOTOR
+
+    VBAT -->|protection| CAP1
+    BEC9 -->|ripple filter| CAP2
+
 ```
 
 ## Wiring
@@ -85,27 +101,23 @@ FC stack (pre-wired via harness)
   ├── GND    → ESP32 GND
   ├── TX2    → ESP32 GPIO5
   ├── RX2    → ESP32 GPIO4
-  └── 9V BEC → Brushed motor (+) via MOSFET drain
+  └── 9V BEC → Brushed motor (+)
 
-MOSFET circuit (brushed autorotation motor):
-  ESP32 GPIO6 → 100Ω → MOSFET gate (IRLML2502)
-  MOSFET source → GND
-  MOSFET drain  → Brushed motor (-)
-  1N4148 flyback: anode→drain, cathode→9V pad
+NPN transistor circuit (brushed autorotation motor):
+  ESP32 GPIO6 → 100Ω → 2N2222 base
+  2N2222 emitter → GND
+  2N2222 collector → Brushed motor (-)
+  1N4148 flyback: anode→collector, cathode→9V pad
   100µF cap across 9V pad and GND
-
-Launch trigger:
-  GPIO3 → one leg of button → GND
 ```
 
 **ESP32-C3 Pin Assignment**
 
 | GPIO | Function |
 |---|---|
-| 3 | Launch trigger (INPUT_PULLUP, active LOW) |
 | 4 | UART1 TX → FC RX2 |
 | 5 | UART1 RX ← FC TX2 |
-| 6 | PWM → MOSFET gate |
+| 6 | PWM → 2N2222 base (via 100Ω) |
 | 8 | Status LED (built-in) |
 | 20/21 | USB debug (keep free) |
 | 9 | Do not use (boot pin) |
@@ -130,12 +142,6 @@ Primary control is over BLE from `quad_tuner.html`:
 | Auto Hover Cal | Arms, slowly ramps throttle until liftoff is detected, writes a first-pass `HOVER_THROTTLE`, then stays in hover test mode. |
 | Start Mission | Arms, waits 1.5s, then runs the full sprint/hold/punch/cut mission. |
 | Disarm | Stops throttle, disarms AUX1, and returns to idle. |
-
-The physical button remains as a backup:
-
-Short press launch button → **hover test mode**
-Long press (1s+) → **full mission**
-
 **LED states**
 
 | Pattern | State |
