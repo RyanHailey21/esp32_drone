@@ -57,7 +57,7 @@ volatile uint16_t PUNCH_THROTTLE  = 2000;  // max throttle for final burst
 #define CAL_MAX_THROTTLE    1650
 #define CAL_STEP_US         5
 #define CAL_STEP_MS         250
-#define CAL_LIFTOFF_M       0.35f
+#define CAL_LIFTOFF_M       0.12f
 #define CAL_BACKOFF_US      25
 #define CAL_TIMEOUT_MS      30000
 
@@ -80,6 +80,7 @@ enum MissionState {
     CUT,
     HOVER_TEST,
     AUTO_HOVER_CAL,
+    LANDING,
     DONE
 };
 MissionState state = IDLE;
@@ -96,11 +97,18 @@ bool     prespunUp  = false;
 float    benchAlt = 0;
 uint32_t benchLastMs = 0;
 
+uint32_t landingStartMs       = 0;
+uint16_t landingStartThrottle = 1000;
+#define  LANDING_TIME_MS      2500
+
+NimBLECharacteristic* hoverChar = nullptr;
+
 HardwareSerial fcSerial(1);
 
 void startHoverTest();
 void startMission();
 void startAutoHoverCal();
+void startLanding(uint16_t currentThrottle);
 void disarmToIdle(const char* reason);
 
 
@@ -166,7 +174,10 @@ public:
                 break;
 
             case CMD_DISARM:
-                disarmToIdle("[BLE] Disarm command");
+                if (state == HOVER_TEST || state == AUTO_HOVER_CAL)
+                    startLanding(channels[2]);
+                else
+                    disarmToIdle("[BLE] Disarm command");
                 break;
 
             case CMD_AUTO_HOVER_CAL:
@@ -178,6 +189,13 @@ public:
                 Serial.println("[BLE] Unknown command");
                 break;
         }
+    }
+};
+
+class ServerCB : public NimBLEServerCallbacks {
+    void onDisconnect(NimBLEServer* server, NimBLEConnInfo& connInfo, int reason) override {
+        Serial.println("[BLE] Client disconnected, restarting advertising");
+        NimBLEDevice::startAdvertising();
     }
 };
 
@@ -217,9 +235,10 @@ NimBLECharacteristic* makeChar(NimBLEService* svc, const char* uuid,
 void setupBLE() {
     NimBLEDevice::init("Quad-Tuner");
     auto* server = NimBLEDevice::createServer();
+    server->setCallbacks(new ServerCB());
     auto* svc    = server->createService(SERVICE_UUID);
 
-    makeChar(svc, HOVER_UUID,
+    hoverChar = makeChar(svc, HOVER_UUID,
         new CBu16(&HOVER_THROTTLE, "HOVER_THROTTLE"),
         (uint8_t*)&HOVER_THROTTLE, 2);
 
@@ -296,7 +315,7 @@ float getAltitude() {
         while (fcSerial.available()) fcSerial.read();
         uint8_t empty = 0;
         sendMSP(MSP_ALTITUDE, &empty, 0);
-        uint32_t timeout = millis() + 20;
+        uint32_t timeout = millis() + 50;
         while (fcSerial.available() < 9 && millis() < timeout);
         if (fcSerial.available() < 9) return 0;
         while (fcSerial.available() >= 9) {
@@ -395,6 +414,14 @@ void startAutoHoverCal() {
     armingForAutoCal = true;
     state = ARMING;
     Serial.println("[STATE] -> ARMING (auto hover cal)");
+}
+
+void startLanding(uint16_t currentThrottle) {
+    landingStartMs       = millis();
+    landingStartThrottle = currentThrottle;
+    state = LANDING;
+    Serial.printf("[STATE] -> LANDING from throttle=%d (%.1fs ramp)\n",
+        currentThrottle, LANDING_TIME_MS / 1000.0f);
 }
 
 void disarmToIdle(const char* reason) {
@@ -582,6 +609,7 @@ void loop() {
 
             if (altitude >= CAL_LIFTOFF_M) {
                 HOVER_THROTTLE = constrain(calThrottle - CAL_BACKOFF_US, 1200, 1600);
+                if (hoverChar) hoverChar->setValue((uint8_t*)&HOVER_THROTTLE, 2);
                 channels[2] = HOVER_THROTTLE;
                 sendRC();
                 state = HOVER_TEST;
@@ -596,6 +624,22 @@ void loop() {
             }
 
             break;
+
+        // ── LANDING ──────────────────────────────────────────
+        case LANDING: {
+            channels[4] = 1800;
+            channels[5] = 1800;
+            uint32_t elapsed = millis() - landingStartMs;
+            if (elapsed >= LANDING_TIME_MS) {
+                disarmToIdle("[LANDING] complete");
+            } else {
+                float t = (float)elapsed / LANDING_TIME_MS;
+                channels[2] = (uint16_t)(landingStartThrottle * (1.0f - t) + 1000 * t);
+            }
+            sendRC();
+            digitalWrite(STATUS_LED, millis() % 200 < 30);
+            break;
+        }
 
         case DONE:
             sendRC();

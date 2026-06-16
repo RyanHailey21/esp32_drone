@@ -5,239 +5,542 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Quad Tuner</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&family=Rajdhani:wght@500;600;700&display=swap');
 
-  body {
-    background: #0d0d0d;
-    color: #e0e0e0;
-    font-family: 'Courier New', monospace;
-    min-height: 100vh;
-    padding: 20px 16px 40px;
-  }
+:root {
+  --bg:           #05080f;
+  --surface:      #0b1018;
+  --surface-2:    #101825;
+  --border:       #1a2535;
+  --border-mid:   #253545;
 
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 28px;
-  }
+  --cyan:         #00c8ff;
+  --cyan-dim:     rgba(0,200,255,0.08);
+  --cyan-glow:    rgba(0,200,255,0.25);
+  --amber:        #ff8c00;
+  --amber-dim:    rgba(255,140,0,0.08);
+  --green:        #00e07a;
+  --green-dim:    rgba(0,224,122,0.08);
+  --red:          #ff2844;
+  --red-dim:      rgba(255,40,68,0.08);
 
-  h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #fff; }
+  --text:         #b0c4d8;
+  --text-mid:     #506070;
+  --text-dim:     #2a3a4a;
 
-  #status-dot {
-    width: 10px; height: 10px; border-radius: 50%;
-    background: #333; transition: background 0.3s; flex-shrink: 0;
-  }
-  #status-dot.connecting { background: #f5a623; }
-  #status-dot.connected  { background: #4caf50; }
-  #status-dot.error      { background: #f44336; }
+  --font-hd:  'Orbitron', monospace;
+  --font-val: 'Share Tech Mono', monospace;
+  --font-ui:  'Rajdhani', sans-serif;
+}
 
-  #status-text { font-size: 11px; color: #555; text-align: right; margin-left: 8px; flex: 1; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  #connect-btn {
-    display: block; width: 100%; padding: 14px;
-    background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px;
-    color: #e0e0e0; font-family: 'Courier New', monospace; font-size: 13px;
-    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
-    transition: border-color 0.2s, color 0.2s; margin-bottom: 28px;
-  }
-  #connect-btn:hover  { border-color: #444; color: #fff; }
-  #connect-btn.active { border-color: #f44336; color: #f44336; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
 
-  .controls {
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: 10px; margin-bottom: 28px; opacity: 0.3;
-    pointer-events: none; transition: opacity 0.3s;
-  }
-  .controls.enabled { opacity: 1; pointer-events: all; }
+/* Grid texture */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.25;
+  pointer-events: none;
+}
 
-  .cmd-btn {
-    padding: 13px 10px; background: #151515; border: 1px solid #2a2a2a;
-    border-radius: 6px; color: #e0e0e0; font-family: 'Courier New', monospace;
-    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
-    cursor: pointer; min-height: 44px;
-  }
-  .cmd-btn:hover { border-color: #555; color: #fff; }
-  .cmd-btn.primary { border-color: #3a2a00; color: #f5a623; }
-  .cmd-btn.danger { border-color: #3a1010; color: #f44336; }
-  .cmd-btn.wide { grid-column: 1 / -1; }
-  .cmd-btn.bench-on { border-color: #3a1010; color: #f44336; }
+/* Radial vignette */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background: radial-gradient(ellipse 90% 70% at 50% 30%, transparent 30%, var(--bg) 100%);
+  pointer-events: none;
+}
 
-  .section-label {
-    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
-    color: #333; margin-bottom: 16px; margin-top: 8px;
-    border-bottom: 1px solid #1a1a1a; padding-bottom: 6px;
-  }
+.wrap {
+  position: relative; z-index: 1;
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
 
-  .param {
-    margin-bottom: 24px; opacity: 0.3;
-    transition: opacity 0.3s; pointer-events: none;
-  }
-  .param.enabled { opacity: 1; pointer-events: all; }
+/* ── HEADER ─────────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
 
-  .param-header {
-    display: flex; justify-content: space-between;
-    align-items: baseline; margin-bottom: 10px;
-  }
-  .param-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #777; }
-  .param-value { font-size: 22px; font-weight: 700; color: #fff; min-width: 60px; text-align: right; }
-  .param-unit  { font-size: 11px; color: #444; margin-left: 4px; }
+.title h1 {
+  font-family: var(--font-hd);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #fff;
+  line-height: 1;
+}
 
-  input[type=range] {
-    -webkit-appearance: none; appearance: none;
-    width: 100%; height: 2px; background: #2a2a2a; outline: none; border-radius: 2px;
-  }
-  input[type=range].sprint::-webkit-slider-thumb  { background: #f5a623; }
-  input[type=range].hold::-webkit-slider-thumb    { background: #4caf50; }
-  input[type=range].punch::-webkit-slider-thumb   { background: #f44336; }
-  input[type=range].hover-t::-webkit-slider-thumb { background: #fff; }
+.title .sub {
+  font-family: var(--font-val);
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: var(--text-dim);
+  margin-top: 7px;
+  text-transform: uppercase;
+}
 
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 22px; height: 22px;
-    border-radius: 50%; cursor: pointer; border: none;
-  }
-  input[type=range]::-moz-range-thumb {
-    width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: none; background: #fff;
-  }
+.status-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+}
 
-  .param-bounds { display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; color: #333; }
-  .param-desc   { margin-top: 8px; font-size: 11px; color: #444; line-height: 1.5; }
+#status-text {
+  font-family: var(--font-val);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-mid);
+  text-transform: uppercase;
+}
 
-  .divider { border: none; border-top: 1px solid #1a1a1a; margin: 24px 0 20px; }
+/* Radar pulse */
+.status-ring {
+  position: relative;
+  width: 14px; height: 14px;
+}
+.status-ring .dot {
+  position: absolute; inset: 3px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: background 0.3s;
+}
+.status-ring .ring {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  transition: border-color 0.3s;
+}
 
-  #log {
-    background: #111; border: 1px solid #1a1a1a; border-radius: 6px;
-    padding: 12px; font-size: 11px; color: #444; height: 130px;
-    overflow-y: auto; line-height: 1.8;
-  }
-  #log .ok  { color: #4caf50; }
-  #log .err { color: #f44336; }
-  #log .info { color: #666; }
+.status-ring.connecting .dot { background: var(--amber); }
+.status-ring.connecting .ring { border-color: var(--amber); animation: pulse 1s ease-out infinite; }
+.status-ring.connected  .dot { background: var(--green); }
+.status-ring.connected  .ring { border-color: var(--green); animation: pulse 2.5s ease-out infinite; }
+.status-ring.error      .dot { background: var(--red); }
 
-  #ble-warning {
-    background: #1a1100; border: 1px solid #3a2a00; border-radius: 6px;
-    padding: 12px 14px; font-size: 11px; color: #888; line-height: 1.6;
-    margin-bottom: 20px; display: none;
-  }
-  #ble-warning.show { display: block; }
+@keyframes pulse {
+  0%   { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
 
-  .phase-badge {
-    display: inline-block; font-size: 9px; letter-spacing: 0.15em;
-    text-transform: uppercase; padding: 2px 6px; border-radius: 3px;
-    margin-left: 8px; vertical-align: middle;
-  }
-  .badge-sprint { background: #2a1f00; color: #f5a623; }
-  .badge-hold   { background: #001a00; color: #4caf50; }
-  .badge-punch  { background: #1a0000; color: #f44336; }
-  .badge-hover  { background: #1a1a1a; color: #888; }
+/* ── BLE WARNING ────────────────────────────────────── */
+#ble-warning {
+  display: none;
+  background: #120800;
+  border: 1px solid #2a1500;
+  border-radius: 4px;
+  padding: 12px 14px;
+  font-family: var(--font-val);
+  font-size: 10px;
+  color: #705040;
+  line-height: 1.7;
+  letter-spacing: 0.05em;
+  margin-bottom: 18px;
+}
+#ble-warning.show { display: block; }
+
+/* ── CONNECT BUTTON ─────────────────────────────────── */
+#connect-btn {
+  display: block; width: 100%;
+  padding: 15px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-mid);
+  font-family: var(--font-hd);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, box-shadow 0.2s;
+  margin-bottom: 24px;
+}
+#connect-btn:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 16px var(--cyan-glow), inset 0 0 20px var(--cyan-dim);
+}
+#connect-btn.active {
+  border-color: var(--red);
+  color: var(--red);
+  box-shadow: 0 0 12px rgba(255,40,68,0.2), inset 0 0 16px var(--red-dim);
+}
+
+/* ── MISSION CONTROLS ───────────────────────────────── */
+.controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 32px;
+  opacity: 0.2;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+.controls.enabled { opacity: 1; pointer-events: all; }
+
+.cmd-btn {
+  padding: 13px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-mid);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  min-height: 48px;
+  transition: all 0.15s;
+}
+.cmd-btn:hover { border-color: var(--border-mid); color: var(--text); }
+
+.cmd-btn.primary { border-color: #2a1800; color: var(--amber); }
+.cmd-btn.primary:hover { border-color: var(--amber); box-shadow: 0 0 10px var(--amber-dim), inset 0 0 12px var(--amber-dim); }
+
+.cmd-btn.danger { border-color: #1e0508; color: var(--red); }
+.cmd-btn.danger:hover { border-color: var(--red); box-shadow: 0 0 10px rgba(255,40,68,0.15), inset 0 0 12px var(--red-dim); }
+
+.cmd-btn.wide { grid-column: 1 / -1; }
+
+.cmd-btn.bench-on {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--red-dim);
+}
+
+/* ── SECTION LABELS ─────────────────────────────────── */
+.sec {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 28px 0 12px;
+}
+.sec-label {
+  font-family: var(--font-val);
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.sec-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.badge {
+  font-family: var(--font-val);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.b-hover  { background: #001822; color: var(--cyan);  border: 1px solid #002a3a; }
+.b-sprint { background: #1e1000; color: var(--amber); border: 1px solid #332000; }
+.b-hold   { background: #001a0e; color: var(--green); border: 1px solid #002a18; }
+.b-punch  { background: #1a0006; color: var(--red);   border: 1px solid #2a000c; }
+
+/* ── INSTRUMENT CARDS ───────────────────────────────── */
+.param {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px 16px 14px;
+  margin-bottom: 8px;
+  opacity: 0.2;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+.param.enabled { opacity: 1; pointer-events: all; }
+
+.param-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.param-label {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-mid);
+  padding-top: 4px;
+}
+
+.param-readout {
+  text-align: right;
+  line-height: 1;
+}
+.param-value {
+  font-family: var(--font-val);
+  font-size: 30px;
+  color: #fff;
+  letter-spacing: 0.03em;
+}
+.param-unit {
+  font-family: var(--font-val);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-left: 3px;
+}
+
+/* ── SLIDERS ────────────────────────────────────────── */
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 2px;
+  border-radius: 0;
+  outline: none;
+  cursor: pointer;
+  background: linear-gradient(
+    to right,
+    var(--thumb-clr) 0%,
+    var(--thumb-clr) var(--fill, 0%),
+    var(--border) var(--fill, 0%),
+    var(--border) 100%
+  );
+}
+
+input[type=range].hover-t { --thumb-clr: var(--cyan); }
+input[type=range].sprint  { --thumb-clr: var(--amber); }
+input[type=range].hold    { --thumb-clr: var(--green); }
+input[type=range].punch   { --thumb-clr: var(--red); }
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 0;
+  background: var(--thumb-clr, #fff);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--thumb-clr, #fff);
+  transition: box-shadow 0.15s;
+}
+input[type=range]:active::-webkit-slider-thumb {
+  box-shadow: 0 0 18px var(--thumb-clr, #fff);
+}
+input[type=range]::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: 0;
+  background: var(--thumb-clr, #fff);
+  border: none;
+  cursor: pointer;
+}
+
+.param-bounds {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-family: var(--font-val);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+}
+
+.param-desc {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* ── LOG ────────────────────────────────────────────── */
+#log {
+  background: #030608;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 14px;
+  font-family: var(--font-val);
+  font-size: 11px;
+  color: var(--text-dim);
+  height: 140px;
+  overflow-y: auto;
+  line-height: 2;
+  margin-top: 28px;
+  position: relative;
+}
+#log::before {
+  content: 'TELEMETRY';
+  position: absolute;
+  top: 9px; right: 13px;
+  font-size: 8px;
+  letter-spacing: 0.3em;
+  color: var(--text-dim);
+  opacity: 0.4;
+}
+#log .ok   { color: var(--green); }
+#log .err  { color: var(--red); }
+#log .info { color: #283848; }
+
+#log::-webkit-scrollbar { width: 3px; }
+#log::-webkit-scrollbar-track { background: transparent; }
+#log::-webkit-scrollbar-thumb { background: var(--border); }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>Quad Tuner</h1>
-  <div style="display:flex;align-items:center;gap:8px">
-    <span id="status-text">disconnected</span>
-    <div id="status-dot"></div>
+<div class="wrap">
+
+  <header>
+    <div class="title">
+      <h1>QUAD // TUNER</h1>
+      <div class="sub">ESP32-C3 · MSP · BLE</div>
+    </div>
+    <div class="status-block">
+      <span id="status-text">disconnected</span>
+      <div class="status-ring" id="status-dot">
+        <div class="dot"></div>
+        <div class="ring"></div>
+      </div>
+    </div>
+  </header>
+
+  <div id="ble-warning">
+    WEB BLE REQUIRES CHROME ON ANDROID OR CHROME DESKTOP.<br>
+    NOT SUPPORTED ON IOS SAFARI OR FIREFOX.
   </div>
-</header>
 
-<div id="ble-warning">
-  Web BLE requires Chrome on Android or Chrome desktop.<br>
-  Not supported on iOS Safari or Firefox.
-</div>
+  <button id="connect-btn">Connect to Quad-Tuner</button>
 
-<button id="connect-btn">Connect to Quad-Tuner</button>
-
-<div class="controls" id="mission-controls">
-  <button class="cmd-btn" id="btn-hover-test">Hover Test</button>
-  <button class="cmd-btn" id="btn-auto-hover">Auto Hover Cal</button>
-  <button class="cmd-btn primary" id="btn-start-mission">Start Mission</button>
-  <button class="cmd-btn danger" id="btn-disarm">Disarm</button>
-  <button class="cmd-btn wide" id="btn-bench-mode">Bench Mode: Off</button>
-</div>
-
-<!-- HOVER TEST -->
-<div class="section-label">Hover Test <span class="phase-badge badge-hover">test only</span></div>
-
-<div class="param" id="param-hover">
-  <div class="param-header">
-    <span class="param-label">Hover Throttle</span>
-    <span><span class="param-value" id="val-hover">1420</span><span class="param-unit">µs</span></span>
+  <div class="controls" id="mission-controls">
+    <button class="cmd-btn" id="btn-hover-test">Hover Test</button>
+    <button class="cmd-btn" id="btn-auto-hover">Auto Hover Cal</button>
+    <button class="cmd-btn primary" id="btn-start-mission">Start Mission</button>
+    <button class="cmd-btn danger"  id="btn-disarm">Disarm</button>
+    <button class="cmd-btn wide"    id="btn-bench-mode">Bench Mode: Off</button>
+    <button class="cmd-btn wide"    id="btn-sync">Sync Values from ESP32</button>
   </div>
-  <input type="range" class="hover-t" id="slider-hover" min="1200" max="1600" value="1420" step="5">
-  <div class="param-bounds"><span>1200</span><span>1600</span></div>
-  <div class="param-desc">Find this first in hover test mode. Everything else is relative to this number.</div>
-</div>
 
-<hr class="divider">
-
-<!-- SPRINT -->
-<div class="section-label">Sprint Phase <span class="phase-badge badge-sprint">full power to 60ft</span></div>
-
-<div class="param" id="param-sprint">
-  <div class="param-header">
-    <span class="param-label">Sprint Throttle</span>
-    <span><span class="param-value" id="val-sprint">1850</span><span class="param-unit">µs</span></span>
+  <!-- HOVER TEST -->
+  <div class="sec">
+    <span class="sec-label">Hover Test</span>
+    <span class="badge b-hover">test only</span>
+    <span class="sec-line"></span>
   </div>
-  <input type="range" class="sprint" id="slider-sprint" min="1500" max="2000" value="1850" step="10">
-  <div class="param-bounds"><span>1500</span><span>2000</span></div>
-  <div class="param-desc">Full climb throttle. Higher = faster to 60ft = more clock time for punch.</div>
-</div>
 
-<div class="param" id="param-cutoff">
-  <div class="param-header">
-    <span class="param-label">Sprint Cutoff</span>
-    <span><span class="param-value" id="val-cutoff">17.0</span><span class="param-unit">m</span></span>
+  <div class="param" id="param-hover">
+    <div class="param-head">
+      <span class="param-label">Hover Throttle</span>
+      <div class="param-readout">
+        <span class="param-value" id="val-hover">1420</span><span class="param-unit">µs</span>
+      </div>
+    </div>
+    <input type="range" class="hover-t" id="slider-hover" min="1000" max="1600" value="1420" step="5">
+    <div class="param-bounds"><span>1000 — zero</span><span>1600</span></div>
+    <div class="param-desc">Live during hover test. Slide to find neutral buoyancy. Pull to 1000 to zero throttle.</div>
   </div>
-  <input type="range" class="sprint" id="slider-cutoff" min="1400" max="1820" value="1700" step="10">
-  <div class="param-bounds"><span>14m (~46ft)</span><span>18.2m (~60ft)</span></div>
-  <div class="param-desc">Altitude to stop sprinting and begin hold. Keep below 60ft to absorb baro lag and avoid overshoot.</div>
-</div>
 
-<hr class="divider">
-
-<!-- HOLD -->
-<div class="section-label">Hold Phase <span class="phase-badge badge-hold">station-keep at 60ft</span></div>
-
-<div class="param" id="param-kp">
-  <div class="param-header">
-    <span class="param-label">Hold P-Gain (Kp)</span>
-    <span><span class="param-value" id="val-kp">120</span></span>
+  <!-- SPRINT -->
+  <div class="sec">
+    <span class="sec-label">Sprint Phase</span>
+    <span class="badge b-sprint">full power to 60ft</span>
+    <span class="sec-line"></span>
   </div>
-  <input type="range" class="hold" id="slider-kp" min="200" max="3000" value="1200" step="50">
-  <div class="param-bounds"><span>20</span><span>300</span></div>
-  <div class="param-desc">Throttle correction per metre of altitude error. Too low = drifts. Too high = oscillates.</div>
-</div>
 
-<hr class="divider">
-
-<!-- PUNCH -->
-<div class="section-label">Punch Phase <span class="phase-badge badge-punch">max velocity before cut</span></div>
-
-<div class="param" id="param-punch-start">
-  <div class="param-header">
-    <span class="param-label">Punch Start</span>
-    <span><span class="param-value" id="val-punch-start">7.5</span><span class="param-unit">s</span></span>
+  <div class="param" id="param-sprint">
+    <div class="param-head">
+      <span class="param-label">Sprint Throttle</span>
+      <div class="param-readout">
+        <span class="param-value" id="val-sprint">1850</span><span class="param-unit">µs</span>
+      </div>
+    </div>
+    <input type="range" class="sprint" id="slider-sprint" min="1500" max="2000" value="1850" step="10">
+    <div class="param-bounds"><span>1500</span><span>2000</span></div>
+    <div class="param-desc">Full climb throttle. Higher = faster to 60ft = more punch time.</div>
   </div>
-  <input type="range" class="punch" id="slider-punch-start" min="6000" max="7800" value="7500" step="100">
-  <div class="param-bounds"><span>6.0s</span><span>7.8s</span></div>
-  <div class="param-desc">When to begin final burst. Later = more velocity at cut. Must leave time to build speed before 8s.</div>
-</div>
 
-<div class="param" id="param-punch-throt">
-  <div class="param-header">
-    <span class="param-label">Punch Throttle</span>
-    <span><span class="param-value" id="val-punch-throt">2000</span><span class="param-unit">µs</span></span>
+  <div class="param" id="param-cutoff">
+    <div class="param-head">
+      <span class="param-label">Sprint Cutoff</span>
+      <div class="param-readout">
+        <span class="param-value" id="val-cutoff">17.0</span><span class="param-unit">m</span>
+      </div>
+    </div>
+    <input type="range" class="sprint" id="slider-cutoff" min="1400" max="1820" value="1700" step="10">
+    <div class="param-bounds"><span>14m (~46ft)</span><span>18.2m (~60ft)</span></div>
+    <div class="param-desc">Altitude to stop sprinting. Keep below 60ft to absorb baro lag and avoid overshoot.</div>
   </div>
-  <input type="range" class="punch" id="slider-punch-throt" min="1600" max="2000" value="2000" step="10">
-  <div class="param-bounds"><span>1600</span><span>2000 (max)</span></div>
-  <div class="param-desc">Max throttle for the final burst. Leave at 2000 unless there's a reason to reduce.</div>
+
+  <!-- HOLD -->
+  <div class="sec">
+    <span class="sec-label">Hold Phase</span>
+    <span class="badge b-hold">station-keep at 60ft</span>
+    <span class="sec-line"></span>
+  </div>
+
+  <div class="param" id="param-kp">
+    <div class="param-head">
+      <span class="param-label">Hold P-Gain (Kp)</span>
+      <div class="param-readout">
+        <span class="param-value" id="val-kp">120</span>
+      </div>
+    </div>
+    <input type="range" class="hold" id="slider-kp" min="200" max="3000" value="1200" step="50">
+    <div class="param-bounds"><span>20</span><span>300</span></div>
+    <div class="param-desc">Throttle correction per metre of altitude error. Too low = drifts. Too high = oscillates.</div>
+  </div>
+
+  <!-- PUNCH -->
+  <div class="sec">
+    <span class="sec-label">Punch Phase</span>
+    <span class="badge b-punch">max velocity before cut</span>
+    <span class="sec-line"></span>
+  </div>
+
+  <div class="param" id="param-punch-start">
+    <div class="param-head">
+      <span class="param-label">Punch Start</span>
+      <div class="param-readout">
+        <span class="param-value" id="val-punch-start">7.5</span><span class="param-unit">s</span>
+      </div>
+    </div>
+    <input type="range" class="punch" id="slider-punch-start" min="6000" max="7800" value="7500" step="100">
+    <div class="param-bounds"><span>6.0s</span><span>7.8s</span></div>
+    <div class="param-desc">When to begin final burst. Later = more exit velocity. Must leave enough time to build speed before 8s cut.</div>
+  </div>
+
+  <div class="param" id="param-punch-throt">
+    <div class="param-head">
+      <span class="param-label">Punch Throttle</span>
+      <div class="param-readout">
+        <span class="param-value" id="val-punch-throt">2000</span><span class="param-unit">µs</span>
+      </div>
+    </div>
+    <input type="range" class="punch" id="slider-punch-throt" min="1600" max="2000" value="2000" step="10">
+    <div class="param-bounds"><span>1600</span><span>2000 — max</span></div>
+    <div class="param-desc">Max throttle for the final burst. Leave at 2000 unless there's a reason to reduce.</div>
+  </div>
+
+  <div id="log"><span class="info">— ready —</span></div>
+
 </div>
-
-<hr class="divider">
-
-<div id="log"><span class="info">— ready —</span></div>
 
 <script>
   const SERVICE_UUID       = 'ab0828b1-198e-4351-b779-901fa0e0371e';
@@ -257,13 +560,13 @@
 
   let chars = {};
   let device = null, connected = false;
+  let benchMode = 0;
 
   const connectBtn = document.getElementById('connect-btn');
   const statusDot  = document.getElementById('status-dot');
   const statusText = document.getElementById('status-text');
   const logEl      = document.getElementById('log');
   const benchBtn   = document.getElementById('btn-bench-mode');
-  let benchMode = 0;
 
   if (!navigator.bluetooth) {
     document.getElementById('ble-warning').classList.add('show');
@@ -272,15 +575,18 @@
     connectBtn.textContent = 'Web BLE not supported in this browser';
   }
 
-  function log(msg, type='info') {
+  function log(msg, type = 'info') {
     const el = document.createElement('div');
     el.className = type;
-    el.textContent = new Date().toTimeString().slice(0,8) + '  ' + msg;
+    el.textContent = new Date().toTimeString().slice(0, 8) + '  ' + msg;
     logEl.appendChild(el);
     logEl.scrollTop = logEl.scrollHeight;
   }
 
-  function setStatus(s, t) { statusDot.className = s; statusText.textContent = t; }
+  function setStatus(s, t) {
+    statusDot.className = 'status-ring' + (s ? ' ' + s : '');
+    statusText.textContent = t;
+  }
 
   function enableAll(on) {
     ['hover','sprint','cutoff','kp','punch-start','punch-throt'].forEach(id => {
@@ -304,14 +610,14 @@
       const server  = await device.gatt.connect();
       const service = await server.getPrimaryService(SERVICE_UUID);
 
-      chars.hover       = await service.getCharacteristic(HOVER_UUID);
-      chars.sprint      = await service.getCharacteristic(SPRINT_THROT_UUID);
-      chars.cutoff      = await service.getCharacteristic(SPRINT_CUTOFF_UUID);
-      chars.kp          = await service.getCharacteristic(HOLD_KP_UUID);
-      chars.punchStart  = await service.getCharacteristic(PUNCH_START_UUID);
-      chars.punchThrot  = await service.getCharacteristic(PUNCH_THROT_UUID);
-      chars.command     = await service.getCharacteristic(COMMAND_UUID);
-      chars.benchMode   = await service.getCharacteristic(BENCH_MODE_UUID);
+      chars.hover      = await service.getCharacteristic(HOVER_UUID);
+      chars.sprint     = await service.getCharacteristic(SPRINT_THROT_UUID);
+      chars.cutoff     = await service.getCharacteristic(SPRINT_CUTOFF_UUID);
+      chars.kp         = await service.getCharacteristic(HOLD_KP_UUID);
+      chars.punchStart = await service.getCharacteristic(PUNCH_START_UUID);
+      chars.punchThrot = await service.getCharacteristic(PUNCH_THROT_UUID);
+      chars.command    = await service.getCharacteristic(COMMAND_UUID);
+      chars.benchMode  = await service.getCharacteristic(BENCH_MODE_UUID);
 
       await readAll();
 
@@ -324,7 +630,7 @@
     } catch(e) {
       setStatus('error', 'failed');
       log('Error: ' + e.message, 'err');
-      setTimeout(() => setStatus('','disconnected'), 2000);
+      setTimeout(() => setStatus('', 'disconnected'), 2000);
     }
   }
 
@@ -337,51 +643,54 @@
     connected = false; chars = {};
     benchMode = 0;
     setBenchButton();
-    setStatus('','disconnected');
+    setStatus('', 'disconnected');
     connectBtn.textContent = 'Connect to Quad-Tuner';
     connectBtn.classList.remove('active');
     enableAll(false);
-    log('Disconnected','err');
+    log('Disconnected', 'err');
   }
 
   async function readAll() {
     try {
-      const hover      = new DataView((await chars.hover.readValue()).buffer).getUint16(0,true);
-      const sprint     = new DataView((await chars.sprint.readValue()).buffer).getUint16(0,true);
-      const cutoffRaw  = new DataView((await chars.cutoff.readValue()).buffer).getUint16(0,true);
-      const kpRaw      = new DataView((await chars.kp.readValue()).buffer).getUint16(0,true);
-      const punchStart = new DataView((await chars.punchStart.readValue()).buffer).getUint32(0,true);
-      const punchThrot = new DataView((await chars.punchThrot.readValue()).buffer).getUint16(0,true);
+      const hover      = new DataView((await chars.hover.readValue()).buffer).getUint16(0, true);
+      const sprint     = new DataView((await chars.sprint.readValue()).buffer).getUint16(0, true);
+      const cutoffRaw  = new DataView((await chars.cutoff.readValue()).buffer).getUint16(0, true);
+      const kpRaw      = new DataView((await chars.kp.readValue()).buffer).getUint16(0, true);
+      const punchStart = new DataView((await chars.punchStart.readValue()).buffer).getUint32(0, true);
+      const punchThrot = new DataView((await chars.punchThrot.readValue()).buffer).getUint16(0, true);
       benchMode        = new DataView((await chars.benchMode.readValue()).buffer).getUint8(0);
 
-      setSlider('hover',       hover,      v => v);
-      setSlider('sprint',      sprint,     v => v);
-      setSlider('cutoff',      cutoffRaw,  v => (v/100).toFixed(1));  // raw is x100
-      setSlider('kp',          kpRaw,      v => (v/10).toFixed(0));   // raw is x10
-      setSlider('punch-start', punchStart, v => (v/1000).toFixed(1));
-      setSlider('punch-throt', punchThrot, v => v);
+      setParam('hover',       hover,      v => v,                   v => v);
+      setParam('sprint',      sprint,     v => v,                   v => v);
+      setParam('cutoff',      cutoffRaw,  v => (v/100).toFixed(1),  v => v);
+      setParam('kp',          kpRaw,      v => (v/10).toFixed(0),   v => v);
+      setParam('punch-start', punchStart, v => (v/1000).toFixed(1), v => v);
+      setParam('punch-throt', punchThrot, v => v,                   v => v);
 
-      // sync slider positions
-      document.getElementById('slider-hover').value       = hover;
-      document.getElementById('slider-sprint').value      = sprint;
-      document.getElementById('slider-cutoff').value      = cutoffRaw;
-      document.getElementById('slider-kp').value          = kpRaw;
-      document.getElementById('slider-punch-start').value = punchStart;
-      document.getElementById('slider-punch-throt').value = punchThrot;
       setBenchButton();
-
       log('Values read from ESP32', 'ok');
     } catch(e) { log('Read failed: ' + e.message, 'err'); }
   }
 
-  function setSlider(id, raw, fmt) {
-    const el = document.getElementById('val-' + id);
-    if (el) el.textContent = fmt(raw);
+  // Update display value, slider position, and slider fill
+  function setParam(id, raw, fmt, sliderVal) {
+    const valEl    = document.getElementById('val-' + id);
+    const sliderEl = document.getElementById('slider-' + id);
+    if (valEl)    valEl.textContent = fmt(raw);
+    if (sliderEl) {
+      sliderEl.value = sliderVal(raw);
+      updateFill(sliderEl);
+    }
   }
 
-  function u16buf(v) { const b=new ArrayBuffer(2); new DataView(b).setUint16(0,v,true); return b; }
-  function u32buf(v) { const b=new ArrayBuffer(4); new DataView(b).setUint32(0,v,true); return b; }
-  function u8buf(v)  { const b=new ArrayBuffer(1); new DataView(b).setUint8(0,v); return b; }
+  function updateFill(slider) {
+    const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
+    slider.style.setProperty('--fill', pct + '%');
+  }
+
+  function u16buf(v) { const b = new ArrayBuffer(2); new DataView(b).setUint16(0, v, true); return b; }
+  function u32buf(v) { const b = new ArrayBuffer(4); new DataView(b).setUint32(0, v, true); return b; }
+  function u8buf(v)  { const b = new ArrayBuffer(1); new DataView(b).setUint8(0, v);        return b; }
 
   function setBenchButton() {
     benchBtn.textContent = benchMode ? 'Bench Mode: On' : 'Bench Mode: Off';
@@ -398,20 +707,22 @@
     }
   }
 
-  document.getElementById('btn-hover-test').addEventListener('click', () => {
-    sendCommand(CMD_HOVER_TEST, 'Hover test command sent');
-  });
+  document.getElementById('btn-hover-test').addEventListener('click', () =>
+    sendCommand(CMD_HOVER_TEST, 'Hover test command sent'));
 
-  document.getElementById('btn-auto-hover').addEventListener('click', () => {
-    sendCommand(CMD_AUTO_HOVER_CAL, 'Auto hover calibration command sent');
-  });
+  document.getElementById('btn-auto-hover').addEventListener('click', () =>
+    sendCommand(CMD_AUTO_HOVER_CAL, 'Auto hover calibration command sent'));
 
-  document.getElementById('btn-start-mission').addEventListener('click', () => {
-    sendCommand(CMD_START_MISSION, 'Mission start command sent');
-  });
+  document.getElementById('btn-start-mission').addEventListener('click', () =>
+    sendCommand(CMD_START_MISSION, 'Mission start command sent'));
 
-  document.getElementById('btn-disarm').addEventListener('click', () => {
-    sendCommand(CMD_DISARM, 'Disarm command sent');
+  document.getElementById('btn-disarm').addEventListener('click', () =>
+    sendCommand(CMD_DISARM, 'Disarm command sent'));
+
+  document.getElementById('btn-sync').addEventListener('click', async () => {
+    if (!connected) return;
+    log('Syncing values from ESP32...');
+    await readAll();
   });
 
   benchBtn.addEventListener('click', async () => {
@@ -423,81 +734,90 @@
       setBenchButton();
       log(benchMode ? 'Bench mode enabled' : 'Bench mode disabled', benchMode ? 'err' : 'ok');
     } catch(e) {
-      log('Bench mode write failed: ' + e.message, 'err');
+      log('Bench mode failed: ' + e.message, 'err');
     }
   });
 
   const timers = {};
-  function debounce(key, fn, delay=150) {
+  function debounce(key, fn, delay = 150) {
     clearTimeout(timers[key]);
     timers[key] = setTimeout(fn, delay);
   }
 
-  // hover throttle — uint16 direct
+  // Hover throttle — live (30ms debounce), min 1000 so you can zero
   document.getElementById('slider-hover').addEventListener('input', function() {
     const v = parseInt(this.value);
     document.getElementById('val-hover').textContent = v;
+    updateFill(this);
     debounce('hover', async () => {
       if (!connected) return;
-      try { await chars.hover.writeValue(u16buf(v)); log('HOVER_THROTTLE → '+v,'ok'); }
-      catch(e) { log('Write failed: '+e.message,'err'); }
-    });
+      try { await chars.hover.writeValue(u16buf(v)); log('HOVER_THROTTLE → ' + v, 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
+    }, 30);
   });
 
-  // sprint throttle — uint16 direct
+  // Sprint throttle
   document.getElementById('slider-sprint').addEventListener('input', function() {
     const v = parseInt(this.value);
     document.getElementById('val-sprint').textContent = v;
+    updateFill(this);
     debounce('sprint', async () => {
       if (!connected) return;
-      try { await chars.sprint.writeValue(u16buf(v)); log('SPRINT_THROTTLE → '+v,'ok'); }
-      catch(e) { log('Write failed: '+e.message,'err'); }
+      try { await chars.sprint.writeValue(u16buf(v)); log('SPRINT_THROTTLE → ' + v, 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
     });
   });
 
-  // sprint cutoff — float x100 as uint16
+  // Sprint cutoff — float x100 as uint16
   document.getElementById('slider-cutoff').addEventListener('input', function() {
     const raw = parseInt(this.value);
-    document.getElementById('val-cutoff').textContent = (raw/100).toFixed(1);
+    document.getElementById('val-cutoff').textContent = (raw / 100).toFixed(1);
+    updateFill(this);
     debounce('cutoff', async () => {
       if (!connected) return;
-      try { await chars.cutoff.writeValue(u16buf(raw)); log('SPRINT_CUTOFF → '+(raw/100).toFixed(1)+'m','ok'); }
-      catch(e) { log('Write failed: '+e.message,'err'); }
+      try { await chars.cutoff.writeValue(u16buf(raw)); log('SPRINT_CUTOFF → ' + (raw / 100).toFixed(1) + 'm', 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
     });
   });
 
-  // hold Kp — float x10 as uint16
+  // Hold Kp — float x10 as uint16
   document.getElementById('slider-kp').addEventListener('input', function() {
     const raw = parseInt(this.value);
-    document.getElementById('val-kp').textContent = (raw/10).toFixed(0);
+    document.getElementById('val-kp').textContent = (raw / 10).toFixed(0);
+    updateFill(this);
     debounce('kp', async () => {
       if (!connected) return;
-      try { await chars.kp.writeValue(u16buf(raw)); log('HOLD_KP → '+(raw/10).toFixed(1),'ok'); }
-      catch(e) { log('Write failed: '+e.message,'err'); }
+      try { await chars.kp.writeValue(u16buf(raw)); log('HOLD_KP → ' + (raw / 10).toFixed(1), 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
     });
   });
 
-  // punch start — uint32 ms
+  // Punch start — uint32 ms
   document.getElementById('slider-punch-start').addEventListener('input', function() {
     const v = parseInt(this.value);
-    document.getElementById('val-punch-start').textContent = (v/1000).toFixed(1);
+    document.getElementById('val-punch-start').textContent = (v / 1000).toFixed(1);
+    updateFill(this);
     debounce('punchStart', async () => {
       if (!connected) return;
-      try { await chars.punchStart.writeValue(u32buf(v)); log('PUNCH_START → '+(v/1000).toFixed(1)+'s','ok'); }
-      catch(e) { log('Write failed: '+e.message,'err'); }
+      try { await chars.punchStart.writeValue(u32buf(v)); log('PUNCH_START → ' + (v / 1000).toFixed(1) + 's', 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
     });
   });
 
-  // punch throttle — uint16 direct
+  // Punch throttle
   document.getElementById('slider-punch-throt').addEventListener('input', function() {
     const v = parseInt(this.value);
     document.getElementById('val-punch-throt').textContent = v;
+    updateFill(this);
     debounce('punchThrot', async () => {
       if (!connected) return;
-      try { await chars.punchThrot.writeValue(u16buf(v)); log('PUNCH_THROTTLE → '+v,'ok'); }
-      catch(e) { log('Write failed: '+e.message,'err'); }
+      try { await chars.punchThrot.writeValue(u16buf(v)); log('PUNCH_THROTTLE → ' + v, 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
     });
   });
+
+  // Init slider fills on page load
+  document.querySelectorAll('input[type=range]').forEach(updateFill);
 </script>
 </body>
 </html>
