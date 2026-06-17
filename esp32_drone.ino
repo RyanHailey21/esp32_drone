@@ -27,10 +27,11 @@ volatile uint16_t HOVER_THROTTLE  = 1420;  // neutral hover, find in hover test
 volatile uint16_t SPRINT_THROTTLE = 1850;  // full climb throttle (~85%)
 volatile float    SPRINT_CUTOFF_M = 17.0;  // ~56ft: transition sprint→hold early
                                             // avoids baro lag overshoot past 60ft
-// Hold phase — simple P controller
+// Hold phase — PID controller
 volatile float    TARGET_ALT_M    = 18.3;  // 60ft target
-volatile float    HOLD_KP         = 120.0; // P gain: throttle_add = KP * error_m
-                                            // e.g. 0.5m low → adds 60µs to hover
+volatile float    HOLD_KP         = 120.0; // P: throttle correction per metre of error
+volatile float    HOLD_KI         = 15.0;  // I: integrates steady-state offset
+volatile float    HOLD_KD         = 80.0;  // D: damps via FC vario (cm/s → m/s)
 // Punch phase
 volatile uint32_t PUNCH_START_MS  = 7500;  // ms from launch when punch begins
 volatile uint16_t PUNCH_THROTTLE  = 2000;  // max throttle for final burst
@@ -43,10 +44,13 @@ volatile uint16_t PUNCH_THROTTLE  = 2000;  // max throttle for final burst
 #define SPRINT_THROT_UUID   "ab0828b5-198e-4351-b779-901fa0e0371e"
 #define SPRINT_CUTOFF_UUID  "ab0828b6-198e-4351-b779-901fa0e0371e"
 #define HOLD_KP_UUID        "ab0828b7-198e-4351-b779-901fa0e0371e"
+#define HOLD_KI_UUID        "ab0828bc-198e-4351-b779-901fa0e0371e"
+#define HOLD_KD_UUID        "ab0828be-198e-4351-b779-901fa0e0371e"
 #define PUNCH_START_UUID    "ab0828b8-198e-4351-b779-901fa0e0371e"
 #define PUNCH_THROT_UUID    "ab0828b9-198e-4351-b779-901fa0e0371e"
 #define COMMAND_UUID        "ab0828ba-198e-4351-b779-901fa0e0371e"
 #define BENCH_MODE_UUID     "ab0828bb-198e-4351-b779-901fa0e0371e"
+#define TELEMETRY_UUID      "ab0828bd-198e-4351-b779-901fa0e0371e"
 
 #define CMD_HOVER_TEST      1
 #define CMD_START_MISSION   2
@@ -57,8 +61,8 @@ volatile uint16_t PUNCH_THROTTLE  = 2000;  // max throttle for final burst
 #define CAL_MAX_THROTTLE    1650
 #define CAL_STEP_US         5
 #define CAL_STEP_MS         250
-#define CAL_LIFTOFF_M       0.12f
-#define CAL_BACKOFF_US      25
+#define CAL_LIFTOFF_M       0.15f
+#define CAL_GE_OFFSET_US    50   // ground effect: free-air hover needs more throttle than near-ground liftoff
 #define CAL_TIMEOUT_MS      30000
 
 #define BENCH_SPRINT_RATE_MPS     9.0f
@@ -91,8 +95,12 @@ bool     armingForHover   = false;
 bool     armingForAutoCal = false;
 uint32_t calTime    = 0;
 uint32_t calStepTime = 0;
-uint16_t calThrottle = CAL_START_THROTTLE;
+uint16_t calThrottle     = CAL_START_THROTTLE;
+uint8_t  calLiftoffCount = 0;
 float    launchAlt  = 0;
+int16_t  lastVario  = 0;   // cm/s from FC baro, updated by getAltitude()
+float    holdIntegral = 0;
+uint32_t holdLastMs   = 0;
 bool     prespunUp  = false;
 float    benchAlt = 0;
 uint32_t benchLastMs = 0;
@@ -101,7 +109,8 @@ uint32_t landingStartMs       = 0;
 uint16_t landingStartThrottle = 1000;
 #define  LANDING_TIME_MS      2500
 
-NimBLECharacteristic* hoverChar = nullptr;
+NimBLECharacteristic* hoverChar      = nullptr;
+NimBLECharacteristic* telemetryChar  = nullptr;
 
 HardwareSerial fcSerial(1);
 
@@ -252,11 +261,21 @@ void setupBLE() {
         new CBfloat(&SPRINT_CUTOFF_M, "SPRINT_CUTOFF_M", 100.0f),
         (uint8_t*)&scInit, 2);
 
-    // HOLD_KP stored x10 (120.0 → 1200)
+    // HOLD_KP/KI/KD stored x10 (120.0 → 1200)
     uint16_t kpInit = (uint16_t)(HOLD_KP * 10);
     makeChar(svc, HOLD_KP_UUID,
         new CBfloat(&HOLD_KP, "HOLD_KP", 10.0f),
         (uint8_t*)&kpInit, 2);
+
+    uint16_t kiInit = (uint16_t)(HOLD_KI * 10);
+    makeChar(svc, HOLD_KI_UUID,
+        new CBfloat(&HOLD_KI, "HOLD_KI", 10.0f),
+        (uint8_t*)&kiInit, 2);
+
+    uint16_t kdInit = (uint16_t)(HOLD_KD * 10);
+    makeChar(svc, HOLD_KD_UUID,
+        new CBfloat(&HOLD_KD, "HOLD_KD", 10.0f),
+        (uint8_t*)&kdInit, 2);
 
     makeChar(svc, PUNCH_START_UUID,
         new CBu32(&PUNCH_START_MS, "PUNCH_START_MS"),
@@ -274,6 +293,12 @@ void setupBLE() {
     makeChar(svc, BENCH_MODE_UUID,
         new CBbenchMode(),
         (uint8_t*)&BENCH_MODE_ENABLED, 1);
+
+    // Telemetry: read + notify, pushed from ESP32 side (no write callback)
+    telemetryChar = svc->createCharacteristic(TELEMETRY_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    uint8_t telInit[7] = {0};
+    telemetryChar->setValue(telInit, 7);
 
     svc->start();
 
@@ -312,13 +337,14 @@ void sendRC() {
 
 float getAltitude() {
     if (!BENCH_MODE_ENABLED) {
+        static float lastAlt = 0;
         while (fcSerial.available()) fcSerial.read();
         uint8_t empty = 0;
         sendMSP(MSP_ALTITUDE, &empty, 0);
         uint32_t timeout = millis() + 50;
-        while (fcSerial.available() < 9 && millis() < timeout);
-        if (fcSerial.available() < 9) return 0;
-        while (fcSerial.available() >= 9) {
+        while (fcSerial.available() < 12 && millis() < timeout);
+        if (fcSerial.available() < 12) return lastAlt;
+        while (fcSerial.available() >= 12) {
             if (fcSerial.read() != '$') continue;
             if (fcSerial.read() != 'M') continue;
             if (fcSerial.read() != '>') continue;
@@ -328,10 +354,15 @@ float getAltitude() {
             alt_cm |= (uint32_t)fcSerial.read() << 8;
             alt_cm |= (uint32_t)fcSerial.read() << 16;
             alt_cm |= (uint32_t)fcSerial.read() << 24;
+            int16_t vario = 0;
+            vario  = (uint16_t)fcSerial.read();
+            vario |= (uint16_t)fcSerial.read() << 8;
             fcSerial.read();  // checksum
-            return alt_cm / 100.0f;
+            lastAlt   = alt_cm / 100.0f;
+            lastVario = vario;
+            return lastAlt;
         }
-        return 0;
+        return lastAlt;
     }
 
     uint32_t now = millis();
@@ -384,10 +415,23 @@ float getAltitude() {
 //  error < 0: above target → reduce throttle
 // ============================================================
 
-uint16_t holdThrottle(float altitude) {
+uint16_t holdPID(float altitude) {
+    uint32_t now = millis();
+    float dt = constrain((now - holdLastMs) / 1000.0f, 0.005f, 0.2f);
+    holdLastMs = now;
+
     float error = TARGET_ALT_M - altitude;
-    int16_t correction = (int16_t)(HOLD_KP * error);
-    return (uint16_t)constrain(HOVER_THROTTLE + correction, 1200, 1700);
+
+    holdIntegral += error * dt;
+    holdIntegral  = constrain(holdIntegral, -10.0f, 10.0f);  // windup limit
+
+    float varioMs = lastVario / 100.0f;  // cm/s → m/s
+
+    float p = HOLD_KP * error;
+    float i = HOLD_KI * holdIntegral;
+    float d = -HOLD_KD * varioMs;        // negative: climbing → reduce throttle
+
+    return (uint16_t)constrain(HOVER_THROTTLE + p + i + d, 1200, 1700);
 }
 
 void startHoverTest() {
@@ -406,9 +450,6 @@ void startMission() {
 }
 
 void startAutoHoverCal() {
-    launchAlt = getAltitude();
-    calTime = millis();
-    calStepTime = millis();
     calThrottle = CAL_START_THROTTLE;
     armTime = millis();
     armingForAutoCal = true;
@@ -459,8 +500,25 @@ void setup() {
 // ============================================================
 
 void loop() {
-    float    altitude     = getAltitude() - launchAlt;
+    float    rawAlt       = getAltitude();
+    float    altitude     = rawAlt - launchAlt;
     uint32_t missionTime  = millis() - launchTime;  // time since motors started
+
+    // Push telemetry at ~10Hz (every 5 loops)
+    // Sends relative altitude (above launch point) so preflight panel shows climb height
+    static uint8_t telTick = 0;
+    if (telemetryChar && ++telTick >= 5) {
+        telTick = 0;
+        int32_t altCm = (int32_t)(rawAlt * 100.0f);
+        int32_t relCm = (int32_t)(altitude * 100.0f);
+        uint8_t pkt[11];
+        memcpy(pkt,     &altCm,       4);
+        memcpy(pkt + 4, &relCm,       4);
+        pkt[8] = (uint8_t)state;
+        memcpy(pkt + 9, &channels[2], 2);
+        telemetryChar->setValue(pkt, 11);
+        telemetryChar->notify();
+    }
 
     switch (state) {
 
@@ -486,10 +544,12 @@ void loop() {
                     Serial.println("[STATE] → HOVER TEST");
                 } else if (armingForAutoCal) {
                     armingForAutoCal = false;
-                    calTime = millis();
-                    calStepTime = millis();
+                    launchAlt        = rawAlt;
+                    calTime          = millis();
+                    calStepTime      = millis();
+                    calLiftoffCount  = 0;
                     state = AUTO_HOVER_CAL;
-                    Serial.println("[STATE] → AUTO HOVER CAL");
+                    Serial.printf("[STATE] → AUTO HOVER CAL (launchAlt=%.2fm)\n", launchAlt);
                 } else {
                     launchTime = millis();
                     prespunUp  = false;
@@ -514,21 +574,21 @@ void loop() {
             if (missionTime >= 8000) { state = CUT; break; }
 
             if (altitude >= SPRINT_CUTOFF_M) {
-                // Kick autorotation motor on entry to hold
                 ledcWrite(MOTOR_PWM_PIN, MOTOR_DUTY);
-                prespunUp = true;
-                state     = HOLDING;
+                prespunUp     = true;
+                holdIntegral  = 0;
+                holdLastMs    = millis();
+                state         = HOLDING;
                 Serial.printf("[STATE] → HOLDING at %.2fm (target %.2fm)\n",
                     altitude, TARGET_ALT_M);
             }
             break;
 
         // ── HOLDING ──────────────────────────────────────────
-        // P controller keeps quad at TARGET_ALT_M (60ft)
-        // Autorotation motor already spinning from SPRINTING exit
-        // Transitions to PUNCH at PUNCH_START_MS
+        // PID controller keeps quad at TARGET_ALT_M (60ft)
+        // D term uses FC vario (vertical velocity) to damp oscillations
         case HOLDING: {
-            uint16_t thr = holdThrottle(altitude);
+            uint16_t thr = holdPID(altitude);
             channels[2]  = thr;
             sendRC();
             digitalWrite(STATUS_LED, HIGH);
@@ -608,13 +668,19 @@ void loop() {
                 altitude, calThrottle);
 
             if (altitude >= CAL_LIFTOFF_M) {
-                HOVER_THROTTLE = constrain(calThrottle - CAL_BACKOFF_US, 1200, 1600);
+                calLiftoffCount++;
+            } else {
+                calLiftoffCount = 0;
+            }
+
+            if (calLiftoffCount >= 5) {
+                HOVER_THROTTLE = constrain(calThrottle + CAL_GE_OFFSET_US, 1200, 1600);
                 if (hoverChar) hoverChar->setValue((uint8_t*)&HOVER_THROTTLE, 2);
                 channels[2] = HOVER_THROTTLE;
                 sendRC();
                 state = HOVER_TEST;
-                Serial.printf("[AUTO_HOVER] liftoff detected, HOVER_THROTTLE=%d -> HOVER TEST\n",
-                    HOVER_THROTTLE);
+                Serial.printf("[AUTO_HOVER] liftoff confirmed (%d counts), HOVER_THROTTLE=%d -> HOVER TEST\n",
+                    calLiftoffCount, HOVER_THROTTLE);
                 break;
             }
 
