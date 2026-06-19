@@ -1,0 +1,51 @@
+#include "State.h"
+
+// ── State Machine ────────────────────────────────────────────
+MissionState state = IDLE;
+
+// ── Runtime State ────────────────────────────────────────────
+uint32_t launchTime      = 0;
+uint32_t armTime         = 0;
+bool     armingForHover  = false;
+bool     armingForAutoCal = false;
+bool     armingForAltHold = false;
+uint32_t calTime         = 0;
+uint32_t calStepTime     = 0;
+uint16_t calThrottle     = CAL_START_THROTTLE;
+uint8_t  calLiftoffCount = 0;
+float    launchAlt       = 0;
+float    currentRelAlt   = 0;
+int16_t  lastVario       = 0;
+float    holdIntegral    = 0;
+uint32_t holdLastMs      = 0;
+bool     prespunUp       = false;
+float    benchAlt        = 0;
+uint32_t benchLastMs     = 0;
+uint32_t landingStartMs  = 0;
+float    landingStartAlt = 0;
+volatile bool bleSafetyLand  = false;
+
+// ── Tunable Parameters (BLE-writable) ────────────────────────
+volatile uint16_t HOVER_THROTTLE  = 1420;
+volatile uint16_t SPRINT_THROTTLE = 1850;
+volatile float    SPRINT_CUTOFF_M = 17.0f;
+volatile float    TARGET_ALT_M    = 18.3f;
+volatile float    HOLD_KP         = 120.0f;
+volatile float    HOLD_KI         = 15.0f;
+volatile float    HOLD_KD         = 80.0f;
+volatile uint32_t PUNCH_START_MS  = 7500;
+volatile uint16_t PUNCH_THROTTLE  = 2000;
+
+// Runtime BLE-controlled bench mode
+volatile uint8_t  BENCH_MODE_ENABLED = 0;
+
+// ── RC Channels ──────────────────────────────────────────────
+// CH1=Roll CH2=Pitch CH3=Throttle CH4=Yaw CH5=AUX1(Arm) CH6=AUX2(Angle)
+uint16_t channels[8] = {1500, 1500, 1000, 1500, 1000, 1000, 1000, 1000};
+
+// ── Flight Controller Serial ─────────────────────────────────
+HardwareSerial fcSerial(1);
+
+// ── BLE Characteristic Pointers ──────────────────────────────
+NimBLECharacteristic* hoverChar     = nullptr;
+NimBLECharacteristic* telemetryChar = nullptr;
