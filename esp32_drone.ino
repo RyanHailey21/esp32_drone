@@ -51,11 +51,13 @@ volatile uint16_t PUNCH_THROTTLE  = 2000;  // max throttle for final burst
 #define COMMAND_UUID        "ab0828ba-198e-4351-b779-901fa0e0371e"
 #define BENCH_MODE_UUID     "ab0828bb-198e-4351-b779-901fa0e0371e"
 #define TELEMETRY_UUID      "ab0828bd-198e-4351-b779-901fa0e0371e"
+#define TARGET_ALT_UUID     "ab0828bf-198e-4351-b779-901fa0e0371e"
 
 #define CMD_HOVER_TEST      1
 #define CMD_START_MISSION   2
 #define CMD_DISARM          3
 #define CMD_AUTO_HOVER_CAL  4
+#define CMD_ALT_HOLD        5
 
 #define CAL_START_THROTTLE  1150
 #define CAL_MAX_THROTTLE    1650
@@ -64,6 +66,10 @@ volatile uint16_t PUNCH_THROTTLE  = 2000;  // max throttle for final burst
 #define CAL_LIFTOFF_M       0.15f
 #define CAL_GE_OFFSET_US    50   // ground effect: free-air hover needs more throttle than near-ground liftoff
 #define CAL_TIMEOUT_MS      30000
+
+#define LANDING_GROUND_M    0.15f  // altitude threshold → cut motors
+#define LANDING_TIMEOUT_MS  30000  // safety: force disarm if landing takes too long
+#define DESCENT_RATE_MPS    0.4f   // target descent speed m/s
 
 #define BENCH_SPRINT_RATE_MPS     9.0f
 #define BENCH_PUNCH_RATE_MPS      7.0f
@@ -79,13 +85,14 @@ enum MissionState {
     IDLE,
     ARMING,
     SPRINTING,   // full throttle to SPRINT_CUTOFF_M
-    HOLDING,     // P-controller holds TARGET_ALT_M
+    HOLDING,     // PID holds TARGET_ALT_M (competition)
     PUNCHING,    // max throttle final burst
     CUT,
     HOVER_TEST,
     AUTO_HOVER_CAL,
     LANDING,
-    DONE
+    DONE,
+    ALT_HOLD     // PID holds TARGET_ALT_M (test mode, BLE-safe)
 };
 MissionState state = IDLE;
 
@@ -93,12 +100,14 @@ uint32_t launchTime = 0;
 uint32_t armTime    = 0;
 bool     armingForHover   = false;
 bool     armingForAutoCal = false;
+bool     armingForAltHold = false;
 uint32_t calTime    = 0;
 uint32_t calStepTime = 0;
 uint16_t calThrottle     = CAL_START_THROTTLE;
 uint8_t  calLiftoffCount = 0;
-float    launchAlt  = 0;
-int16_t  lastVario  = 0;   // cm/s from FC baro, updated by getAltitude()
+float    launchAlt     = 0;
+float    currentRelAlt = 0;  // updated every loop(), safe to read from BLE callbacks
+int16_t  lastVario     = 0;  // cm/s from FC baro, updated by getAltitude()
 float    holdIntegral = 0;
 uint32_t holdLastMs   = 0;
 bool     prespunUp  = false;
@@ -106,8 +115,8 @@ float    benchAlt = 0;
 uint32_t benchLastMs = 0;
 
 uint32_t landingStartMs       = 0;
-uint16_t landingStartThrottle = 1000;
-#define  LANDING_TIME_MS      2500
+float    landingStartAlt      = 0;
+volatile bool bleSafetyLand   = false;  // set by BLE disconnect, handled in main loop
 
 NimBLECharacteristic* hoverChar      = nullptr;
 NimBLECharacteristic* telemetryChar  = nullptr;
@@ -117,7 +126,8 @@ HardwareSerial fcSerial(1);
 void startHoverTest();
 void startMission();
 void startAutoHoverCal();
-void startLanding(uint16_t currentThrottle);
+void startAltHold();
+void startLanding(float currentAlt);
 void disarmToIdle(const char* reason);
 
 
@@ -183,8 +193,8 @@ public:
                 break;
 
             case CMD_DISARM:
-                if (state == HOVER_TEST || state == AUTO_HOVER_CAL)
-                    startLanding(channels[2]);
+                if (state == HOVER_TEST || state == ALT_HOLD || state == AUTO_HOVER_CAL)
+                    startLanding(currentRelAlt);
                 else
                     disarmToIdle("[BLE] Disarm command");
                 break;
@@ -192,6 +202,11 @@ public:
             case CMD_AUTO_HOVER_CAL:
                 if (state == IDLE || state == DONE) startAutoHoverCal();
                 else Serial.println("[BLE] Ignored auto hover calibration command: not idle");
+                break;
+
+            case CMD_ALT_HOLD:
+                if (state == IDLE || state == DONE) startAltHold();
+                else Serial.println("[BLE] Ignored alt hold command: not idle");
                 break;
 
             default:
@@ -205,6 +220,10 @@ class ServerCB : public NimBLEServerCallbacks {
     void onDisconnect(NimBLEServer* server, NimBLEConnInfo& connInfo, int reason) override {
         Serial.println("[BLE] Client disconnected, restarting advertising");
         NimBLEDevice::startAdvertising();
+        // Test states land on BLE loss. Mission states continue autonomously.
+        if (state == HOVER_TEST || state == ALT_HOLD || state == AUTO_HOVER_CAL) {
+            bleSafetyLand = true;
+        }
     }
 };
 
@@ -260,6 +279,12 @@ void setupBLE() {
     makeChar(svc, SPRINT_CUTOFF_UUID,
         new CBfloat(&SPRINT_CUTOFF_M, "SPRINT_CUTOFF_M", 100.0f),
         (uint8_t*)&scInit, 2);
+
+    // TARGET_ALT stored x10 (18.3m → 183)
+    uint16_t taInit = (uint16_t)(TARGET_ALT_M * 10);
+    makeChar(svc, TARGET_ALT_UUID,
+        new CBfloat(&TARGET_ALT_M, "TARGET_ALT_M", 10.0f),
+        (uint8_t*)&taInit, 2);
 
     // HOLD_KP/KI/KD stored x10 (120.0 → 1200)
     uint16_t kpInit = (uint16_t)(HOLD_KP * 10);
@@ -393,6 +418,7 @@ float getAltitude() {
             break;
 
         case HOLDING:
+        case ALT_HOLD:
             benchAlt = launchAlt + TARGET_ALT_M;
             break;
 
@@ -457,12 +483,19 @@ void startAutoHoverCal() {
     Serial.println("[STATE] -> ARMING (auto hover cal)");
 }
 
-void startLanding(uint16_t currentThrottle) {
-    landingStartMs       = millis();
-    landingStartThrottle = currentThrottle;
+void startAltHold() {
+    armTime           = millis();
+    armingForAltHold  = true;
+    state = ARMING;
+    Serial.printf("[STATE] -> ARMING (alt hold, target=%.1fm)\n", TARGET_ALT_M);
+}
+
+void startLanding(float currentAlt) {
+    landingStartMs  = millis();
+    landingStartAlt = currentAlt;
+    holdIntegral    = 0;
     state = LANDING;
-    Serial.printf("[STATE] -> LANDING from throttle=%d (%.1fs ramp)\n",
-        currentThrottle, LANDING_TIME_MS / 1000.0f);
+    Serial.printf("[STATE] -> LANDING from alt=%.2fm\n", currentAlt);
 }
 
 void disarmToIdle(const char* reason) {
@@ -502,6 +535,7 @@ void setup() {
 void loop() {
     float    rawAlt       = getAltitude();
     float    altitude     = rawAlt - launchAlt;
+    currentRelAlt         = altitude;
     uint32_t missionTime  = millis() - launchTime;  // time since motors started
 
     // Push telemetry at ~10Hz (every 5 loops)
@@ -518,6 +552,13 @@ void loop() {
         memcpy(pkt + 9, &channels[2], 2);
         telemetryChar->setValue(pkt, 11);
         telemetryChar->notify();
+    }
+
+    // BLE disconnect safety: land if triggered while in a test state
+    if (bleSafetyLand) {
+        bleSafetyLand = false;
+        Serial.println("[BLE] Disconnect safety → LANDING");
+        startLanding(altitude);
     }
 
     switch (state) {
@@ -550,6 +591,13 @@ void loop() {
                     calLiftoffCount  = 0;
                     state = AUTO_HOVER_CAL;
                     Serial.printf("[STATE] → AUTO HOVER CAL (launchAlt=%.2fm)\n", launchAlt);
+                } else if (armingForAltHold) {
+                    armingForAltHold = false;
+                    launchAlt        = rawAlt;
+                    holdIntegral     = 0;
+                    holdLastMs       = millis();
+                    state = ALT_HOLD;
+                    Serial.printf("[STATE] → ALT HOLD (launchAlt=%.2fm, target=%.1fm)\n", launchAlt, TARGET_ALT_M);
                 } else {
                     launchTime = millis();
                     prespunUp  = false;
@@ -691,19 +739,49 @@ void loop() {
 
             break;
 
+        // ── ALT HOLD ─────────────────────────────────────────
+        // Test mode: same PID as HOLDING but lands on BLE disconnect
+        case ALT_HOLD: {
+            uint16_t thr = holdPID(altitude);
+            channels[2]  = thr;
+            channels[4]  = 1800;
+            channels[5]  = 1800;
+            sendRC();
+            digitalWrite(STATUS_LED, millis() % 500 < 250);
+            Serial.printf("[ALT_HOLD] alt=%.2fm  target=%.1fm  thr=%d  vario=%d\n",
+                altitude, TARGET_ALT_M, thr, lastVario);
+            break;
+        }
+
         // ── LANDING ──────────────────────────────────────────
+        // Velocity-based descent: targets DESCENT_RATE_MPS downward
+        // using FC vario as feedback. Cuts motors at ground threshold.
         case LANDING: {
             channels[4] = 1800;
             channels[5] = 1800;
-            uint32_t elapsed = millis() - landingStartMs;
-            if (elapsed >= LANDING_TIME_MS) {
-                disarmToIdle("[LANDING] complete");
-            } else {
-                float t = (float)elapsed / LANDING_TIME_MS;
-                channels[2] = (uint16_t)(landingStartThrottle * (1.0f - t) + 1000 * t);
-            }
-            sendRC();
             digitalWrite(STATUS_LED, millis() % 200 < 30);
+
+            // Ground detected or timeout → disarm
+            if (altitude <= LANDING_GROUND_M) {
+                disarmToIdle("[LANDING] ground detected");
+                break;
+            }
+            if (millis() - landingStartMs >= LANDING_TIMEOUT_MS) {
+                disarmToIdle("[LANDING] timeout");
+                break;
+            }
+
+            // Velocity controller: error = desired_vario - actual_vario
+            // desired = -DESCENT_RATE_MPS (negative = downward)
+            float varioMs     = lastVario / 100.0f;
+            float rateError   = (-DESCENT_RATE_MPS) - varioMs;
+            // Use KP-scaled correction around hover throttle
+            int16_t correction = (int16_t)(HOLD_KP * 0.6f * rateError);
+            channels[2] = (uint16_t)constrain(HOVER_THROTTLE + correction, 1000, 1600);
+            sendRC();
+
+            Serial.printf("[LANDING] alt=%.2fm  vario=%d  thr=%d\n",
+                altitude, lastVario, channels[2]);
             break;
         }
 

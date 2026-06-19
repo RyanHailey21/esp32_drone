@@ -5,19 +5,21 @@ const SPRINT_CUTOFF_UUID = 'ab0828b6-198e-4351-b779-901fa0e0371e';
 const HOLD_KP_UUID       = 'ab0828b7-198e-4351-b779-901fa0e0371e';
 const HOLD_KI_UUID       = 'ab0828bc-198e-4351-b779-901fa0e0371e';
 const HOLD_KD_UUID       = 'ab0828be-198e-4351-b779-901fa0e0371e';
+const TARGET_ALT_UUID    = 'ab0828bf-198e-4351-b779-901fa0e0371e';
 const PUNCH_START_UUID   = 'ab0828b8-198e-4351-b779-901fa0e0371e';
 const PUNCH_THROT_UUID   = 'ab0828b9-198e-4351-b779-901fa0e0371e';
 const COMMAND_UUID       = 'ab0828ba-198e-4351-b779-901fa0e0371e';
 const BENCH_MODE_UUID    = 'ab0828bb-198e-4351-b779-901fa0e0371e';
 const TELEMETRY_UUID     = 'ab0828bd-198e-4351-b779-901fa0e0371e';
 
-const STATE_NAMES  = ['IDLE','ARMING','SPRINTING','HOLDING','PUNCHING','CUT','HOVER TEST','AUTO HOVER CAL','LANDING','DONE'];
-const STATE_COLORS = ['','var(--amber)','var(--amber)','var(--green)','var(--red)','var(--red)','var(--cyan)','var(--cyan)','var(--cyan)','var(--text-mid)'];
+const STATE_NAMES  = ['IDLE','ARMING','SPRINTING','HOLDING','PUNCHING','CUT','HOVER TEST','AUTO HOVER CAL','LANDING','DONE','ALT HOLD'];
+const STATE_COLORS = ['','var(--amber)','var(--amber)','var(--green)','var(--red)','var(--red)','var(--cyan)','var(--cyan)','var(--cyan)','var(--text-mid)','var(--green)'];
 
 const CMD_HOVER_TEST     = 1;
 const CMD_START_MISSION  = 2;
 const CMD_DISARM         = 3;
 const CMD_AUTO_HOVER_CAL = 4;
+const CMD_ALT_HOLD       = 5;
 
 const CAL_LIFTOFF_CM = 15;
 const CAL_MIN_THROT  = 1150;
@@ -57,7 +59,7 @@ function setStatus(s, t) {
 }
 
 function enableAll(on) {
-  ['hover','sprint','cutoff','kp','ki','kd','punch-start','punch-throt'].forEach(id => {
+  ['hover','sprint','cutoff','target-alt','kp','ki','kd','punch-start','punch-throt'].forEach(id => {
     const el = document.getElementById('param-' + id);
     if (el) el.classList.toggle('enabled', on);
   });
@@ -85,6 +87,7 @@ async function connect() {
     chars.kp         = await service.getCharacteristic(HOLD_KP_UUID);
     chars.ki         = await service.getCharacteristic(HOLD_KI_UUID);
     chars.kd         = await service.getCharacteristic(HOLD_KD_UUID);
+    chars.targetAlt  = await service.getCharacteristic(TARGET_ALT_UUID);
     chars.punchStart = await service.getCharacteristic(PUNCH_START_UUID);
     chars.punchThrot = await service.getCharacteristic(PUNCH_THROT_UUID);
     chars.command    = await service.getCharacteristic(COMMAND_UUID);
@@ -134,6 +137,7 @@ async function readAll() {
     const kpRaw      = new DataView((await chars.kp.readValue()).buffer).getUint16(0, true);
     const kiRaw      = new DataView((await chars.ki.readValue()).buffer).getUint16(0, true);
     const kdRaw      = new DataView((await chars.kd.readValue()).buffer).getUint16(0, true);
+    const targetAlt  = new DataView((await chars.targetAlt.readValue()).buffer).getUint16(0, true);
     const punchStart = new DataView((await chars.punchStart.readValue()).buffer).getUint32(0, true);
     const punchThrot = new DataView((await chars.punchThrot.readValue()).buffer).getUint16(0, true);
     benchMode        = new DataView((await chars.benchMode.readValue()).buffer).getUint8(0);
@@ -144,6 +148,7 @@ async function readAll() {
     setParam('kp',          kpRaw,      v => (v/10).toFixed(0),   v => v);
     setParam('ki',          kiRaw,      v => (v/10).toFixed(1),   v => v);
     setParam('kd',          kdRaw,      v => (v/10).toFixed(0),   v => v);
+    setParam('target-alt',  targetAlt,  v => (v/10).toFixed(1),   v => v);
     setParam('punch-start', punchStart, v => (v/1000).toFixed(1), v => v);
     setParam('punch-throt', punchThrot, v => v,                   v => v);
 
@@ -190,6 +195,9 @@ document.getElementById('btn-hover-test').addEventListener('click', () =>
 
 document.getElementById('btn-auto-hover').addEventListener('click', () =>
   sendCommand(CMD_AUTO_HOVER_CAL, 'Auto hover calibration command sent'));
+
+document.getElementById('btn-alt-hold').addEventListener('click', () =>
+  sendCommand(CMD_ALT_HOLD, 'Alt hold command sent'));
 
 document.getElementById('btn-start-mission').addEventListener('click', () =>
   sendCommand(CMD_START_MISSION, 'Mission start command sent'));
@@ -257,6 +265,18 @@ document.getElementById('slider-cutoff').addEventListener('input', function() {
   debounce('cutoff', async () => {
     if (!connected) return;
     try { await chars.cutoff.writeValue(u16buf(raw)); log('SPRINT_CUTOFF → ' + (raw / 100).toFixed(1) + 'm', 'ok'); }
+    catch(e) { log('Write failed: ' + e.message, 'err'); }
+  });
+});
+
+// Target altitude — float x10 as uint16 (18.3m → 183)
+document.getElementById('slider-target-alt').addEventListener('input', function() {
+  const raw = parseInt(this.value);
+  document.getElementById('val-target-alt').textContent = (raw / 10).toFixed(1);
+  updateFill(this);
+  debounce('targetAlt', async () => {
+    if (!connected) return;
+    try { await chars.targetAlt.writeValue(u16buf(raw)); log('TARGET_ALT → ' + (raw / 10).toFixed(1) + 'm', 'ok'); }
     catch(e) { log('Write failed: ' + e.message, 'err'); }
   });
 });

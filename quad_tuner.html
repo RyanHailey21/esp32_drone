@@ -90,8 +90,9 @@
   <div class="controls" id="mission-controls">
     <button class="cmd-btn" id="btn-hover-test">Hover Test</button>
     <button class="cmd-btn" id="btn-auto-hover">Auto Hover Cal</button>
-    <button class="cmd-btn primary" id="btn-start-mission">Start Mission</button>
-    <button class="cmd-btn danger"  id="btn-disarm">Disarm</button>
+    <button class="cmd-btn" id="btn-alt-hold">Alt Hold</button>
+    <button class="cmd-btn primary wide" id="btn-start-mission">Start Mission</button>
+    <button class="cmd-btn danger wide"  id="btn-disarm">Disarm</button>
     <button class="cmd-btn wide"    id="btn-bench-mode">Bench Mode: Off</button>
     <button class="cmd-btn wide"    id="btn-sync">Sync Values from ESP32</button>
   </div>
@@ -148,9 +149,21 @@
 
   <!-- ── HOLD PHASE ──────────────────────────────────── -->
   <div class="sec">
-    <span class="sec-label">Hold Phase</span>
-    <span class="badge b-hold">station-keep at 60ft</span>
+    <span class="sec-label">Hold Phase / Alt Hold</span>
+    <span class="badge b-hold">station-keep</span>
     <span class="sec-line"></span>
+  </div>
+
+  <div class="param" id="param-target-alt">
+    <div class="param-head">
+      <span class="param-label">Target Altitude</span>
+      <div class="param-readout">
+        <span class="param-value" id="val-target-alt">18.3</span><span class="param-unit">m</span>
+      </div>
+    </div>
+    <input type="range" class="hold" id="slider-target-alt" min="10" max="250" value="183" step="1">
+    <div class="param-bounds"><span>1.0m</span><span>25.0m</span></div>
+    <div class="param-desc">Target hold altitude for both Alt Hold test mode and competition Hold phase. BLE disconnect during Alt Hold triggers auto-land.</div>
   </div>
 
   <div class="param" id="param-kp">
