@@ -20,75 +20,6 @@ The quad sprints to 60ft as fast as possible, holds altitude while the clock run
 
 ---
 
-## Wiring Diagram
-
-```mermaid
-flowchart LR
-    BAT["BATTERY\nGNB 3S LiHV\nXT30\n11.1V max"]
-
-    subgraph POWER["POWER BUS"]
-        direction TB
-        VBAT["VBAT+\nESC input"]
-        GND["GND\nreference"]
-    end
-
-    subgraph FC["FLIGHT CONTROLLER\nSpeedyBee F405 Mini BLS 35A"]
-        direction TB
-        VBAT_IN["VBAT+ / GND pads"]
-        BEC5["5V BEC out"]
-        BEC9["9V BEC out"]
-        TX2["UART2 TX"]
-        RX2["UART2 RX"]
-        FCGND["GND"]
-    end
-
-    subgraph ESP["MISSION CONTROLLER\nESP32-C3 Super Mini"]
-        direction TB
-        VIN["VIN 5V"]
-        G5["GPIO5 RX"]
-        G4["GPIO4 TX"]
-        G6["GPIO6 PWM"]
-        G8["GPIO8 LED"]
-        ESPGND["GND"]
-    end
-
-    subgraph MOTOR_DRV["LOW-SIDE MOTOR DRIVER\n2N2222 NPN transistor"]
-        direction TB
-        GATE["Base via 100 ohm"]
-        DRAIN["Collector"]
-        SOURCE["Emitter / GND"]
-        FLYBACK["Flyback 1N4148"]
-    end
-
-    subgraph PERIPH["PERIPHERALS"]
-        direction TB
-        MOTOR["Brushed DC motor\nautorotation pre-spin"]
-        CAP1["100 uF cap\nVBAT protection"]
-        CAP2["100 uF cap\n9V rail"]
-    end
-
-    BAT -->|VBAT+ 11.1V| VBAT
-    VBAT -->|unregulated| VBAT_IN
-    BAT -->|GND| GND
-    GND -->|reference| FCGND
-    FCGND -->|GND| ESPGND
-
-    BEC5 -->|5V| VIN
-    BEC9 -->|9V +| MOTOR
-
-    TX2 -->|FC TX| G5
-    G4 -->|ESP TX| RX2
-
-    G6 -->|PWM| GATE
-    DRAIN -->|motor -| MOTOR
-    SOURCE -->|GND| ESPGND
-    FLYBACK -->|clamp| MOTOR
-
-    VBAT -->|protection| CAP1
-    BEC9 -->|ripple filter| CAP2
-
-```
-
 ## Wiring
 
 ```
@@ -99,8 +30,8 @@ GNB 3S LiHV
 FC stack (pre-wired via harness)
   ├── 5V BEC → ESP32 VIN
   ├── GND    → ESP32 GND
-  ├── TX2    → ESP32 GPIO5
-  ├── RX2    → ESP32 GPIO4
+  ├── UART2 TX → ESP32 GPIO5
+  ├── UART2 RX → ESP32 GPIO4
   └── 9V BEC → Brushed motor (+)
 
 NPN transistor circuit (brushed autorotation motor):
@@ -119,41 +50,8 @@ NPN transistor circuit (brushed autorotation motor):
 | 5 | UART1 RX ← FC TX2 |
 | 6 | PWM → 2N2222 base (via 100Ω) |
 | 8 | Status LED (built-in) |
-| 20/21 | USB debug (keep free) |
 | 9 | Do not use (boot pin) |
-
----
-
-## Mission Profile
-
-```
-ARMING     → FC arms over MSP, 1.5s settle
-SPRINTING  → Full throttle (SPRINT_THROTTLE) until SPRINT_CUTOFF altitude
-HOLDING    → P-controller holds 60ft, autorotation motor starts spinning
-PUNCHING   → Max throttle from PUNCH_START_MS until 8000ms
-CUT        → FC disarmed, motors off, autorotation descent begins
-```
-
-Primary control is over BLE from `quad_tuner.html`:
-
-| Command | Behavior |
-|---|---|
-| Hover Test | Arms into fixed `HOVER_THROTTLE` so you can tune it live. |
-| Auto Hover Cal | Arms, slowly ramps throttle until liftoff is detected, writes a first-pass `HOVER_THROTTLE`, then stays in hover test mode. |
-| Start Mission | Arms, waits 1.5s, then runs the full sprint/hold/punch/cut mission. |
-| Disarm | Stops throttle, disarms AUX1, and returns to idle. |
-**LED states**
-
-| Pattern | State |
-|---|---|
-| Slow single blink | IDLE |
-| Fast flicker | ARMING |
-| Rapid double blink | SPRINTING |
-| Solid | HOLDING |
-| Very fast strobe | PUNCHING |
-| Medium blink | HOVER TEST |
-| Medium slow blink | AUTO HOVER CAL |
-| Rapid strobe | DONE |
+| 20/21 | USB debug (keep free) |
 
 ---
 
@@ -162,85 +60,290 @@ Primary control is over BLE from `quad_tuner.html`:
 Flash target: `SPEEDYBEEF405MINI`
 
 **Ports tab**
-- UART2: MSP enabled
+- UART2: MSP only — no Serial RX on this port
 
 **Configuration tab**
-- Receiver mode: Serial RX
-- Serial receiver provider: MSP
-- Feature: RX_SERIAL
+- Receiver mode: MSP (`feature RX_MSP`)
 - ESC protocol: DSHOT300
+- `set yaw_motors_reversed = ON` (if motors spin wrong direction)
+- `set min_check = 1005`
 
 **Modes tab**
-- AUX1 HIGH → Arm
-- AUX2 HIGH → Angle Mode
+- AUX1 HIGH (>1700) → Arm
+- AUX2 HIGH (>1700) → Angle Mode
 
-**Failsafe tab**
+**Failsafe**
 - Procedure: DROP
 - Delay: 1.0s
 
 **CLI**
 ```
+serial 1 1 115200 57600 0 115200
 set vbat_max_cell_voltage = 435
 set battery_cell_count = 3
 save
 ```
 
+> If you can't connect Betaflight Configurator, open a serial terminal on the ESP32's COM port at 115200, type `#` to enter the FC CLI directly.
+
+**Accelerometer calibration** — do this before every tuning session on a flat surface with props off. Consistent horizontal drift during hover is almost always a bad accel calibration. Use `board_align_roll` / `board_align_pitch` (tenths of a degree) to null any residual tilt after calibration.
+
+---
+
+## State Machine
+
+```mermaid
+flowchart LR
+    BOOT(("BOOT")) --> IDLE
+
+    IDLE -->|hover test cmd| ARMING_HT
+    IDLE -->|auto hover cal cmd| ARMING_AC
+    IDLE -->|alt hold cmd| ARMING_AH
+    IDLE -->|start mission cmd| ARMING_M
+
+    subgraph TEST["TEST MODES  —  BLE disconnect → LANDING"]
+        ARMING_HT["ARMING\nhover path"]
+        ARMING_AC["ARMING\nauto cal path"]
+        ARMING_AH["ARMING\nalt hold path"]
+        HOVER_TEST["HOVER_TEST\nfixed HOVER_THROTTLE"]
+        AUTO_HOVER_CAL["AUTO_HOVER_CAL\nramp until liftoff"]
+        ALT_HOLD["ALT_HOLD\nPID at TARGET_ALT_M"]
+    end
+
+    subgraph MISSION["COMPETITION MISSION  —  BLE disconnect ignored"]
+        ARMING_M["ARMING\nmission path"]
+        SPRINTING["SPRINTING\nfull climb throttle"]
+        HOLDING["HOLDING\nPID at TARGET_ALT_M"]
+        PUNCHING["PUNCHING\nfull throttle burst"]
+        CUT["CUT\ndisarm + zero"]
+        DONE["DONE"]
+    end
+
+    LANDING["LANDING\nvelocity descent\n0.4 m/s target"]
+
+    ARMING_HT -->|1500ms| HOVER_TEST
+    ARMING_AC -->|1500ms| AUTO_HOVER_CAL
+    ARMING_AH -->|1500ms| ALT_HOLD
+    ARMING_M  -->|1500ms| SPRINTING
+
+    AUTO_HOVER_CAL -->|liftoff 5× confirmed| HOVER_TEST
+    AUTO_HOVER_CAL -->|timeout / max throttle| IDLE
+
+    SPRINTING -->|alt >= SPRINT_CUTOFF_M| HOLDING
+    HOLDING   -->|missionTime >= PUNCH_START_MS| PUNCHING
+    PUNCHING  -->|missionTime >= 8000ms| CUT
+    CUT --> DONE
+
+    HOVER_TEST  -->|disarm cmd| LANDING
+    ALT_HOLD    -->|disarm cmd| LANDING
+    AUTO_HOVER_CAL -->|disarm cmd| LANDING
+    LANDING -->|alt < 15cm or timeout| IDLE
+```
+
+---
+
+## Mission Profile (Competition)
+
+```
+ARMING    1500ms settle — throttle held at 1000, AUX1 high
+SPRINT    Full SPRINT_THROTTLE until SPRINT_CUTOFF_M (~56ft)
+          Autorotation motor begins pre-spin on HOLDING entry
+HOLD      PID controller (Kp/Ki/Kd) stations at TARGET_ALT_M (60ft)
+PUNCH     Full PUNCH_THROTTLE from PUNCH_START_MS until 8000ms
+CUT       FC disarms, motors stop, autorotation descent begins
+```
+
+---
+
+## LED Patterns
+
+| Pattern | State |
+|---|---|
+| Slow single blink (1s) | IDLE |
+| Fast double blink (200ms) | ARMING |
+| Rapid strobe (100ms) | SPRINTING |
+| Solid on | HOLDING |
+| Very fast strobe (50ms) | PUNCHING |
+| Medium blink (300ms) | AUTO HOVER CAL |
+| Medium blink (500ms) | HOVER TEST / ALT HOLD |
+| Slow strobe (200ms, short on) | LANDING |
+| Rapid double blink | DONE |
+
+---
+
+## BLE Tuner
+
+Open `quad_tuner.html` directly in Chrome (Android or desktop). Connect to device named `Quad-Tuner`. Web BLE requires Chrome — not Firefox, Edge, or iOS Safari.
+
+```pwsh
+start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
+```
+
+**Commands**
+
+| Button | Behavior |
+|---|---|
+| Hover Test | Arms → fixed `HOVER_THROTTLE`. Adjust slider live to find neutral buoyancy. |
+| Auto Hover Cal | Arms → ramps throttle until 5 consecutive readings above 15cm → writes `HOVER_THROTTLE` (with +50µs ground-effect offset) → stays in Hover Test. |
+| Alt Hold | Arms → PID holds `TARGET_ALT_M`. BLE disconnect triggers auto-land. |
+| Start Mission | Arms → full sprint/hold/punch/cut sequence. BLE disconnect ignored during mission. |
+| Disarm | In test modes: smooth velocity-based landing. In mission: immediate disarm. |
+| Sync Values | Re-reads all parameters from ESP32. |
+| Bench Mode | Simulates altitude for desk testing. Never fly with this on. |
+
+**Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, and throttle at ~10Hz via BLE notify.
+
+**Active state strip** appears whenever not idle — shows state name, altitude, throttle, and a DISARM button. During Auto Hover Cal an inline progress panel shows altitude bar (0–50cm with 15cm threshold marker) and throttle bar. On cal completion a notification shows the detected hover throttle and auto-syncs the slider.
+
 ---
 
 ## Tunable Parameters
 
-All parameters are writable live over BLE using `quad_tuner.html` in Chrome (Android or desktop). The same page also has command buttons for hover test, auto hover calibration, mission start, and disarm. Connect to device named `Quad-Tuner`.
+All parameters are writable live over BLE. Changes take effect immediately and persist until reboot.
 
-> Open the file directly in Chrome: `start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html`
-> Web BLE requires Chrome — not Firefox, Edge, or iOS Safari.
-> If the device doesn't appear in the scan dialog, check `chrome://bluetooth-internals/#devices` to confirm Chrome can see it.
+| Parameter | Default | Encoding | Description |
+|---|---|---|---|
+| `HOVER_THROTTLE` | 1420 µs | uint16 | Neutral hover throttle. Use Auto Hover Cal for first-pass, then fine-tune in Hover Test. |
+| `SPRINT_THROTTLE` | 1850 µs | uint16 | Full climb throttle during sprint. Higher = faster to 60ft = more punch time. |
+| `SPRINT_CUTOFF_M` | 17.0 m | float×100 | Altitude to stop sprinting. Keep below 18.3m to absorb baro lag. |
+| `TARGET_ALT_M` | 18.3 m | float×10 | Hold target for both Hold phase and Alt Hold test mode. 60ft = 18.3m. |
+| `HOLD_KP` | 120.0 | float×10 | P-gain: throttle correction per metre of altitude error. |
+| `HOLD_KI` | 15.0 | float×10 | I-gain: integrates steady-state offset over time. Keep low to avoid windup. |
+| `HOLD_KD` | 80.0 | float×10 | D-gain: damps via FC vertical velocity (vario). Reduces oscillations. |
+| `PUNCH_START_MS` | 7500 ms | uint32 | Mission clock time to begin final burst. Later = more exit velocity. |
+| `PUNCH_THROTTLE` | 2000 µs | uint16 | Max throttle for punch phase. |
 
-| Parameter | Default | Description |
-|---|---|---|
-| `HOVER_THROTTLE` | 1420 | Throttle at neutral hover. Find in hover test mode first. |
-| `SPRINT_THROTTLE` | 1850 | Full climb throttle during sprint phase. |
-| `SPRINT_CUTOFF_M` | 18.0 | Altitude (m) to stop sprinting and begin hold. |
-| `TARGET_ALT_M` | 18.3 | Hold target altitude (60ft = 18.3m). |
-| `HOLD_KP` | 120.0 | P-gain for altitude hold. Throttle correction per metre of error. |
-| `PUNCH_START_MS` | 7500 | Mission clock time (ms) to begin final throttle burst. |
-| `PUNCH_THROTTLE` | 2000 | Max throttle for punch phase. |
+---
+
+## Altitude Hold PID
+
+The hold controller runs in both `HOLDING` (mission) and `ALT_HOLD` (test) states:
+
+```
+error     = TARGET_ALT_M - altitude
+integral += error × dt          (clamped ±10 m·s to prevent windup)
+vario_ms  = FC_vario_cm_s / 100
+
+throttle = HOVER_THROTTLE
+         + KP × error
+         + KI × integral
+         - KD × vario_ms        (negative: climbing → reduce throttle)
+```
+
+The D term uses vertical velocity directly from the FC's MSP_ALTITUDE response (vario field), avoiding noisy numerical differentiation of the altitude signal.
+
+**Landing** uses a velocity controller targeting `DESCENT_RATE_MPS = 0.4 m/s` downward, also driven by FC vario. Motors cut when altitude drops below 15cm or after a 30s timeout.
 
 ---
 
 ## Tuning Sequence
 
-1. **Find hover throttle** — run Auto Hover Cal for a first-pass `HOVER_THROTTLE`, then use hover test mode and adjust `HOVER_THROTTLE` via BLE until neutrally buoyant
-2. **Verify MSP** — Betaflight receiver tab should show live channel values with ESP32 powered
-3. **Verify motor directions** — Betaflight motors tab, props-out configuration
-4. **Low-altitude sprint test** — confirm climb rate, adjust `SPRINT_THROTTLE`
-5. **Tune hold** — confirm quad stations at 60ft, adjust `HOLD_KP` if oscillating or drifting
-6. **Tune punch timing** — adjust `PUNCH_START_MS`, later = more exit velocity = more air time
-7. **Verify pre-spin** — autorotation device must be fully spun before motor cut at 8s
+1. **Accelerometer calibration** — drone flat and still, Betaflight Setup → Calibrate Accelerometer
+2. **Auto Hover Cal** — gets a first-pass `HOVER_THROTTLE` automatically
+3. **Hover Test** — fine-tune `HOVER_THROTTLE` until neutrally buoyant. Note: cal detects near-ground liftoff (+50µs ground-effect offset applied automatically)
+4. **Alt Hold test** — command a low target (e.g. 1.5m), verify PID holds it. Tune `HOLD_KP/KI/KD`:
+   - Oscillating → raise `HOLD_KD`, lower `HOLD_KP`
+   - Steady sag/climb → raise `HOLD_KI`
+   - Sluggish response → lower `HOLD_KD`, raise `HOLD_KP`
+5. **Sprint test** — low altitude, confirm climb rate and cutoff
+6. **Full mission dry run** — confirm sprint→hold→punch→cut timing
+7. **Punch timing** — adjust `PUNCH_START_MS`: later = more exit velocity
+
+---
+
+## Auto Hover Calibration Detail
+
+- Starts at `CAL_START_THROTTLE = 1150 µs`, steps up 5µs every 250ms
+- Liftoff confirmed after **5 consecutive readings** above 15cm (debounce against baro noise)
+- Final `HOVER_THROTTLE = calThrottle + 50 µs` (ground-effect offset — free-air hover needs more throttle than near-ground liftoff)
+- `launchAlt` is set at the ARMING→CAL transition (after 1500ms motor settle), not before, to avoid baro drift pre-triggering the threshold
+- Cal times out after 30s or at `CAL_MAX_THROTTLE = 1650 µs`
+
+---
+
+## BLE Safety
+
+- **Test states** (`HOVER_TEST`, `ALT_HOLD`, `AUTO_HOVER_CAL`): BLE disconnect triggers velocity-based landing immediately
+- **Mission states** (`SPRINTING`, `HOLDING`, `PUNCHING`): BLE disconnect is ignored — the mission runs to completion autonomously
+- On reconnect, the ESP32 restarts advertising automatically; reconnect from the browser to resume monitoring
+
+---
+
+## Variable & Data Flow
+
+```mermaid
+flowchart LR
+    subgraph BLE["BLE — Quad-Tuner"]
+        W1["CBu16\nhover / sprint / punch throttle"]
+        W2["CBfloat\ncutoff / target alt / KP / KI / KD"]
+        W3["CBu32\npunch start ms"]
+        W4["CBcommand\nhover / cal / alt hold / mission / disarm"]
+        TEL["telemetryChar NOTIFY\n11-byte packet @10Hz\nabs_alt · rel_alt · state · throttle"]
+    end
+
+    subgraph PARAMS["VOLATILE PARAMS"]
+        HT["HOVER_THROTTLE"]
+        ST["SPRINT_THROTTLE"]
+        SC["SPRINT_CUTOFF_M"]
+        TA["TARGET_ALT_M"]
+        KP["HOLD_KP"]
+        KI["HOLD_KI"]
+        KD["HOLD_KD"]
+        PS["PUNCH_START_MS"]
+        PT["PUNCH_THROTTLE"]
+    end
+
+    subgraph SENSOR["MSP SENSOR — UART1"]
+        ALT["getAltitude()\nMSP_ALTITUDE cmd 109\nalt_cm int32 + vario int16"]
+    end
+
+    subgraph SM["STATE MACHINE ~50Hz"]
+        SPR["SPRINTING\nchannels[2] = ST"]
+        HLD["HOLDING / ALT_HOLD\nPID(KP,KI,KD,vario)"]
+        PUN["PUNCHING\nchannels[2] = PT"]
+        HVT["HOVER_TEST\nchannels[2] = HT"]
+        AHC["AUTO_HOVER_CAL\nramp → liftoff → HT+50"]
+        LND["LANDING\nvelocity ctrl 0.4 m/s"]
+    end
+
+    subgraph OUT["OUTPUTS"]
+        MSP_OUT["UART1 MSP_SET_RAW_RC"]
+        PWM["GPIO6 PWM\nautorotation motor"]
+        LED["GPIO8 LED"]
+    end
+
+    W1 --> HT & ST & PT
+    W2 --> SC & TA & KP & KI & KD
+    W3 --> PS
+    W4 -->|state transitions| SM
+
+    ALT -->|altitude m + vario cm/s| HLD & AHC & LND & SPR
+
+    HT --> HLD & HVT & AHC
+    ST --> SPR
+    SC --> SPR
+    TA --> HLD
+    KP & KI & KD --> HLD
+    PS --> HLD
+    PT --> PUN
+
+    SM --> MSP_OUT
+    SM -->|HOLDING entry| PWM
+    SM --> LED
+    SM --> TEL
+```
 
 ---
 
 ## Bench Mode
 
-Bench mode is controlled from `quad_tuner.html` and defaults off on every boot. It simulates altitude, so mission flow and auto hover calibration can be tested with only the ESP32-C3 connected.
-
-BLE controls in bench mode:
-
-| Command | Behavior |
-|---|---|
-| Bench Mode | Toggles simulated altitude on or off while idle. |
-| Start Mission | Runs the full mission flow using simulated altitude. |
-| Hover Test | Enters hover test mode. |
-| Auto Hover Cal | Runs auto hover calibration using simulated liftoff. |
-| Disarm | Disarms and returns to idle. |
-
-Leave Bench Mode off for any real flight.
+Toggle from `quad_tuner.html` while idle. Simulates altitude so mission flow and auto hover cal can be tested on the desk without a flight controller connected. Defaults off on every boot — never fly with it on.
 
 ---
 
-## Arduino CLI
+## Build & Flash
 
-### Install board support
-
+**Install board support**
 ```pwsh
 arduino-cli config init
 arduino-cli config add board_manager.additional_urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
@@ -248,41 +351,30 @@ arduino-cli core update-index
 arduino-cli core install esp32:esp32
 ```
 
-### Install dependencies
-
+**Install dependencies**
 ```pwsh
 arduino-cli lib install "NimBLE-Arduino"
 ```
 
-### Compile
-
+**Compile**
 ```pwsh
 arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc .
 ```
 
-> `CDCOnBoot=cdc` is required — without it `Serial` does not map to the USB port and the serial monitor shows nothing.
+> `CDCOnBoot=cdc` is required — without it `Serial` does not map to the USB port.
 
-### Upload
-
-Find your port first:
+**Upload**
 ```pwsh
 arduino-cli board list
-```
-
-Then upload:
-```pwsh
 arduino-cli upload --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc --port COM11 .
 ```
 
-### Monitor serial output
-
+**Monitor**
 ```pwsh
 arduino-cli monitor --port COM11 --config baudrate=115200
 ```
 
-> On Windows, use the `COM` port reported by `arduino-cli board list`.
-> On macOS, use something like `/dev/cu.usbmodem101`.
-> The ESP32-C3 Super Mini uses USB CDC — no separate USB-UART chip. If the port disappears after flashing, re-run `arduino-cli board list` as it may re-enumerate on a new COM number.
+> The ESP32-C3 Super Mini uses USB CDC — no separate UART chip. The port may re-enumerate on a new COM number after flashing; re-run `board list` if it disappears.
 
 ---
 
@@ -290,8 +382,10 @@ arduino-cli monitor --port COM11 --config baudrate=115200
 
 ```
 esp32_drone/
-  esp32_drone.ino    — ESP32-C3 mission controller firmware
-  quad_tuner.html    — BLE live tuning page (open in Chrome)
-  architecture.md    — state machine and variable flow diagrams
+  esp32_drone.ino    — ESP32-C3 firmware
+  quad_tuner.html    — BLE tuner UI shell
+  quad_tuner.css     — styles
+  quad_tuner.js      — BLE logic, slider handlers, telemetry
+  Wiring Diagram.drawio
   README.md          — this file
 ```
