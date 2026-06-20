@@ -37,10 +37,23 @@ const logEl      = document.getElementById('log');
 const benchBtn   = document.getElementById('btn-bench-mode');
 
 if (!navigator.bluetooth) {
-  document.getElementById('ble-warning').classList.add('show');
+  const ua  = navigator.userAgent;
+  const ios = /iphone|ipad|ipod/i.test(ua);
+  const ff  = /firefox/i.test(ua);
+  const linux = /linux/i.test(ua) && !/android/i.test(ua);
+  const msg = ios
+    ? 'iOS does not support Web Bluetooth. Open this page on Chrome for Android or Chrome on a Mac/Windows PC.'
+    : ff
+      ? 'Firefox does not support Web Bluetooth. Open this page in Chrome.'
+      : linux
+        ? 'Chrome on Linux requires a flag: open chrome://flags/#enable-experimental-web-platform-features and set it to Enabled, then relaunch Chrome.'
+        : 'Web Bluetooth not available. Use Chrome on Android, Windows, or macOS (not Firefox, Safari, or iOS).';
+  const warn = document.getElementById('ble-warning');
+  warn.textContent = msg;
+  warn.classList.add('show');
   connectBtn.disabled = true;
   connectBtn.style.opacity = '0.3';
-  connectBtn.textContent = 'Web BLE not supported in this browser';
+  connectBtn.textContent = 'BLE not available — see above';
 }
 
 // ── LOGGING ─────────────────────────────────────────────
