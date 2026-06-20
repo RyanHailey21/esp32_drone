@@ -13,13 +13,20 @@ void runMissionLoop() {
         telTick = 0;
         int32_t altCm = (int32_t)(rawAlt * 100.0f);
         int32_t relCm = (int32_t)(altitude * 100.0f);
-        uint8_t pkt[11];
-        memcpy(pkt,     &altCm,       4);
-        memcpy(pkt + 4, &relCm,       4);
+        uint8_t pkt[13];
+        memcpy(pkt,      &altCm,       4);
+        memcpy(pkt + 4,  &relCm,       4);
         pkt[8] = (uint8_t)state;
-        memcpy(pkt + 9, &channels[2], 2);
-        telemetryChar->setValue(pkt, 11);
+        memcpy(pkt + 9,  &channels[2], 2);
+        memcpy(pkt + 11, &lastVario,   2);
+        telemetryChar->setValue(pkt, 13);
         telemetryChar->notify();
+    }
+
+    // Keep vario filter current every loop so LANDING and other states see fresh data
+    if ((millis() - lastVarioMs) < VARIO_STALE_MS && abs(lastVario) <= VARIO_MAX_PLAUSIBLE_CMS) {
+        float rawMs = lastVario / 100.0f;
+        filteredVario = VARIO_ALPHA * rawMs + (1.0f - VARIO_ALPHA) * filteredVario;
     }
 
     // BLE disconnect safety: land if triggered while in a test state
@@ -62,10 +69,9 @@ void runMissionLoop() {
                 } else if (armingForAltHold) {
                     armingForAltHold = false;
                     launchAlt        = rawAlt;
-                    holdIntegral     = 0;
-                    holdLastMs       = millis();
+                    resetCascadeController(0.0f);   // setpoint starts at ground, ramps to target
                     state = ALT_HOLD;
-                    Serial.printf("[STATE] → ALT HOLD (launchAlt=%.2fm, target=%.1fm)\n", launchAlt, TARGET_ALT_M);
+                    Serial.printf("[STATE] → ALT HOLD (launchAlt=%.2fm, target=%.1fm)\n", launchAlt, (float)TARGET_ALT_M);
                 } else {
                     launchTime = millis();
                     prespunUp  = false;
@@ -91,12 +97,11 @@ void runMissionLoop() {
 
             if (altitude >= SPRINT_CUTOFF_M) {
                 ledcWrite(MOTOR_PWM_PIN, MOTOR_DUTY);
-                prespunUp     = true;
-                holdIntegral  = 0;
-                holdLastMs    = millis();
-                state         = HOLDING;
+                prespunUp = true;
+                resetCascadeController(altitude);   // bumpless: setpoint = current alt
+                state     = HOLDING;
                 Serial.printf("[STATE] → HOLDING at %.2fm (target %.2fm)\n",
-                    altitude, TARGET_ALT_M);
+                    altitude, (float)TARGET_ALT_M);
             }
             break;
 
@@ -104,13 +109,13 @@ void runMissionLoop() {
         // PID controller keeps quad at TARGET_ALT_M (60ft)
         // D term uses FC vario (vertical velocity) to damp oscillations
         case HOLDING: {
-            uint16_t thr = holdPID(altitude);
+            uint16_t thr = holdCascaded(altitude, true);
             channels[2]  = thr;
             sendRC();
             digitalWrite(STATUS_LED, HIGH);
 
-            Serial.printf("[HOLD] t=%dms  alt=%.2fm  err=%.2fm  throttle=%d\n",
-                missionTime, altitude, TARGET_ALT_M - altitude, thr);
+            Serial.printf("[HOLD] t=%dms  alt=%.2fm  setpt=%.2fm  thr=%d\n",
+                missionTime, altitude, internalSetpoint, thr);
 
             // Safety
             if (missionTime >= 8000) { state = CUT; break; }
@@ -210,14 +215,18 @@ void runMissionLoop() {
         // ── ALT HOLD ─────────────────────────────────────────
         // Test mode: same PID as HOLDING but lands on BLE disconnect
         case ALT_HOLD: {
-            uint16_t thr = holdPID(altitude);
+            uint16_t thr = holdCascaded(altitude, false);
             channels[2]  = thr;
             channels[4]  = 1800;
             channels[5]  = 1800;
             sendRC();
             digitalWrite(STATUS_LED, millis() % 500 < 250);
-            Serial.printf("[ALT_HOLD] alt=%.2fm  target=%.1fm  thr=%d  vario=%d\n",
-                altitude, TARGET_ALT_M, thr, lastVario);
+
+            if (altitude > ALT_MAX_M) {
+                Serial.printf("[ALT_HOLD] ceiling exceeded %.2fm, landing\n", altitude);
+                startLanding(altitude);
+                break;
+            }
             break;
         }
 
@@ -239,17 +248,14 @@ void runMissionLoop() {
                 break;
             }
 
-            // Velocity controller: error = desired_vario - actual_vario
-            // desired = -DESCENT_RATE_MPS (negative = downward)
-            float varioMs     = lastVario / 100.0f;
-            float rateError   = (-DESCENT_RATE_MPS) - varioMs;
-            // Use KP-scaled correction around hover throttle
-            int16_t correction = (int16_t)(HOLD_KP * 0.6f * rateError);
+            // Velocity controller: target DESCENT_RATE_MPS downward using filtered vario
+            float rateError    = (-DESCENT_RATE_MPS) - filteredVario;
+            int16_t correction = (int16_t)(LANDING_KP_VSPEED * rateError);
             channels[2] = (uint16_t)constrain(HOVER_THROTTLE + correction, 1000, 1600);
             sendRC();
 
-            Serial.printf("[LANDING] alt=%.2fm  vario=%d  thr=%d\n",
-                altitude, lastVario, channels[2]);
+            Serial.printf("[LANDING] alt=%.2fm  filtV=%.2f  thr=%d\n",
+                altitude, filteredVario, channels[2]);
             break;
         }
 

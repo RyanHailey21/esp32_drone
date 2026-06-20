@@ -33,8 +33,11 @@ extern uint8_t      calLiftoffCount;
 extern float        launchAlt;
 extern float        currentRelAlt;
 extern int16_t      lastVario;
-extern float        holdIntegral;
-extern uint32_t     holdLastMs;
+extern uint32_t     lastVarioMs;       // millis() of last valid vario read
+extern float        internalSetpoint;  // ramped altitude target (cascade outer loop)
+extern float        filteredVario;     // low-pass filtered vario in m/s
+extern float        vspeedIntegral;    // cascade inner loop integral
+extern uint32_t     vspeedLastMs;      // last inner loop timestamp
 extern bool         prespunUp;
 extern float        benchAlt;
 extern uint32_t     benchLastMs;

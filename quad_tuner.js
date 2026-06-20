@@ -13,7 +13,7 @@ const BENCH_MODE_UUID    = 'ab0828bb-198e-4351-b779-901fa0e0371e';
 const TELEMETRY_UUID     = 'ab0828bd-198e-4351-b779-901fa0e0371e';
 
 const STATE_NAMES  = ['IDLE','ARMING','SPRINTING','HOLDING','PUNCHING','CUT','HOVER TEST','AUTO HOVER CAL','LANDING','DONE','ALT HOLD'];
-const STATE_COLORS = ['','var(--amber)','var(--amber)','var(--green)','var(--red)','var(--red)','var(--cyan)','var(--cyan)','var(--cyan)','var(--text-mid)','var(--green)'];
+const STATE_COLORS = ['','var(--amber)','var(--amber)','var(--green)','var(--red)','var(--red)','var(--cyan)','var(--cyan)','var(--amber)','var(--text-mid)','var(--green)'];
 
 const CMD_HOVER_TEST     = 1;
 const CMD_START_MISSION  = 2;
@@ -145,9 +145,9 @@ async function readAll() {
     setParam('hover',       hover,      v => v,                   v => v);
     setParam('sprint',      sprint,     v => v,                   v => v);
     setParam('cutoff',      cutoffRaw,  v => (v/100).toFixed(1),  v => v);
-    setParam('kp',          kpRaw,      v => (v/10).toFixed(0),   v => v);
+    setParam('kp',          kpRaw,      v => (v/10).toFixed(1),   v => v);
     setParam('ki',          kiRaw,      v => (v/10).toFixed(1),   v => v);
-    setParam('kd',          kdRaw,      v => (v/10).toFixed(0),   v => v);
+    setParam('kd',          kdRaw,      v => (v/10).toFixed(1),   v => v);
     setParam('target-alt',  targetAlt,  v => (v/10).toFixed(1),   v => v);
     setParam('punch-start', punchStart, v => (v/1000).toFixed(1), v => v);
     setParam('punch-throt', punchThrot, v => v,                   v => v);
@@ -281,10 +281,10 @@ document.getElementById('slider-target-alt').addEventListener('input', function(
   });
 });
 
-// Hold Kp — float x10 as uint16
+// Alt loop Kp (outer P) — float x10 as uint16
 document.getElementById('slider-kp').addEventListener('input', function() {
   const raw = parseInt(this.value);
-  document.getElementById('val-kp').textContent = (raw / 10).toFixed(0);
+  document.getElementById('val-kp').textContent = (raw / 10).toFixed(1);
   updateFill(this);
   debounce('kp', async () => {
     if (!connected) return;
@@ -305,10 +305,10 @@ document.getElementById('slider-ki').addEventListener('input', function() {
   });
 });
 
-// Hold Kd
+// Speed loop Kp (inner P) — float x10 as uint16
 document.getElementById('slider-kd').addEventListener('input', function() {
   const raw = parseInt(this.value);
-  document.getElementById('val-kd').textContent = (raw / 10).toFixed(0);
+  document.getElementById('val-kd').textContent = (raw / 10).toFixed(1);
   updateFill(this);
   debounce('kd', async () => {
     if (!connected) return;
@@ -347,6 +347,7 @@ function onTelemetry(e) {
   const relCm    = dv.getInt32(4, true);
   const stateId  = dv.getUint8(8);
   const throttle = dv.getUint16(9, true);
+  const varioCs  = dv.byteLength >= 13 ? dv.getInt16(11, true) : 0;  // cm/s
 
   // Preflight panel (always visible)
   const altM = (altCm / 100).toFixed(2);
@@ -366,8 +367,11 @@ function onTelemetry(e) {
   strip.style.borderColor = isIdle ? '' : color;
   document.getElementById('strip-state').textContent = STATE_NAMES[stateId] || '?';
   document.getElementById('strip-state').style.color = color;
+  const isLanding = stateId === 8;
   document.getElementById('strip-alt').textContent   = 'ALT ' + relM + ' m';
-  document.getElementById('strip-throt').textContent = 'THROT ' + throttle;
+  document.getElementById('strip-throt').textContent = isLanding
+    ? 'DESCENT ' + (varioCs / 100).toFixed(2) + ' m/s'
+    : 'THROT ' + throttle;
 
   // Cal progress panel — only during AUTO_HOVER_CAL (state 7)
   document.getElementById('cal-panel').classList.toggle('active', isCal);

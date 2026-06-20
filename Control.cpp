@@ -1,28 +1,85 @@
 #include "Control.h"
 
 // ============================================================
-//  ALTITUDE HOLD — simple PID controller
-//  error > 0: below target → add throttle
-//  error < 0: above target → reduce throttle
+//  ALTITUDE HOLD — cascaded controller
+//
+//  Outer loop: altitude error → desired vertical speed
+//    HOLD_KP: alt error (m) → desired speed (m/s)
+//
+//  Inner loop: vertical speed error → throttle (PI)
+//    HOLD_KD: speed error (m/s) → throttle offset (µs)  [inner P]
+//    HOLD_KI: speed integral   → throttle offset (µs)   [inner I]
+//
+//  Reference shaping: internalSetpoint ramps toward TARGET_ALT_M
+//  at ALT_RAMP_RATE_MPS to avoid stepping the setpoint.
 // ============================================================
 
-uint16_t holdPID(float altitude) {
+void resetCascadeController(float currentAlt) {
+    internalSetpoint = currentAlt;   // bumpless: start from current altitude
+    filteredVario    = 0.0f;
+    vspeedIntegral   = 0.0f;
+    vspeedLastMs     = millis();
+    lastVarioMs      = millis();     // treat vario as fresh at reset
+}
+
+uint16_t holdCascaded(float altitude, bool isMission) {
     uint32_t now = millis();
-    float dt = constrain((now - holdLastMs) / 1000.0f, 0.005f, 0.2f);
-    holdLastMs = now;
+    float dt = constrain((now - vspeedLastMs) / 1000.0f, 0.005f, 0.2f);
+    vspeedLastMs = now;
 
-    float error = TARGET_ALT_M - altitude;
+    // 1. Reference shaping: ramp internal setpoint toward TARGET_ALT_M
+    float target = TARGET_ALT_M;
+    if (internalSetpoint < target) {
+        internalSetpoint = min(internalSetpoint + ALT_RAMP_RATE_MPS * dt, target);
+    } else if (internalSetpoint > target) {
+        internalSetpoint = max(internalSetpoint - ALT_RAMP_RATE_MPS * dt, target);
+    }
 
-    holdIntegral += error * dt;
-    holdIntegral  = constrain(holdIntegral, -10.0f, 10.0f);  // windup limit
+    // 2. Outer loop: altitude error → desired vertical speed
+    float altError = internalSetpoint - altitude;
+    float maxClimb = isMission ? MAX_CLIMB_MPS_HOLD  : MAX_CLIMB_MPS_TEST;
+    float maxDesc  = isMission ? MAX_DESCENT_MPS_HOLD : MAX_DESCENT_MPS_TEST;
 
-    float varioMs = lastVario / 100.0f;  // cm/s → m/s
+    // Near target: scale down speed limits to cushion final approach
+    if (fabsf(altError) < NEAR_TARGET_M) {
+        float factor = fabsf(altError) / NEAR_TARGET_M;
+        factor = NEAR_TARGET_FACTOR + (1.0f - NEAR_TARGET_FACTOR) * factor;
+        maxClimb *= factor;
+        maxDesc  *= factor;
+    }
+    float desiredVspeed = constrain(HOLD_KP * altError, -maxDesc, maxClimb);
 
-    float p = HOLD_KP * error;
-    float i = HOLD_KI * holdIntegral;
-    float d = -HOLD_KD * varioMs;        // negative: climbing → reduce throttle
+    // filteredVario is maintained by runMissionLoop() every iteration.
+    // If vario goes stale the filter just holds its last value — safe degraded behaviour.
 
-    return (uint16_t)constrain(HOVER_THROTTLE + p + i + d, 1200, 1700);
+    // 4. Inner PI loop with conditional anti-windup
+    float vspeedError  = desiredVspeed - filteredVario;
+    float thrMin = (float)HOVER_THROTTLE - THR_DOWN_OFFSET_US;
+    float thrMax = (float)HOVER_THROTTLE + THR_UP_OFFSET_US;
+
+    // Only integrate when not saturated in the direction of the error
+    float rawThrottle = (float)HOVER_THROTTLE + HOLD_KD * vspeedError + HOLD_KI * vspeedIntegral;
+    bool satHigh = rawThrottle > thrMax && vspeedError > 0;
+    bool satLow  = rawThrottle < thrMin && vspeedError < 0;
+    if (!satHigh && !satLow) {
+        vspeedIntegral += vspeedError * dt;
+        vspeedIntegral  = constrain(vspeedIntegral, -KI_VSPEED_LIMIT, KI_VSPEED_LIMIT);
+    }
+
+    float finalThrottle = (float)HOVER_THROTTLE + HOLD_KD * vspeedError + HOLD_KI * vspeedIntegral;
+
+    // Rate-limited debug log at 10 Hz
+    static uint32_t lastLogMs = 0;
+    if (now - lastLogMs >= 100) {
+        lastLogMs = now;
+        Serial.printf("[CASCADE] setpt=%.2f aErr=%.2f desV=%.2f fV=%.2f vErr=%.2f "
+                      "P=%.0f I=%.0f raw=%.0f sat=%s\n",
+            internalSetpoint, altError, desiredVspeed, filteredVario, vspeedError,
+            HOLD_KD * vspeedError, HOLD_KI * vspeedIntegral, finalThrottle,
+            satHigh ? "HI" : (satLow ? "LO" : "ok"));
+    }
+
+    return (uint16_t)constrain(finalThrottle, thrMin, thrMax);
 }
 
 void startHoverTest() {
@@ -58,7 +115,6 @@ void startAltHold() {
 void startLanding(float currentAlt) {
     landingStartMs  = millis();
     landingStartAlt = currentAlt;
-    holdIntegral    = 0;
     state = LANDING;
     Serial.printf("[STATE] -> LANDING from alt=%.2fm\n", currentAlt);
 }

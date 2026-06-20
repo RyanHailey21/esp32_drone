@@ -43,8 +43,9 @@ float getAltitude() {
             vario  = (uint16_t)fcSerial.read();
             vario |= (uint16_t)fcSerial.read() << 8;
             fcSerial.read();  // checksum
-            lastAlt   = alt_cm / 100.0f;
-            lastVario = vario;
+            lastAlt     = alt_cm / 100.0f;
+            lastVario   = vario;
+            lastVarioMs = millis();
             return lastAlt;
         }
         return lastAlt;
@@ -80,6 +81,8 @@ float getAltitude() {
         case HOLDING:
         case ALT_HOLD:
             benchAlt = launchAlt + TARGET_ALT_M;
+            lastVario   = 0;
+            lastVarioMs = millis();   // keep vario "fresh" so cascade filter stays active
             break;
 
         case PUNCHING:

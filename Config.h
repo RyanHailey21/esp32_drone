@@ -61,3 +61,31 @@
 
 // ── Arming Settle Time ────────────────────────────────────────
 #define ARMING_MS  1500
+
+// ── Cascaded Altitude Hold ────────────────────────────────────
+// HOLD_KP = outer P gain: altitude error (m) → desired vertical speed (m/s)
+// HOLD_KD = inner P gain: speed error (m/s) → throttle offset (µs)
+// HOLD_KI = inner I gain: speed integral    → throttle offset (µs)
+
+// Outer loop: setpoint ramp and speed limits
+#define ALT_RAMP_RATE_MPS       1.0f    // m/s — internal setpoint ramp rate
+#define MAX_CLIMB_MPS_TEST      1.5f    // max commanded climb, test mode
+#define MAX_DESCENT_MPS_TEST    1.0f    // max commanded descent, test mode
+#define MAX_CLIMB_MPS_HOLD      3.5f    // max commanded climb, competition HOLDING
+#define MAX_DESCENT_MPS_HOLD    2.0f    // max commanded descent, competition HOLDING
+#define NEAR_TARGET_M           0.5f    // within this radius, scale down max speed
+#define NEAR_TARGET_FACTOR      0.35f   // minimum speed factor within near-target zone
+
+// Inner loop: vario filtering
+#define VARIO_ALPHA             0.25f   // low-pass weight (0=max smoothing, 1=raw)
+#define VARIO_STALE_MS          500     // ms before vario reading is considered stale
+#define VARIO_MAX_PLAUSIBLE_CMS 800     // cm/s — implausible above this (~8 m/s)
+#define KI_VSPEED_LIMIT         40.0f   // anti-windup clamp on vspeedIntegral (µs)
+
+// Throttle authority around hover
+#define THR_UP_OFFSET_US        200     // max µs above HOVER_THROTTLE
+#define THR_DOWN_OFFSET_US      250     // max µs below HOVER_THROTTLE (more for braking)
+
+// Safety
+#define ALT_MAX_M               22.0f   // absolute ceiling — triggers landing above this
+#define LANDING_KP_VSPEED       30.0f   // fixed P gain for landing velocity controller

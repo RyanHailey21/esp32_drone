@@ -16,8 +16,11 @@ uint8_t  calLiftoffCount = 0;
 float    launchAlt       = 0;
 float    currentRelAlt   = 0;
 int16_t  lastVario       = 0;
-float    holdIntegral    = 0;
-uint32_t holdLastMs      = 0;
+uint32_t lastVarioMs     = 0;
+float    internalSetpoint = 0;
+float    filteredVario   = 0;
+float    vspeedIntegral  = 0;
+uint32_t vspeedLastMs    = 0;
 bool     prespunUp       = false;
 float    benchAlt        = 0;
 uint32_t benchLastMs     = 0;
@@ -26,13 +29,13 @@ float    landingStartAlt = 0;
 volatile bool bleSafetyLand  = false;
 
 // ── Tunable Parameters (BLE-writable) ────────────────────────
-volatile uint16_t HOVER_THROTTLE  = 1420;
+volatile uint16_t HOVER_THROTTLE  = 1320;
 volatile uint16_t SPRINT_THROTTLE = 1850;
 volatile float    SPRINT_CUTOFF_M = 17.0f;
 volatile float    TARGET_ALT_M    = 18.3f;
-volatile float    HOLD_KP         = 120.0f;
-volatile float    HOLD_KI         = 15.0f;
-volatile float    HOLD_KD         = 80.0f;
+volatile float    HOLD_KP         = 1.2f;   // outer P: alt error (m) → desired speed (m/s)
+volatile float    HOLD_KI         = 3.0f;   // inner I: speed integral → throttle (µs)
+volatile float    HOLD_KD         = 25.0f;  // inner P: speed error (m/s) → throttle (µs)
 volatile uint32_t PUNCH_START_MS  = 7500;
 volatile uint16_t PUNCH_THROTTLE  = 2000;
 

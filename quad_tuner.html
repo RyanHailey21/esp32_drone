@@ -108,10 +108,10 @@
     <div class="param-head">
       <span class="param-label">Hover Throttle</span>
       <div class="param-readout">
-        <span class="param-value" id="val-hover">1420</span><span class="param-unit">µs</span>
+        <span class="param-value" id="val-hover">1320</span><span class="param-unit">µs</span>
       </div>
     </div>
-    <input type="range" class="hover-t" id="slider-hover" min="1000" max="1600" value="1420" step="5">
+    <input type="range" class="hover-t" id="slider-hover" min="1000" max="1600" value="1320" step="5">
     <div class="param-bounds"><span>1000 — zero</span><span>1600</span></div>
     <div class="param-desc">Live during hover test. Slide to find neutral buoyancy. Pull to 1000 to zero throttle.</div>
   </div>
@@ -168,38 +168,38 @@
 
   <div class="param" id="param-kp">
     <div class="param-head">
-      <span class="param-label">Hold Kp</span>
+      <span class="param-label">Alt Loop Kp</span>
       <div class="param-readout">
-        <span class="param-value" id="val-kp">120</span>
+        <span class="param-value" id="val-kp">1.2</span>
       </div>
     </div>
-    <input type="range" class="hold" id="slider-kp" min="200" max="3000" value="1200" step="50">
-    <div class="param-bounds"><span>20</span><span>300</span></div>
-    <div class="param-desc">Throttle correction per metre of error. Too low = sags. Too high = oscillates.</div>
+    <input type="range" class="hold" id="slider-kp" min="3" max="100" value="12" step="1">
+    <div class="param-bounds"><span>0.3</span><span>10.0</span></div>
+    <div class="param-desc">Outer loop: alt error (m) → desired climb speed (m/s). Start low. Too high = setpoint overshoot.</div>
   </div>
 
   <div class="param" id="param-ki">
     <div class="param-head">
-      <span class="param-label">Hold Ki</span>
+      <span class="param-label">Speed Loop Ki</span>
       <div class="param-readout">
-        <span class="param-value" id="val-ki">15.0</span>
+        <span class="param-value" id="val-ki">3.0</span>
       </div>
     </div>
-    <input type="range" class="hold" id="slider-ki" min="0" max="500" value="150" step="5">
-    <div class="param-bounds"><span>0</span><span>50</span></div>
-    <div class="param-desc">Integrates steady-state offset. Corrects residual sag/climb over time. Keep low to avoid windup.</div>
+    <input type="range" class="hold" id="slider-ki" min="0" max="200" value="30" step="5">
+    <div class="param-bounds"><span>0</span><span>20.0</span></div>
+    <div class="param-desc">Inner loop integral: removes steady-state speed bias. Add only after vehicle settles near target without large overshoot.</div>
   </div>
 
   <div class="param" id="param-kd">
     <div class="param-head">
-      <span class="param-label">Hold Kd</span>
+      <span class="param-label">Speed Loop Kp</span>
       <div class="param-readout">
-        <span class="param-value" id="val-kd">80</span>
+        <span class="param-value" id="val-kd">25.0</span>
       </div>
     </div>
-    <input type="range" class="hold" id="slider-kd" min="0" max="2000" value="800" step="50">
-    <div class="param-bounds"><span>0</span><span>200</span></div>
-    <div class="param-desc">Damps via FC vertical velocity (vario). Reduces oscillations. Too high = sluggish response.</div>
+    <input type="range" class="hold" id="slider-kd" min="0" max="1500" value="250" step="25">
+    <div class="param-bounds"><span>0</span><span>150.0</span></div>
+    <div class="param-desc">Inner loop P: speed error (m/s) → throttle offset (µs). Tune this first with Ki=0.</div>
   </div>
 
   <!-- ── PUNCH PHASE ─────────────────────────────────── -->
