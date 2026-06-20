@@ -42,7 +42,7 @@ if (!navigator.bluetooth) {
   const ff  = /firefox/i.test(ua);
   const linux = /linux/i.test(ua) && !/android/i.test(ua);
   const msg = ios
-    ? 'iOS does not support Web Bluetooth. Open this page on Chrome for Android or Chrome on a Mac/Windows PC.'
+    ? 'iOS blocks Web Bluetooth in all browsers (Apple restriction). Install Bluefy from the App Store — it is a free browser that adds Web BLE to iOS. Open this page inside Bluefy.'
     : ff
       ? 'Firefox does not support Web Bluetooth. Open this page in Chrome.'
       : linux
