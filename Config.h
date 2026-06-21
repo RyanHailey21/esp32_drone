@@ -68,7 +68,7 @@
 // HOLD_KI = inner I gain: speed integral    → throttle offset (µs)
 
 // Outer loop: setpoint ramp and speed limits
-#define ALT_RAMP_RATE_MPS       1.0f    // m/s — internal setpoint ramp rate
+#define ALT_RAMP_RATE_MPS       3.5f    // m/s — internal setpoint ramp rate
 #define MAX_CLIMB_MPS_TEST      1.5f    // max commanded climb, test mode
 #define MAX_DESCENT_MPS_TEST    1.0f    // max commanded descent, test mode
 #define MAX_CLIMB_MPS_HOLD      3.5f    // max commanded climb, competition HOLDING

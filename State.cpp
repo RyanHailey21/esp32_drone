@@ -1,4 +1,5 @@
 #include "State.h"
+#include "altitude_gains.h"
 
 // ── State Machine ────────────────────────────────────────────
 MissionState state = IDLE;
@@ -29,13 +30,13 @@ float    landingStartAlt = 0;
 volatile bool bleSafetyLand  = false;
 
 // ── Tunable Parameters (BLE-writable) ────────────────────────
-volatile uint16_t HOVER_THROTTLE  = 1320;
+volatile uint16_t HOVER_THROTTLE  = (uint16_t)(AltitudeParameters::HOVER_THROTTLE + 0.5f);
 volatile uint16_t SPRINT_THROTTLE = 1850;
 volatile float    SPRINT_CUTOFF_M = 17.0f;
 volatile float    TARGET_ALT_M    = 18.3f;
-volatile float    HOLD_KP         = 1.2f;   // outer P: alt error (m) → desired speed (m/s)
-volatile float    HOLD_KI         = 3.0f;   // inner I: speed integral → throttle (µs)
-volatile float    HOLD_KD         = 25.0f;  // inner P: speed error (m/s) → throttle (µs)
+volatile float    HOLD_KP         = AltitudeParameters::HOLD_KP;
+volatile float    HOLD_KI         = AltitudeParameters::HOLD_KI;
+volatile float    HOLD_KD         = AltitudeParameters::HOLD_KD;
 volatile uint32_t PUNCH_START_MS  = 7500;
 volatile uint16_t PUNCH_THROTTLE  = 2000;
 

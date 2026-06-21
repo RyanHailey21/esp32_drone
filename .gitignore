@@ -1,1 +1,3 @@
 \.claude
+# Python design pipeline output — copy out/altitude_gains.h here manually after each tuning run
+altitude_gains.h

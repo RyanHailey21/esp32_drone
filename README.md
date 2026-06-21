@@ -382,7 +382,13 @@ arduino-cli monitor --port COM11 --config baudrate=115200
 
 ```
 esp32_drone/
-  esp32_drone.ino    — ESP32-C3 firmware
+  esp32_drone.ino    — Entrypoint: setup() and loop() only
+  Config.h           — All compile-time constants (pins, UUIDs, command IDs, cal/landing params)
+  State.h / .cpp     — MissionState enum, volatile tunable params, runtime globals, fcSerial
+  Msp.h / .cpp       — sendMSP(), sendRC(), getAltitude() with bench-mode sim
+  Control.h / .cpp   — holdPID(), disarmToIdle(), all start*() state transition functions
+  Ble.h / .cpp       — NimBLE callback classes, setupBLE(), telemetry notify
+  Mission.h / .cpp   — runMissionLoop(): full state machine switch/case
   quad_tuner.html    — BLE tuner UI shell
   quad_tuner.css     — styles
   quad_tuner.js      — BLE logic, slider handlers, telemetry
