@@ -61,8 +61,9 @@ Flash target: `BETAFPVF4` (select in Betaflight Configurator firmware flasher �
 
 **Physical mounting**
 - FC mounted right-side up (component/chip side facing up), arrow pointing toward the front of the frame
-- Verify orientation: Betaflight Setup tab → 3D model should tip forward when you tilt the nose down, and tip left when you tilt left
-- If the FC arrow points backward in the frame, add `set align_board_yaw = 180` to the CLI block below
+- The BetaFPV F4 target has a hardware gyro alignment of **CW 90° flip** (visible in Setup → Active IMU) — this is normal and expected; Betaflight compensates for it automatically. Do not add software corrections to work around it.
+- Verify orientation: Betaflight Setup tab → 3D model should tip forward when you tilt the nose down, and tip left when you tilt left. If it moves wrong, adjust `align_board_yaw` only.
+- Software board alignment should be **0, 0, 0** for right-side-up mounting with arrow pointing forward
 
 **Ports tab**
 - Assign the UART connected to ESP32 GPIO4/5: MSP only — no Serial RX on this port
@@ -70,7 +71,7 @@ Flash target: `BETAFPVF4` (select in Betaflight Configurator firmware flasher �
 
 **Configuration tab**
 - Receiver mode: MSP (`feature RX_MSP`)
-- ESC protocol: DSHOT600
+- ESC protocol: DSHOT300 (BetaFPV F4 target default — do not change)
 - `set min_check = 1005`
 
 **Motors tab**
@@ -100,26 +101,35 @@ serial <N> 1 115200 57600 0 115200
 
 # Battery
 set vbat_max_cell_voltage = 435
-set battery_cell_count = 2
+set battery_cell_count = 3
 
 # Board alignment — right-side up, arrow pointing forward
 set align_board_roll = 0
 set align_board_pitch = 0
-set align_board_yaw = 0   # change to 180 if FC arrow points toward the rear of the frame
+set align_board_yaw = 0   # confirmed: FC arrow points toward front of frame
 
-# RPM filter — must be disabled; requires bidirectional DSHOT which is not configured
-# Leaving it enabled causes motor pulsing / erratic RPM at low throttle
-set rpm_filter_harmonics = 0
-set rpm_filter_enabled = OFF
+# Throttle / motor idle
+set min_check = 1005
+set dshot_idle_value = 800   # default 550 — raised to 800 to prevent low-RPM desync/dropout
+
+# RPM filter — requires bidirectional DSHOT
+# Confirmed working on BetaFPV F4: RPM readouts visible in Motors tab
+set dshot_bidir = ON
+set rpm_filter_harmonics = 1
 
 # Runaway takeoff prevention — disable during initial tuning
 # Re-enable (set to ON) once motor directions and hover throttle are confirmed correct
 set runaway_takeoff_prevention = OFF
 
+# AIRMODE must be disabled — with AIRMODE on, PID corrections remain active at zero throttle
+# and create a vibration feedback loop at low throttle that drives all motors well above idle,
+# causing rapid ESC overheating. AIRMODE is for freestyle/acrobatics only.
+feature -AIRMODE
+
 save
 ```
 
-> **2S vs 3S**: set `battery_cell_count` to match the pack in use. For LiHV packs `vbat_max_cell_voltage = 435` (4.35V/cell) applies to both.
+> Running 3S. For LiHV packs `vbat_max_cell_voltage = 435` (4.35V/cell) is correct regardless of cell count.
 
 > If you can't connect Betaflight Configurator, open a serial terminal on the ESP32's COM port at 115200, type `#` to enter the FC CLI directly.
 
