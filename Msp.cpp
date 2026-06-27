@@ -1,6 +1,6 @@
 #include "Msp.h"
 
-void sendMSP(uint8_t cmd, uint8_t* data, uint8_t len) {
+static void sendMSP(uint8_t cmd, uint8_t* data, uint8_t len) {
     uint8_t cs = 0;
     fcSerial.write('$');
     fcSerial.write('M');

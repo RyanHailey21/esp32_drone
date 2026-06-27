@@ -2,14 +2,12 @@
 #include "altitude_gains.h"
 
 // ── State Machine ────────────────────────────────────────────
-MissionState state = IDLE;
+MissionState state     = IDLE;
+ArmTarget    armTarget = ARM_MISSION;
 
 // ── Runtime State ────────────────────────────────────────────
 uint32_t launchTime      = 0;
 uint32_t armTime         = 0;
-bool     armingForHover  = false;
-bool     armingForAutoCal = false;
-bool     armingForAltHold = false;
 uint32_t calTime         = 0;
 uint32_t calStepTime     = 0;
 uint16_t calThrottle     = CAL_START_THROTTLE;
@@ -22,12 +20,10 @@ float    internalSetpoint = 0;
 float    filteredVario   = 0;
 float    vspeedIntegral  = 0;
 uint32_t vspeedLastMs    = 0;
-bool     prespunUp       = false;
 float    benchAlt        = 0;
 uint32_t benchLastMs     = 0;
 uint32_t landingStartMs  = 0;
-float    landingStartAlt = 0;
-volatile bool bleSafetyLand  = false;
+volatile bool bleSafetyLand = false;
 
 // ── Tunable Parameters (BLE-writable) ────────────────────────
 volatile uint16_t HOVER_THROTTLE  = (uint16_t)(AltitudeParameters::HOVER_THROTTLE + 0.5f);

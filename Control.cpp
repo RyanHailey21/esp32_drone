@@ -15,11 +15,11 @@
 // ============================================================
 
 void resetCascadeController(float currentAlt) {
-    internalSetpoint = currentAlt;   // bumpless: start from current altitude
+    internalSetpoint = currentAlt;
     filteredVario    = 0.0f;
     vspeedIntegral   = 0.0f;
     vspeedLastMs     = millis();
-    lastVarioMs      = millis();     // treat vario as fresh at reset
+    lastVarioMs      = millis();
 }
 
 uint16_t holdCascaded(float altitude, bool isMission) {
@@ -52,12 +52,11 @@ uint16_t holdCascaded(float altitude, bool isMission) {
     // filteredVario is maintained by runMissionLoop() every iteration.
     // If vario goes stale the filter just holds its last value — safe degraded behaviour.
 
-    // 4. Inner PI loop with conditional anti-windup
+    // Inner PI loop with conditional anti-windup
     float vspeedError  = desiredVspeed - filteredVario;
     float thrMin = (float)HOVER_THROTTLE - THR_DOWN_OFFSET_US;
     float thrMax = (float)HOVER_THROTTLE + THR_UP_OFFSET_US;
 
-    // Only integrate when not saturated in the direction of the error
     float rawThrottle = (float)HOVER_THROTTLE + HOLD_KD * vspeedError + HOLD_KI * vspeedIntegral;
     bool satHigh = rawThrottle > thrMax && vspeedError > 0;
     bool satLow  = rawThrottle < thrMin && vspeedError < 0;
@@ -68,7 +67,6 @@ uint16_t holdCascaded(float altitude, bool isMission) {
 
     float finalThrottle = (float)HOVER_THROTTLE + HOLD_KD * vspeedError + HOLD_KI * vspeedIntegral;
 
-    // Rate-limited debug log at 10 Hz
     static uint32_t lastLogMs = 0;
     if (now - lastLogMs >= 100) {
         lastLogMs = now;
@@ -83,49 +81,48 @@ uint16_t holdCascaded(float altitude, bool isMission) {
 }
 
 void startHoverTest() {
-    armTime = millis();
-    armingForHover = true;
-    state = ARMING;
+    armTime   = millis();
+    armTarget = ARM_HOVER_TEST;
+    state     = ARMING;
     Serial.println("[STATE] -> ARMING (hover test)");
 }
 
 void startMission() {
-    armTime = millis();
-    state   = ARMING;
+    armTime   = millis();
+    armTarget = ARM_MISSION;
+    state     = ARMING;
     Serial.println("[STATE] -> ARMING");
 }
 
 void startAutoHoverCal() {
     calThrottle = CAL_START_THROTTLE;
-    armTime = millis();
-    armingForAutoCal = true;
-    state = ARMING;
+    armTime     = millis();
+    armTarget   = ARM_AUTO_HOVER_CAL;
+    state       = ARMING;
     Serial.println("[STATE] -> ARMING (auto hover cal)");
 }
 
 void startAltHold() {
-    armTime           = millis();
-    armingForAltHold  = true;
-    state = ARMING;
+    armTime   = millis();
+    armTarget = ARM_ALT_HOLD;
+    state     = ARMING;
     Serial.printf("[STATE] -> ARMING (alt hold, target=%.1fm)\n", TARGET_ALT_M);
 }
 
 void startLanding(float currentAlt) {
-    landingStartMs  = millis();
-    landingStartAlt = currentAlt;
-    state = LANDING;
+    landingStartMs = millis();
+    state          = LANDING;
     Serial.printf("[STATE] -> LANDING from alt=%.2fm\n", currentAlt);
 }
 
 void disarmToIdle(const char* reason) {
     ledcWrite(MOTOR_PWM_PIN, 0);
-    channels[4] = 1000;
-    channels[5] = 1000;
-    channels[2] = 1000;
+    channels[CH_ARM]      = 1000;
+    channels[CH_ANGLE]    = 1000;
+    channels[CH_THROTTLE] = 1000;
     launchAlt = 0;
-    state = IDLE;
+    state     = IDLE;
     Serial.println(reason);
-    // Do NOT call sendRC() here — this may be invoked from the NimBLE task,
-    // which would race with the main loop's fcSerial writes and corrupt MSP framing.
+    // Do NOT call sendRC() here — invoked from NimBLE task, races with main loop fcSerial.
     // The main loop sends RC on its next iteration within one cycle (<70ms).
 }

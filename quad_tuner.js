@@ -256,127 +256,33 @@ function debounce(key, fn, delay = 150) {
   timers[key] = setTimeout(fn, delay);
 }
 
-// Hover throttle — live (30ms debounce), min 1000 to zero throttle
-document.getElementById('slider-hover').addEventListener('input', function() {
-  const v = parseInt(this.value);
-  document.getElementById('val-hover').textContent = v;
-  updateFill(this);
-  debounce('hover', () => {
-    if (!connected) return;
-    bleWrite(async () => {
-      try { await chars.hover.writeValue(u16buf(v)); log('HOVER_THROTTLE → ' + v, 'ok'); }
-      catch(e) { log('Write failed: ' + e.message, 'err'); }
-    });
-  }, 30);
-});
+const SLIDERS = [
+  { id: 'hover',       char: 'hover',      enc: v => u16buf(v),  fmt: v => String(v),           label: v => 'HOVER_THROTTLE → ' + v,                        ms: 30  },
+  { id: 'sprint',      char: 'sprint',     enc: v => u16buf(v),  fmt: v => String(v),           label: v => 'SPRINT_THROTTLE → ' + v,                       ms: 150 },
+  { id: 'cutoff',      char: 'cutoff',     enc: v => u16buf(v),  fmt: v => (v/100).toFixed(1),  label: v => 'SPRINT_CUTOFF → ' + (v/100).toFixed(1) + 'm', ms: 150 },
+  { id: 'target-alt',  char: 'targetAlt',  enc: v => u16buf(v),  fmt: v => (v/10).toFixed(1),   label: v => 'TARGET_ALT → ' + (v/10).toFixed(1) + 'm',     ms: 150 },
+  { id: 'kp',          char: 'kp',         enc: v => u16buf(v),  fmt: v => (v/10).toFixed(1),   label: v => 'HOLD_KP → ' + (v/10).toFixed(1),              ms: 150 },
+  { id: 'ki',          char: 'ki',         enc: v => u16buf(v),  fmt: v => (v/10).toFixed(1),   label: v => 'HOLD_KI → ' + (v/10).toFixed(1),              ms: 150 },
+  { id: 'kd',          char: 'kd',         enc: v => u16buf(v),  fmt: v => (v/10).toFixed(1),   label: v => 'HOLD_KD → ' + (v/10).toFixed(1),              ms: 150 },
+  { id: 'punch-start', char: 'punchStart', enc: v => u32buf(v),  fmt: v => (v/1000).toFixed(1), label: v => 'PUNCH_START → ' + (v/1000).toFixed(1) + 's',  ms: 150 },
+  { id: 'punch-throt', char: 'punchThrot', enc: v => u16buf(v),  fmt: v => String(v),           label: v => 'PUNCH_THROTTLE → ' + v,                       ms: 150 },
+];
 
-document.getElementById('slider-sprint').addEventListener('input', function() {
-  const v = parseInt(this.value);
-  document.getElementById('val-sprint').textContent = v;
-  updateFill(this);
-  debounce('sprint', () => {
-    if (!connected) return;
-    bleWrite(async () => {
-      try { await chars.sprint.writeValue(u16buf(v)); log('SPRINT_THROTTLE → ' + v, 'ok'); }
-      catch(e) { log('Write failed: ' + e.message, 'err'); }
-    });
-  });
-});
-
-// Sprint cutoff — float x100 as uint16
-document.getElementById('slider-cutoff').addEventListener('input', function() {
-  const raw = parseInt(this.value);
-  document.getElementById('val-cutoff').textContent = (raw / 100).toFixed(1);
-  updateFill(this);
-  debounce('cutoff', () => {
-    if (!connected) return;
-    bleWrite(async () => {
-      try { await chars.cutoff.writeValue(u16buf(raw)); log('SPRINT_CUTOFF → ' + (raw / 100).toFixed(1) + 'm', 'ok'); }
-      catch(e) { log('Write failed: ' + e.message, 'err'); }
-    });
-  });
-});
-
-// Target altitude — float x10 as uint16 (18.3m → 183)
-document.getElementById('slider-target-alt').addEventListener('input', function() {
-  const raw = parseInt(this.value);
-  document.getElementById('val-target-alt').textContent = (raw / 10).toFixed(1);
-  updateFill(this);
-  debounce('targetAlt', () => {
-    if (!connected) return;
-    bleWrite(async () => {
-      try { await chars.targetAlt.writeValue(u16buf(raw)); log('TARGET_ALT → ' + (raw / 10).toFixed(1) + 'm', 'ok'); }
-      catch(e) { log('Write failed: ' + e.message, 'err'); }
-    });
-  });
-});
-
-// Alt loop Kp (outer P) — float x10 as uint16
-document.getElementById('slider-kp').addEventListener('input', function() {
-  const raw = parseInt(this.value);
-  document.getElementById('val-kp').textContent = (raw / 10).toFixed(1);
-  updateFill(this);
-  debounce('kp', () => {
-    if (!connected) return;
-    bleWrite(async () => {
-      try { await chars.kp.writeValue(u16buf(raw)); log('HOLD_KP → ' + (raw / 10).toFixed(1), 'ok'); }
-      catch(e) { log('Write failed: ' + e.message, 'err'); }
-    });
-  });
-});
-
-// Hold Ki
-document.getElementById('slider-ki').addEventListener('input', function() {
-  const raw = parseInt(this.value);
-  document.getElementById('val-ki').textContent = (raw / 10).toFixed(1);
-  updateFill(this);
-  debounce('ki', () => {
-    if (!connected) return;
-    bleWrite(async () => {
-      try { await chars.ki.writeValue(u16buf(raw)); log('HOLD_KI → ' + (raw / 10).toFixed(1), 'ok'); }
-      catch(e) { log('Write failed: ' + e.message, 'err'); }
-    });
-  });
-});
-
-// Speed loop Kp (inner P) — float x10 as uint16
-document.getElementById('slider-kd').addEventListener('input', function() {
-  const raw = parseInt(this.value);
-  document.getElementById('val-kd').textContent = (raw / 10).toFixed(1);
-  updateFill(this);
-  debounce('kd', () => {
-    if (!connected) return;
-    bleWrite(async () => {
-      try { await chars.kd.writeValue(u16buf(raw)); log('HOLD_KD → ' + (raw / 10).toFixed(1), 'ok'); }
-      catch(e) { log('Write failed: ' + e.message, 'err'); }
-    });
-  });
-});
-
-// Punch start — uint32 ms
-document.getElementById('slider-punch-start').addEventListener('input', function() {
-  const v = parseInt(this.value);
-  document.getElementById('val-punch-start').textContent = (v / 1000).toFixed(1);
-  updateFill(this);
-  debounce('punchStart', () => {
-    if (!connected) return;
-    bleWrite(async () => {
-      try { await chars.punchStart.writeValue(u32buf(v)); log('PUNCH_START → ' + (v / 1000).toFixed(1) + 's', 'ok'); }
-      catch(e) { log('Write failed: ' + e.message, 'err'); }
-    });
-  });
-});
-
-document.getElementById('slider-punch-throt').addEventListener('input', function() {
-  const v = parseInt(this.value);
-  document.getElementById('val-punch-throt').textContent = v;
-  updateFill(this);
-  debounce('punchThrot', () => {
-    if (!connected) return;
-    bleWrite(async () => {
-      try { await chars.punchThrot.writeValue(u16buf(v)); log('PUNCH_THROTTLE → ' + v, 'ok'); }
-      catch(e) { log('Write failed: ' + e.message, 'err'); }
-    });
+SLIDERS.forEach(({ id, char: charKey, enc, fmt, label, ms }) => {
+  const slider = document.getElementById('slider-' + id);
+  const valEl  = document.getElementById('val-' + id);
+  if (!slider) return;
+  slider.addEventListener('input', function() {
+    const v = parseInt(this.value);
+    if (valEl) valEl.textContent = fmt(v);
+    updateFill(this);
+    debounce(id, () => {
+      if (!connected || !chars[charKey]) return;
+      bleWrite(async () => {
+        try { await chars[charKey].writeValue(enc(v)); log(label(v), 'ok'); }
+        catch(e) { log('Write failed: ' + e.message, 'err'); }
+      });
+    }, ms);
   });
 });
 

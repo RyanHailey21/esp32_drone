@@ -1,8 +1,9 @@
 #pragma once
 
 #include <Arduino.h>
-#include <NimBLEDevice.h>
 #include "Config.h"
+
+class NimBLECharacteristic;  // forward declaration — includers that call methods must include NimBLEDevice.h
 
 // ── State Machine ────────────────────────────────────────────
 enum MissionState {
@@ -19,13 +20,14 @@ enum MissionState {
     ALT_HOLD       // PID holds TARGET_ALT_M (test mode, BLE-safe)
 };
 
+// ── Arm Target ───────────────────────────────────────────────
+enum ArmTarget { ARM_MISSION, ARM_HOVER_TEST, ARM_AUTO_HOVER_CAL, ARM_ALT_HOLD };
+
 // ── Runtime State ────────────────────────────────────────────
 extern MissionState state;
+extern ArmTarget    armTarget;
 extern uint32_t     launchTime;
 extern uint32_t     armTime;
-extern bool         armingForHover;
-extern bool         armingForAutoCal;
-extern bool         armingForAltHold;
 extern uint32_t     calTime;
 extern uint32_t     calStepTime;
 extern uint16_t     calThrottle;
@@ -33,16 +35,14 @@ extern uint8_t      calLiftoffCount;
 extern float        launchAlt;
 extern float        currentRelAlt;
 extern int16_t      lastVario;
-extern uint32_t     lastVarioMs;       // millis() of last valid vario read
-extern float        internalSetpoint;  // ramped altitude target (cascade outer loop)
-extern float        filteredVario;     // low-pass filtered vario in m/s
-extern float        vspeedIntegral;    // cascade inner loop integral
-extern uint32_t     vspeedLastMs;      // last inner loop timestamp
-extern bool         prespunUp;
+extern uint32_t     lastVarioMs;
+extern float        internalSetpoint;
+extern float        filteredVario;
+extern float        vspeedIntegral;
+extern uint32_t     vspeedLastMs;
 extern float        benchAlt;
 extern uint32_t     benchLastMs;
 extern uint32_t     landingStartMs;
-extern float        landingStartAlt;
 extern volatile bool bleSafetyLand;
 
 // ── Tunable Parameters (BLE-writable) ────────────────────────

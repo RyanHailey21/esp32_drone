@@ -1,4 +1,7 @@
 #include "Ble.h"
+#include <NimBLEDevice.h>
+#include "State.h"
+#include "Control.h"
 
 // ============================================================
 //  BLE CALLBACKS
@@ -129,6 +132,12 @@ static NimBLECharacteristic* makeChar(NimBLEService* svc, const char* uuid,
     return c;
 }
 
+static void makeFloat(NimBLEService* svc, const char* uuid,
+                      volatile float* var, const char* name, float scale) {
+    uint16_t init = (uint16_t)(*var * scale);
+    makeChar(svc, uuid, new CBfloat(var, name, scale), (uint8_t*)&init, 2);
+}
+
 void setupBLE() {
     NimBLEDevice::init("Quad-Tuner");
     auto* server = NimBLEDevice::createServer();
@@ -143,33 +152,11 @@ void setupBLE() {
         new CBu16(&SPRINT_THROTTLE, "SPRINT_THROTTLE"),
         (uint8_t*)&SPRINT_THROTTLE, 2);
 
-    // SPRINT_CUTOFF stored x100 (17.0m → 1700)
-    uint16_t scInit = (uint16_t)(SPRINT_CUTOFF_M * 100);
-    makeChar(svc, SPRINT_CUTOFF_UUID,
-        new CBfloat(&SPRINT_CUTOFF_M, "SPRINT_CUTOFF_M", 100.0f),
-        (uint8_t*)&scInit, 2);
-
-    // TARGET_ALT stored x10 (18.3m → 183)
-    uint16_t taInit = (uint16_t)(TARGET_ALT_M * 10);
-    makeChar(svc, TARGET_ALT_UUID,
-        new CBfloat(&TARGET_ALT_M, "TARGET_ALT_M", 10.0f),
-        (uint8_t*)&taInit, 2);
-
-    // HOLD_KP/KI/KD stored x10 (120.0 → 1200)
-    uint16_t kpInit = (uint16_t)(HOLD_KP * 10);
-    makeChar(svc, HOLD_KP_UUID,
-        new CBfloat(&HOLD_KP, "HOLD_KP", 10.0f),
-        (uint8_t*)&kpInit, 2);
-
-    uint16_t kiInit = (uint16_t)(HOLD_KI * 10);
-    makeChar(svc, HOLD_KI_UUID,
-        new CBfloat(&HOLD_KI, "HOLD_KI", 10.0f),
-        (uint8_t*)&kiInit, 2);
-
-    uint16_t kdInit = (uint16_t)(HOLD_KD * 10);
-    makeChar(svc, HOLD_KD_UUID,
-        new CBfloat(&HOLD_KD, "HOLD_KD", 10.0f),
-        (uint8_t*)&kdInit, 2);
+    makeFloat(svc, SPRINT_CUTOFF_UUID, &SPRINT_CUTOFF_M, "SPRINT_CUTOFF_M", 100.0f);
+    makeFloat(svc, TARGET_ALT_UUID,    &TARGET_ALT_M,    "TARGET_ALT_M",    10.0f);
+    makeFloat(svc, HOLD_KP_UUID,       &HOLD_KP,         "HOLD_KP",         10.0f);
+    makeFloat(svc, HOLD_KI_UUID,       &HOLD_KI,         "HOLD_KI",         10.0f);
+    makeFloat(svc, HOLD_KD_UUID,       &HOLD_KD,         "HOLD_KD",         10.0f);
 
     makeChar(svc, PUNCH_START_UUID,
         new CBu32(&PUNCH_START_MS, "PUNCH_START_MS"),

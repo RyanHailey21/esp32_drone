@@ -15,6 +15,11 @@
 #define MSP_SET_RAW_RC  200
 #define MSP_ALTITUDE    109
 
+// ── RC Channel Indices ────────────────────────────────────────
+#define CH_THROTTLE  2
+#define CH_ARM       4
+#define CH_ANGLE     5
+
 // ── BLE UUIDs ────────────────────────────────────────────────
 #define SERVICE_UUID        "ab0828b1-198e-4351-b779-901fa0e0371e"
 #define HOVER_UUID          "ab0828b2-198e-4351-b779-901fa0e0371e"
