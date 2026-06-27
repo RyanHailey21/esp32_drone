@@ -12,8 +12,8 @@ The quad sprints to 60ft as fast as possible, holds altitude while the clock run
 |---|---|
 | Happymodel EX1404 4800KV (×4) | Propulsion |
 | HQProp T3×2×3 | Props |
-| GNB 300mAh 3S 80C LiHV XT30 | Power |
-| SpeedyBee F405 Mini BLS 35A Stack | FC + ESC |
+| GNB 300mAh 2–3S 80C LiHV XT30 | Power |
+| BetaFPV F4 2-3S AIO | FC + ESC |
 | ESP32-C3 Super Mini | Mission controller |
 | Brushed DC motor (3–12V) | Autorotation pre-spin |
 | 2N2222 NPN transistor + 1N4148 + 100Ω | Brushed motor driver |
@@ -27,12 +27,12 @@ GNB 3S LiHV
   └── XT30 → ESC VBAT/GND pads
         └── 100µF cap across VBAT/GND (as close to pads as possible)
 
-FC stack (pre-wired via harness)
-  ├── 5V BEC → ESP32 VIN
-  ├── GND    → ESP32 GND
-  ├── UART2 TX → ESP32 GPIO5
-  ├── UART2 RX → ESP32 GPIO4
-  └── 9V BEC → Brushed motor (+)
+BetaFPV F4 2-3S
+  ├── 5V pad  → ESP32 VIN
+  ├── GND pad → ESP32 GND
+  ├── UARTx TX → ESP32 GPIO5  (x = whichever UART pad is used; note for CLI serial command)
+  ├── UARTx RX → ESP32 GPIO4
+  └── 5V or 9V pad → Brushed motor (+)  (check available BEC voltage on this board)
 
 NPN transistor circuit (brushed autorotation motor):
   ESP32 GPIO6 → 100Ω → 2N2222 base
@@ -46,8 +46,8 @@ NPN transistor circuit (brushed autorotation motor):
 
 | GPIO | Function |
 |---|---|
-| 4 | UART1 TX → FC RX2 |
-| 5 | UART1 RX ← FC TX2 |
+| 4 | UART1 TX → FC RX (MSP UART) |
+| 5 | UART1 RX ← FC TX (MSP UART) |
 | 6 | PWM → 2N2222 base (via 100Ω) |
 | 8 | Status LED (built-in) |
 | 9 | Do not use (boot pin) |
@@ -57,16 +57,33 @@ NPN transistor circuit (brushed autorotation motor):
 
 ## Betaflight Configuration
 
-Flash target: `SPEEDYBEEF405MINI`
+Flash target: `BETAFPVF4` (select in Betaflight Configurator firmware flasher — verify exact target name against the board label)
+
+**Physical mounting**
+- FC mounted right-side up (component/chip side facing up), arrow pointing toward the front of the frame
+- Verify orientation: Betaflight Setup tab → 3D model should tip forward when you tilt the nose down, and tip left when you tilt left
+- If the FC arrow points backward in the frame, add `set align_board_yaw = 180` to the CLI block below
 
 **Ports tab**
-- UART2: MSP only — no Serial RX on this port
+- Assign the UART connected to ESP32 GPIO4/5: MSP only — no Serial RX on this port
+- Verify which UART number is broken out on the BetaFPV F4 pads used for FC↔ESP32 wiring
 
 **Configuration tab**
 - Receiver mode: MSP (`feature RX_MSP`)
-- ESC protocol: DSHOT300
-- `set yaw_motors_reversed = ON` (if motors spin wrong direction)
+- ESC protocol: DSHOT600
 - `set min_check = 1005`
+
+**Motors tab**
+- Verify motor spin directions match Quad X layout (viewed from above):
+  ```
+       FRONT
+   M4(CCW)  M1(CW)
+   M3(CW)   M2(CCW)
+       BACK
+  ```
+- Use the per-motor **Reversed** direction checkboxes in the Motors tab to correct any motors spinning the wrong way — this sends a persistent DShot direction command to the ESC
+- Motor test (props off, battery on): spin each motor one at a time and confirm it drives the correct physical corner in the correct direction before first flight
+- Props must match motor direction: CW motor → CW prop, CCW motor → CCW prop (CCW props are typically marked with an "R" suffix)
 
 **Modes tab**
 - AUX1 HIGH (>1700) → Arm
@@ -78,15 +95,35 @@ Flash target: `SPEEDYBEEF405MINI`
 
 **CLI**
 ```
-serial 1 1 115200 57600 0 115200
+# Replace <N> with the UART number wired to the ESP32 (check Ports tab)
+serial <N> 1 115200 57600 0 115200
+
+# Battery
 set vbat_max_cell_voltage = 435
-set battery_cell_count = 3
+set battery_cell_count = 2
+
+# Board alignment — right-side up, arrow pointing forward
+set align_board_roll = 0
+set align_board_pitch = 0
+set align_board_yaw = 0   # change to 180 if FC arrow points toward the rear of the frame
+
+# RPM filter — must be disabled; requires bidirectional DSHOT which is not configured
+# Leaving it enabled causes motor pulsing / erratic RPM at low throttle
+set rpm_filter_harmonics = 0
+set rpm_filter_enabled = OFF
+
+# Runaway takeoff prevention — disable during initial tuning
+# Re-enable (set to ON) once motor directions and hover throttle are confirmed correct
+set runaway_takeoff_prevention = OFF
+
 save
 ```
 
+> **2S vs 3S**: set `battery_cell_count` to match the pack in use. For LiHV packs `vbat_max_cell_voltage = 435` (4.35V/cell) applies to both.
+
 > If you can't connect Betaflight Configurator, open a serial terminal on the ESP32's COM port at 115200, type `#` to enter the FC CLI directly.
 
-**Accelerometer calibration** — do this before every tuning session on a flat surface with props off. Consistent horizontal drift during hover is almost always a bad accel calibration. Use `board_align_roll` / `board_align_pitch` (tenths of a degree) to null any residual tilt after calibration.
+**Accelerometer calibration** — do this on a flat surface with props off before the first hover session and after any remounting of the FC. Consistent horizontal drift during hover is almost always a bad accel calibration.
 
 ---
 

@@ -73,10 +73,11 @@ void runMissionLoop() {
                     state = ALT_HOLD;
                     Serial.printf("[STATE] → ALT HOLD (launchAlt=%.2fm, target=%.1fm)\n", launchAlt, (float)TARGET_ALT_M);
                 } else {
+                    launchAlt  = rawAlt;
                     launchTime = millis();
                     prespunUp  = false;
                     state      = SPRINTING;
-                    Serial.println("[STATE] → SPRINTING");
+                    Serial.printf("[STATE] → SPRINTING (launchAlt=%.2fm)\n", launchAlt);
                 }
             }
             break;

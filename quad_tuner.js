@@ -30,6 +30,10 @@ let device = null, connected = false;
 let benchMode = 0;
 let prevStateId = -1;
 
+// Serialise all BLE writes — prevents "GATT operation already in progress"
+let _bleQ = Promise.resolve();
+function bleWrite(fn) { _bleQ = _bleQ.then(fn).catch(() => {}); }
+
 const connectBtn = document.getElementById('connect-btn');
 const statusDot  = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
@@ -133,6 +137,7 @@ function disconnect() {
 function onDisconnected() {
   connected = false; chars = {};
   benchMode = 0;
+  _bleQ = Promise.resolve();
   setBenchButton();
   setStatus('', 'disconnected');
   connectBtn.textContent = 'Connect to Quad-Tuner';
@@ -192,14 +197,16 @@ function setBenchButton() {
   benchBtn.classList.toggle('bench-on', !!benchMode);
 }
 
-async function sendCommand(cmd, label) {
+function sendCommand(cmd, label) {
   if (!connected) return;
-  try {
-    await chars.command.writeValue(u8buf(cmd));
-    log(label, 'ok');
-  } catch(e) {
-    log('Command failed: ' + e.message, 'err');
-  }
+  bleWrite(async () => {
+    try {
+      await chars.command.writeValue(u8buf(cmd));
+      log(label, 'ok');
+    } catch(e) {
+      log('Command failed: ' + e.message, 'err');
+    }
+  });
 }
 
 // ── COMMAND BUTTONS ──────────────────────────────────────
@@ -227,17 +234,19 @@ document.getElementById('btn-sync').addEventListener('click', async () => {
   await readAll();
 });
 
-benchBtn.addEventListener('click', async () => {
+benchBtn.addEventListener('click', () => {
   if (!connected) return;
   const next = benchMode ? 0 : 1;
-  try {
-    await chars.benchMode.writeValue(u8buf(next));
-    benchMode = new DataView((await chars.benchMode.readValue()).buffer).getUint8(0);
-    setBenchButton();
-    log(benchMode ? 'Bench mode enabled' : 'Bench mode disabled', benchMode ? 'err' : 'ok');
-  } catch(e) {
-    log('Bench mode failed: ' + e.message, 'err');
-  }
+  bleWrite(async () => {
+    try {
+      await chars.benchMode.writeValue(u8buf(next));
+      benchMode = new DataView((await chars.benchMode.readValue()).buffer).getUint8(0);
+      setBenchButton();
+      log(benchMode ? 'Bench mode enabled' : 'Bench mode disabled', benchMode ? 'err' : 'ok');
+    } catch(e) {
+      log('Bench mode failed: ' + e.message, 'err');
+    }
+  });
 });
 
 // ── SLIDER LISTENERS ─────────────────────────────────────
@@ -252,10 +261,12 @@ document.getElementById('slider-hover').addEventListener('input', function() {
   const v = parseInt(this.value);
   document.getElementById('val-hover').textContent = v;
   updateFill(this);
-  debounce('hover', async () => {
+  debounce('hover', () => {
     if (!connected) return;
-    try { await chars.hover.writeValue(u16buf(v)); log('HOVER_THROTTLE → ' + v, 'ok'); }
-    catch(e) { log('Write failed: ' + e.message, 'err'); }
+    bleWrite(async () => {
+      try { await chars.hover.writeValue(u16buf(v)); log('HOVER_THROTTLE → ' + v, 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
+    });
   }, 30);
 });
 
@@ -263,10 +274,12 @@ document.getElementById('slider-sprint').addEventListener('input', function() {
   const v = parseInt(this.value);
   document.getElementById('val-sprint').textContent = v;
   updateFill(this);
-  debounce('sprint', async () => {
+  debounce('sprint', () => {
     if (!connected) return;
-    try { await chars.sprint.writeValue(u16buf(v)); log('SPRINT_THROTTLE → ' + v, 'ok'); }
-    catch(e) { log('Write failed: ' + e.message, 'err'); }
+    bleWrite(async () => {
+      try { await chars.sprint.writeValue(u16buf(v)); log('SPRINT_THROTTLE → ' + v, 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
+    });
   });
 });
 
@@ -275,10 +288,12 @@ document.getElementById('slider-cutoff').addEventListener('input', function() {
   const raw = parseInt(this.value);
   document.getElementById('val-cutoff').textContent = (raw / 100).toFixed(1);
   updateFill(this);
-  debounce('cutoff', async () => {
+  debounce('cutoff', () => {
     if (!connected) return;
-    try { await chars.cutoff.writeValue(u16buf(raw)); log('SPRINT_CUTOFF → ' + (raw / 100).toFixed(1) + 'm', 'ok'); }
-    catch(e) { log('Write failed: ' + e.message, 'err'); }
+    bleWrite(async () => {
+      try { await chars.cutoff.writeValue(u16buf(raw)); log('SPRINT_CUTOFF → ' + (raw / 100).toFixed(1) + 'm', 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
+    });
   });
 });
 
@@ -287,10 +302,12 @@ document.getElementById('slider-target-alt').addEventListener('input', function(
   const raw = parseInt(this.value);
   document.getElementById('val-target-alt').textContent = (raw / 10).toFixed(1);
   updateFill(this);
-  debounce('targetAlt', async () => {
+  debounce('targetAlt', () => {
     if (!connected) return;
-    try { await chars.targetAlt.writeValue(u16buf(raw)); log('TARGET_ALT → ' + (raw / 10).toFixed(1) + 'm', 'ok'); }
-    catch(e) { log('Write failed: ' + e.message, 'err'); }
+    bleWrite(async () => {
+      try { await chars.targetAlt.writeValue(u16buf(raw)); log('TARGET_ALT → ' + (raw / 10).toFixed(1) + 'm', 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
+    });
   });
 });
 
@@ -299,10 +316,12 @@ document.getElementById('slider-kp').addEventListener('input', function() {
   const raw = parseInt(this.value);
   document.getElementById('val-kp').textContent = (raw / 10).toFixed(1);
   updateFill(this);
-  debounce('kp', async () => {
+  debounce('kp', () => {
     if (!connected) return;
-    try { await chars.kp.writeValue(u16buf(raw)); log('HOLD_KP → ' + (raw / 10).toFixed(1), 'ok'); }
-    catch(e) { log('Write failed: ' + e.message, 'err'); }
+    bleWrite(async () => {
+      try { await chars.kp.writeValue(u16buf(raw)); log('HOLD_KP → ' + (raw / 10).toFixed(1), 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
+    });
   });
 });
 
@@ -311,10 +330,12 @@ document.getElementById('slider-ki').addEventListener('input', function() {
   const raw = parseInt(this.value);
   document.getElementById('val-ki').textContent = (raw / 10).toFixed(1);
   updateFill(this);
-  debounce('ki', async () => {
+  debounce('ki', () => {
     if (!connected) return;
-    try { await chars.ki.writeValue(u16buf(raw)); log('HOLD_KI → ' + (raw / 10).toFixed(1), 'ok'); }
-    catch(e) { log('Write failed: ' + e.message, 'err'); }
+    bleWrite(async () => {
+      try { await chars.ki.writeValue(u16buf(raw)); log('HOLD_KI → ' + (raw / 10).toFixed(1), 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
+    });
   });
 });
 
@@ -323,10 +344,12 @@ document.getElementById('slider-kd').addEventListener('input', function() {
   const raw = parseInt(this.value);
   document.getElementById('val-kd').textContent = (raw / 10).toFixed(1);
   updateFill(this);
-  debounce('kd', async () => {
+  debounce('kd', () => {
     if (!connected) return;
-    try { await chars.kd.writeValue(u16buf(raw)); log('HOLD_KD → ' + (raw / 10).toFixed(1), 'ok'); }
-    catch(e) { log('Write failed: ' + e.message, 'err'); }
+    bleWrite(async () => {
+      try { await chars.kd.writeValue(u16buf(raw)); log('HOLD_KD → ' + (raw / 10).toFixed(1), 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
+    });
   });
 });
 
@@ -335,10 +358,12 @@ document.getElementById('slider-punch-start').addEventListener('input', function
   const v = parseInt(this.value);
   document.getElementById('val-punch-start').textContent = (v / 1000).toFixed(1);
   updateFill(this);
-  debounce('punchStart', async () => {
+  debounce('punchStart', () => {
     if (!connected) return;
-    try { await chars.punchStart.writeValue(u32buf(v)); log('PUNCH_START → ' + (v / 1000).toFixed(1) + 's', 'ok'); }
-    catch(e) { log('Write failed: ' + e.message, 'err'); }
+    bleWrite(async () => {
+      try { await chars.punchStart.writeValue(u32buf(v)); log('PUNCH_START → ' + (v / 1000).toFixed(1) + 's', 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
+    });
   });
 });
 
@@ -346,10 +371,12 @@ document.getElementById('slider-punch-throt').addEventListener('input', function
   const v = parseInt(this.value);
   document.getElementById('val-punch-throt').textContent = v;
   updateFill(this);
-  debounce('punchThrot', async () => {
+  debounce('punchThrot', () => {
     if (!connected) return;
-    try { await chars.punchThrot.writeValue(u16buf(v)); log('PUNCH_THROTTLE → ' + v, 'ok'); }
-    catch(e) { log('Write failed: ' + e.message, 'err'); }
+    bleWrite(async () => {
+      try { await chars.punchThrot.writeValue(u16buf(v)); log('PUNCH_THROTTLE → ' + v, 'ok'); }
+      catch(e) { log('Write failed: ' + e.message, 'err'); }
+    });
   });
 });
 
@@ -364,7 +391,8 @@ function onTelemetry(e) {
 
   // Preflight panel (always visible)
   const altM = (altCm / 100).toFixed(2);
-  const relM = (relCm / 100).toFixed(2);
+  const relValid = Math.abs(relCm) <= 10000000;  // >100 km = firmware mismatch
+  const relM = relValid ? (relCm / 100).toFixed(2) : '---';
   document.getElementById('tel-alt').textContent   = altM + ' m  ↕  ' + relM + ' m';
   document.getElementById('tel-state').textContent = STATE_NAMES[stateId] ?? stateId;
   document.getElementById('tel-throt').textContent = throttle + ' µs';
@@ -381,7 +409,7 @@ function onTelemetry(e) {
   document.getElementById('strip-state').textContent = STATE_NAMES[stateId] || '?';
   document.getElementById('strip-state').style.color = color;
   const isLanding = stateId === 8;
-  document.getElementById('strip-alt').textContent   = 'ALT ' + relM + ' m';
+  document.getElementById('strip-alt').textContent   = relValid ? 'ALT ' + relM + ' m' : 'ALT ---';
   document.getElementById('strip-throt').textContent = isLanding
     ? 'DESCENT ' + (varioCs / 100).toFixed(2) + ' m/s'
     : 'THROT ' + throttle;

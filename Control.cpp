@@ -83,7 +83,6 @@ uint16_t holdCascaded(float altitude, bool isMission) {
 }
 
 void startHoverTest() {
-    launchAlt = getAltitude();
     armTime = millis();
     armingForHover = true;
     state = ARMING;
@@ -91,7 +90,6 @@ void startHoverTest() {
 }
 
 void startMission() {
-    launchAlt = getAltitude();
     armTime = millis();
     state   = ARMING;
     Serial.println("[STATE] -> ARMING");
@@ -124,7 +122,10 @@ void disarmToIdle(const char* reason) {
     channels[4] = 1000;
     channels[5] = 1000;
     channels[2] = 1000;
-    sendRC();
+    launchAlt = 0;
     state = IDLE;
     Serial.println(reason);
+    // Do NOT call sendRC() here — this may be invoked from the NimBLE task,
+    // which would race with the main loop's fcSerial writes and corrupt MSP framing.
+    // The main loop sends RC on its next iteration within one cycle (<70ms).
 }

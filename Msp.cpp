@@ -26,7 +26,7 @@ float getAltitude() {
         while (fcSerial.available()) fcSerial.read();
         uint8_t empty = 0;
         sendMSP(MSP_ALTITUDE, &empty, 0);
-        uint32_t timeout = millis() + 50;
+        uint32_t timeout = millis() + 20;
         while (fcSerial.available() < 12 && millis() < timeout);
         if (fcSerial.available() < 12) return lastAlt;
         while (fcSerial.available() >= 12) {
