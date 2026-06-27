@@ -36,6 +36,7 @@
 #define BENCH_MODE_UUID     "ab0828bb-198e-4351-b779-901fa0e0371e"
 #define TELEMETRY_UUID      "ab0828bd-198e-4351-b779-901fa0e0371e"
 #define TARGET_ALT_UUID     "ab0828bf-198e-4351-b779-901fa0e0371e"
+#define ALT_HOLD_TARGET_UUID "ab0828c0-198e-4351-b779-901fa0e0371e"
 
 // ── BLE Command IDs ──────────────────────────────────────────
 #define CMD_HOVER_TEST      1
@@ -67,6 +68,11 @@
 // ── Arming Settle Time ────────────────────────────────────────
 #define ARMING_MS  1500
 
+// ── Hover Test Throttle Ramp ──────────────────────────────────
+// µs added per loop iteration (~20ms) when ramping from arm-throttle to HOVER_THROTTLE.
+// 4 µs/iter × 50 Hz ≈ 200 µs/s → 270 µs step takes ~1.3 s, too slow to trigger ANTI_GRAVITY.
+#define HOVER_RAMP_STEP_US  4
+
 // ── Cascaded Altitude Hold ────────────────────────────────────
 // HOLD_KP = outer P gain: altitude error (m) → desired vertical speed (m/s)
 // HOLD_KD = inner P gain: speed error (m/s) → throttle offset (µs)
@@ -78,6 +84,8 @@
 #define MAX_DESCENT_MPS_TEST    1.0f    // max commanded descent, test mode
 #define MAX_CLIMB_MPS_HOLD      3.5f    // max commanded climb, competition HOLDING
 #define MAX_DESCENT_MPS_HOLD    2.0f    // max commanded descent, competition HOLDING
+#define ALT_HOLD_TARGET_MIN_M   0.5f    // BLE Alt Hold test target lower bound
+#define ALT_HOLD_TARGET_MAX_M   2.0f    // BLE Alt Hold test target upper bound
 #define NEAR_TARGET_M           0.5f    // within this radius, scale down max speed
 #define NEAR_TARGET_FACTOR      0.35f   // minimum speed factor within near-target zone
 
@@ -85,7 +93,7 @@
 #define VARIO_ALPHA             0.25f   // low-pass weight (0=max smoothing, 1=raw)
 #define VARIO_STALE_MS          500     // ms before vario reading is considered stale
 #define VARIO_MAX_PLAUSIBLE_CMS 800     // cm/s — implausible above this (~8 m/s)
-#define KI_VSPEED_LIMIT         40.0f   // anti-windup clamp on vspeedIntegral (µs)
+#define KI_VSPEED_LIMIT         40.0f   // anti-windup clamp on integrated speed error (m)
 
 // Throttle authority around hover
 #define THR_UP_OFFSET_US        200     // max µs above HOVER_THROTTLE
@@ -94,3 +102,7 @@
 // Safety
 #define ALT_MAX_M               22.0f   // absolute ceiling — triggers landing above this
 #define LANDING_KP_VSPEED       30.0f   // fixed P gain for landing velocity controller
+
+// Takeoff ground guard — avoids integrator windup and baro-spike at liftoff
+#define TAKEOFF_ALT_M           0.3f    // altitude below which closed-loop is suppressed
+#define TAKEOFF_NUDGE_US        50      // µs above HOVER_THROTTLE for ground-phase thrust

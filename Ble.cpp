@@ -31,7 +31,7 @@ public:
     }
 };
 
-// Float stored as uint16 scaled x100 (e.g. 120.0 → 12000, 17.0 → 1700)
+// Float stored as uint16 with per-characteristic scale (e.g. HOLD_KP x10, altitude x100).
 class CBfloat : public NimBLECharacteristicCallbacks {
     volatile float* t; const char* n; float scale;
 public:
@@ -154,6 +154,7 @@ void setupBLE() {
 
     makeFloat(svc, SPRINT_CUTOFF_UUID, &SPRINT_CUTOFF_M, "SPRINT_CUTOFF_M", 100.0f);
     makeFloat(svc, TARGET_ALT_UUID,    &TARGET_ALT_M,    "TARGET_ALT_M",    10.0f);
+    makeFloat(svc, ALT_HOLD_TARGET_UUID, &ALT_HOLD_TARGET_M, "ALT_HOLD_TARGET_M", 10.0f);
     makeFloat(svc, HOLD_KP_UUID,       &HOLD_KP,         "HOLD_KP",         10.0f);
     makeFloat(svc, HOLD_KI_UUID,       &HOLD_KI,         "HOLD_KI",         10.0f);
     makeFloat(svc, HOLD_KD_UUID,       &HOLD_KD,         "HOLD_KD",         10.0f);

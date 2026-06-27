@@ -30,6 +30,7 @@ volatile uint16_t HOVER_THROTTLE  = (uint16_t)(AltitudeParameters::HOVER_THROTTL
 volatile uint16_t SPRINT_THROTTLE = 1850;
 volatile float    SPRINT_CUTOFF_M = 17.0f;
 volatile float    TARGET_ALT_M    = 18.3f;
+volatile float    ALT_HOLD_TARGET_M = 1.5f;
 volatile float    HOLD_KP         = AltitudeParameters::HOLD_KP;
 volatile float    HOLD_KI         = AltitudeParameters::HOLD_KI;
 volatile float    HOLD_KD         = AltitudeParameters::HOLD_KD;

@@ -80,7 +80,7 @@ void runMissionLoop() {
                         resetCascadeController(0.0f);
                         state = ALT_HOLD;
                         Serial.printf("[STATE] → ALT HOLD (launchAlt=%.2fm, target=%.1fm)\n",
-                            launchAlt, (float)TARGET_ALT_M);
+                            launchAlt, constrain((float)ALT_HOLD_TARGET_M, ALT_HOLD_TARGET_MIN_M, ALT_HOLD_TARGET_MAX_M));
                         break;
 
                     default:  // ARM_MISSION
@@ -159,14 +159,21 @@ void runMissionLoop() {
 
         // ── HOVER TEST ───────────────────────────────────────
         case HOVER_TEST:
-            channels[CH_ARM]      = 1800;
-            channels[CH_ANGLE]    = 1800;
-            channels[CH_THROTTLE] = HOVER_THROTTLE;
+            channels[CH_ARM]   = 1800;
+            channels[CH_ANGLE] = 1800;
+            // Ramp toward HOVER_THROTTLE at ~200 µs/s so a rapid step from the
+            // ARMING low-throttle doesn't trigger Betaflight's ANTI_GRAVITY I-term boost.
+            if (channels[CH_THROTTLE] < (uint16_t)HOVER_THROTTLE) {
+                channels[CH_THROTTLE] = min((uint16_t)(channels[CH_THROTTLE] + HOVER_RAMP_STEP_US),
+                                            (uint16_t)HOVER_THROTTLE);
+            } else {
+                channels[CH_THROTTLE] = HOVER_THROTTLE;
+            }
             sendRC();
             digitalWrite(STATUS_LED, millis() % 500 < 250);
 
-            Serial.printf("[HOVER] throttle=%d  (tune HOVER_THROTTLE via BLE)\n",
-                HOVER_THROTTLE);
+            Serial.printf("[HOVER] throttle=%d  target=%d\n",
+                channels[CH_THROTTLE], (int)HOVER_THROTTLE);
             break;
 
         // ── AUTO HOVER CAL ───────────────────────────────────
@@ -205,10 +212,21 @@ void runMissionLoop() {
 
         // ── ALT HOLD ─────────────────────────────────────────
         case ALT_HOLD: {
-            uint16_t thr          = holdCascaded(altitude, false);
+            channels[CH_ARM]   = 1800;
+            channels[CH_ANGLE] = 1800;
+
+            uint16_t thr;
+            if (altitude < TAKEOFF_ALT_M) {
+                // Ground guard: while the drone is still on the ground, avoid running
+                // the cascade (which would wind up the integral against the floor and
+                // pick up baro noise). Reset every iteration so the cascade starts
+                // with clean state (integral=0, vario=0, setpoint=liftoff alt).
+                thr = HOVER_THROTTLE + TAKEOFF_NUDGE_US;
+                resetCascadeController(altitude);
+            } else {
+                thr = holdCascaded(altitude, false);
+            }
             channels[CH_THROTTLE] = thr;
-            channels[CH_ARM]      = 1800;
-            channels[CH_ANGLE]    = 1800;
             sendRC();
             digitalWrite(STATUS_LED, millis() % 500 < 250);
 

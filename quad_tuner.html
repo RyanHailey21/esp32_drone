@@ -160,7 +160,19 @@
     </div>
     <input type="range" class="hold" id="slider-target-alt" min="10" max="250" value="183" step="1">
     <div class="param-bounds"><span>1.0m</span><span>25.0m</span></div>
-    <div class="param-desc">Target hold altitude for both Alt Hold test mode and competition Hold phase. BLE disconnect during Alt Hold triggers auto-land.</div>
+    <div class="param-desc">Mission hold target used after sprint cutoff. 60ft = 18.3m.</div>
+  </div>
+
+  <div class="param" id="param-alt-hold-target">
+    <div class="param-head">
+      <span class="param-label">Alt Hold Test Target</span>
+      <div class="param-readout">
+        <span class="param-value" id="val-alt-hold-target">1.5</span><span class="param-unit">m</span>
+      </div>
+    </div>
+    <input type="range" class="hold" id="slider-alt-hold-target" min="5" max="20" value="15" step="1">
+    <div class="param-bounds"><span>0.5m</span><span>2.0m</span></div>
+    <div class="param-desc">Low-altitude target used only by the Alt Hold test command. BLE disconnect during Alt Hold triggers auto-land.</div>
   </div>
 
   <div class="param" id="param-kp">

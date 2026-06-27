@@ -6,6 +6,7 @@ const HOLD_KP_UUID       = 'ab0828b7-198e-4351-b779-901fa0e0371e';
 const HOLD_KI_UUID       = 'ab0828bc-198e-4351-b779-901fa0e0371e';
 const HOLD_KD_UUID       = 'ab0828be-198e-4351-b779-901fa0e0371e';
 const TARGET_ALT_UUID    = 'ab0828bf-198e-4351-b779-901fa0e0371e';
+const ALT_HOLD_TARGET_UUID = 'ab0828c0-198e-4351-b779-901fa0e0371e';
 const PUNCH_START_UUID   = 'ab0828b8-198e-4351-b779-901fa0e0371e';
 const PUNCH_THROT_UUID   = 'ab0828b9-198e-4351-b779-901fa0e0371e';
 const COMMAND_UUID       = 'ab0828ba-198e-4351-b779-901fa0e0371e';
@@ -76,7 +77,7 @@ function setStatus(s, t) {
 }
 
 function enableAll(on) {
-  ['hover','sprint','cutoff','target-alt','kp','ki','kd','punch-start','punch-throt'].forEach(id => {
+  ['hover','sprint','cutoff','target-alt','alt-hold-target','kp','ki','kd','punch-start','punch-throt'].forEach(id => {
     const el = document.getElementById('param-' + id);
     if (el) el.classList.toggle('enabled', on);
   });
@@ -105,6 +106,7 @@ async function connect() {
     chars.ki         = await service.getCharacteristic(HOLD_KI_UUID);
     chars.kd         = await service.getCharacteristic(HOLD_KD_UUID);
     chars.targetAlt  = await service.getCharacteristic(TARGET_ALT_UUID);
+    chars.altHoldTarget = await service.getCharacteristic(ALT_HOLD_TARGET_UUID);
     chars.punchStart = await service.getCharacteristic(PUNCH_START_UUID);
     chars.punchThrot = await service.getCharacteristic(PUNCH_THROT_UUID);
     chars.command    = await service.getCharacteristic(COMMAND_UUID);
@@ -156,6 +158,7 @@ async function readAll() {
     const kiRaw      = new DataView((await chars.ki.readValue()).buffer).getUint16(0, true);
     const kdRaw      = new DataView((await chars.kd.readValue()).buffer).getUint16(0, true);
     const targetAlt  = new DataView((await chars.targetAlt.readValue()).buffer).getUint16(0, true);
+    const altHoldTarget = new DataView((await chars.altHoldTarget.readValue()).buffer).getUint16(0, true);
     const punchStart = new DataView((await chars.punchStart.readValue()).buffer).getUint32(0, true);
     const punchThrot = new DataView((await chars.punchThrot.readValue()).buffer).getUint16(0, true);
     benchMode        = new DataView((await chars.benchMode.readValue()).buffer).getUint8(0);
@@ -167,6 +170,7 @@ async function readAll() {
     setParam('ki',          kiRaw,      v => (v/10).toFixed(1),   v => v);
     setParam('kd',          kdRaw,      v => (v/10).toFixed(1),   v => v);
     setParam('target-alt',  targetAlt,  v => (v/10).toFixed(1),   v => v);
+    setParam('alt-hold-target', altHoldTarget, v => (v/10).toFixed(1), v => v);
     setParam('punch-start', punchStart, v => (v/1000).toFixed(1), v => v);
     setParam('punch-throt', punchThrot, v => v,                   v => v);
 
@@ -257,6 +261,7 @@ function debounce(key, fn, delay = 150) {
 }
 
 const SLIDERS = [
+  { id: 'alt-hold-target', char: 'altHoldTarget', enc: v => u16buf(v), fmt: v => (v/10).toFixed(1), label: v => 'ALT_HOLD_TARGET -> ' + (v/10).toFixed(1) + 'm', ms: 150 },
   { id: 'hover',       char: 'hover',      enc: v => u16buf(v),  fmt: v => String(v),           label: v => 'HOVER_THROTTLE → ' + v,                        ms: 30  },
   { id: 'sprint',      char: 'sprint',     enc: v => u16buf(v),  fmt: v => String(v),           label: v => 'SPRINT_THROTTLE → ' + v,                       ms: 150 },
   { id: 'cutoff',      char: 'cutoff',     enc: v => u16buf(v),  fmt: v => (v/100).toFixed(1),  label: v => 'SPRINT_CUTOFF → ' + (v/100).toFixed(1) + 'm', ms: 150 },

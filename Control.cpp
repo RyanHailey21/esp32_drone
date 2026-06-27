@@ -10,7 +10,7 @@
 //    HOLD_KD: speed error (m/s) → throttle offset (µs)  [inner P]
 //    HOLD_KI: speed integral   → throttle offset (µs)   [inner I]
 //
-//  Reference shaping: internalSetpoint ramps toward TARGET_ALT_M
+//  Reference shaping: internalSetpoint ramps toward the active target.
 //  at ALT_RAMP_RATE_MPS to avoid stepping the setpoint.
 // ============================================================
 
@@ -27,8 +27,10 @@ uint16_t holdCascaded(float altitude, bool isMission) {
     float dt = constrain((now - vspeedLastMs) / 1000.0f, 0.005f, 0.2f);
     vspeedLastMs = now;
 
-    // 1. Reference shaping: ramp internal setpoint toward TARGET_ALT_M
-    float target = TARGET_ALT_M;
+    // 1. Reference shaping: ramp internal setpoint toward the active target.
+    float target = isMission
+        ? TARGET_ALT_M
+        : constrain((float)ALT_HOLD_TARGET_M, ALT_HOLD_TARGET_MIN_M, ALT_HOLD_TARGET_MAX_M);
     if (internalSetpoint < target) {
         internalSetpoint = min(internalSetpoint + ALT_RAMP_RATE_MPS * dt, target);
     } else if (internalSetpoint > target) {
@@ -106,7 +108,8 @@ void startAltHold() {
     armTime   = millis();
     armTarget = ARM_ALT_HOLD;
     state     = ARMING;
-    Serial.printf("[STATE] -> ARMING (alt hold, target=%.1fm)\n", TARGET_ALT_M);
+    Serial.printf("[STATE] -> ARMING (alt hold, target=%.1fm)\n",
+        constrain((float)ALT_HOLD_TARGET_M, ALT_HOLD_TARGET_MIN_M, ALT_HOLD_TARGET_MAX_M));
 }
 
 void startLanding(float currentAlt) {

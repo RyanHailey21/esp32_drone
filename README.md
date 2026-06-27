@@ -154,7 +154,7 @@ flowchart LR
         ARMING_AH["ARMING\nalt hold path"]
         HOVER_TEST["HOVER_TEST\nfixed HOVER_THROTTLE"]
         AUTO_HOVER_CAL["AUTO_HOVER_CAL\nramp until liftoff"]
-        ALT_HOLD["ALT_HOLD\nPID at TARGET_ALT_M"]
+        ALT_HOLD["ALT_HOLD\nPID at ALT_HOLD_TARGET_M"]
     end
 
     subgraph MISSION["COMPETITION MISSION  —  BLE disconnect ignored"]
@@ -232,7 +232,7 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 |---|---|
 | Hover Test | Arms → fixed `HOVER_THROTTLE`. Adjust slider live to find neutral buoyancy. |
 | Auto Hover Cal | Arms → ramps throttle until 5 consecutive readings above 15cm → writes `HOVER_THROTTLE` (with +50µs ground-effect offset) → stays in Hover Test. |
-| Alt Hold | Arms → PID holds `TARGET_ALT_M`. BLE disconnect triggers auto-land. |
+| Alt Hold | Arms → PID holds `ALT_HOLD_TARGET_M`. BLE disconnect triggers auto-land. |
 | Start Mission | Arms → full sprint/hold/punch/cut sequence. BLE disconnect ignored during mission. |
 | Disarm | In test modes: smooth velocity-based landing. In mission: immediate disarm. |
 | Sync Values | Re-reads all parameters from ESP32. |
@@ -250,13 +250,14 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 
 | Parameter | Default | Encoding | Description |
 |---|---|---|---|
-| `HOVER_THROTTLE` | 1420 µs | uint16 | Neutral hover throttle. Use Auto Hover Cal for first-pass, then fine-tune in Hover Test. |
+| `HOVER_THROTTLE` | 1270 µs | uint16 | Neutral hover throttle. Use Auto Hover Cal for first-pass, then fine-tune in Hover Test. |
 | `SPRINT_THROTTLE` | 1850 µs | uint16 | Full climb throttle during sprint. Higher = faster to 60ft = more punch time. |
 | `SPRINT_CUTOFF_M` | 17.0 m | float×100 | Altitude to stop sprinting. Keep below 18.3m to absorb baro lag. |
-| `TARGET_ALT_M` | 18.3 m | float×10 | Hold target for both Hold phase and Alt Hold test mode. 60ft = 18.3m. |
-| `HOLD_KP` | 120.0 | float×10 | P-gain: throttle correction per metre of altitude error. |
-| `HOLD_KI` | 15.0 | float×10 | I-gain: integrates steady-state offset over time. Keep low to avoid windup. |
-| `HOLD_KD` | 80.0 | float×10 | D-gain: damps via FC vertical velocity (vario). Reduces oscillations. |
+| `TARGET_ALT_M` | 18.3 m | float×10 | Mission hold target. 60ft = 18.3m. Used by `HOLDING` after sprint cutoff. |
+| `ALT_HOLD_TARGET_M` | 1.5 m | float×10 | Low-altitude target used only by the BLE `ALT_HOLD` test command; firmware clamps active command to 0.5–2.0m. |
+| `HOLD_KP` | 1.2 | float×10 | Outer altitude P: altitude error (m) to desired vertical speed (m/s). |
+| `HOLD_KI` | 3.0 | float×10 | Inner speed I: integrated vertical-speed error to throttle offset (µs). Keep low to avoid windup. |
+| `HOLD_KD` | 25.0 | float×10 | Inner speed P: vertical-speed error (m/s) to throttle offset (µs). Tune before adding integral. |
 | `PUNCH_START_MS` | 7500 ms | uint32 | Mission clock time to begin final burst. Later = more exit velocity. |
 | `PUNCH_THROTTLE` | 2000 µs | uint16 | Max throttle for punch phase. |
 
@@ -264,17 +265,18 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 
 ## Altitude Hold PID
 
-The hold controller runs in both `HOLDING` (mission) and `ALT_HOLD` (test) states:
+The hold controller runs in both `HOLDING` (mission) and `ALT_HOLD` (test) states. Mission `HOLDING` uses `TARGET_ALT_M`; BLE `ALT_HOLD` test mode uses the separate `ALT_HOLD_TARGET_M`.
 
 ```
-error     = TARGET_ALT_M - altitude
-integral += error × dt          (clamped ±10 m·s to prevent windup)
-vario_ms  = FC_vario_cm_s / 100
+alt_error       = internal_setpoint - altitude
+desired_vspeed  = clamp(HOLD_KP * alt_error, -max_descent, max_climb)
+vario_ms        = FC_vario_cm_s / 100
+vspeed_error    = desired_vspeed - filtered_vario_ms
+vspeed_integral += vspeed_error × dt
 
 throttle = HOVER_THROTTLE
-         + KP × error
-         + KI × integral
-         - KD × vario_ms        (negative: climbing → reduce throttle)
+         + HOLD_KD × vspeed_error
+         + HOLD_KI × vspeed_integral
 ```
 
 The D term uses vertical velocity directly from the FC's MSP_ALTITUDE response (vario field), avoiding noisy numerical differentiation of the altitude signal.
@@ -333,6 +335,7 @@ flowchart LR
         ST["SPRINT_THROTTLE"]
         SC["SPRINT_CUTOFF_M"]
         TA["TARGET_ALT_M"]
+        AHT["ALT_HOLD_TARGET_M"]
         KP["HOLD_KP"]
         KI["HOLD_KI"]
         KD["HOLD_KD"]

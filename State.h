@@ -17,7 +17,7 @@ enum MissionState {
     AUTO_HOVER_CAL,
     LANDING,
     DONE,
-    ALT_HOLD       // PID holds TARGET_ALT_M (test mode, BLE-safe)
+    ALT_HOLD       // PID holds ALT_HOLD_TARGET_M (test mode, BLE-safe)
 };
 
 // ── Arm Target ───────────────────────────────────────────────
@@ -50,6 +50,7 @@ extern volatile uint16_t HOVER_THROTTLE;
 extern volatile uint16_t SPRINT_THROTTLE;
 extern volatile float    SPRINT_CUTOFF_M;
 extern volatile float    TARGET_ALT_M;
+extern volatile float    ALT_HOLD_TARGET_M;
 extern volatile float    HOLD_KP;
 extern volatile float    HOLD_KI;
 extern volatile float    HOLD_KD;
