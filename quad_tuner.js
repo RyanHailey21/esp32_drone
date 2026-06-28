@@ -77,12 +77,23 @@ function setStatus(s, t) {
 }
 
 function enableAll(on) {
-  ['hover','sprint','cutoff','target-alt','alt-hold-target','kp','ki','kd','punch-start','punch-throt'].forEach(id => {
+  ['sprint','cutoff','target-alt','alt-hold-target','kp','ki','kd','punch-start','punch-throt'].forEach(id => {
     const el = document.getElementById('param-' + id);
     if (el) el.classList.toggle('enabled', on);
   });
   document.getElementById('mission-controls').classList.toggle('enabled', on);
+  document.getElementById('params-controls').classList.toggle('enabled', on);
 }
+
+// ── TABS ─────────────────────────────────────────────────
+function switchTab(paneId) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === paneId));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === paneId));
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
 
 // ── BLE CONNECT ──────────────────────────────────────────
 connectBtn.addEventListener('click', () => connected ? disconnect() : connect());
@@ -292,71 +303,169 @@ SLIDERS.forEach(({ id, char: charKey, enc, fmt, label, ms }) => {
 });
 
 // ── TELEMETRY ────────────────────────────────────────────
+const DBG_MAX_M = 3.5;  // bar full-scale (m) — matches safety ceiling
+
+function signedMs(cms) {
+  const v = cms / 100;
+  return (v >= 0 ? '+' : '') + v.toFixed(2) + ' m/s';
+}
+function varColor(cms) {
+  if (cms >  15) return 'var(--amber)';
+  if (cms < -15) return 'var(--cyan)';
+  return 'var(--text-mid)';
+}
+function thrOffColor(off) {
+  if (off >  10) return 'var(--amber)';
+  if (off < -10) return 'var(--cyan)';
+  return 'var(--text-mid)';
+}
+
+function el(id) { return document.getElementById(id); }
+
+let lastTelemetryDumpMs = 0;
+
 function onTelemetry(e) {
-  const dv       = e.target.value;
-  const altCm    = dv.getInt32(0, true);
-  const relCm    = dv.getInt32(4, true);
-  const stateId  = dv.getUint8(8);
-  const throttle = dv.getUint16(9, true);
-  const varioCs  = dv.byteLength >= 13 ? dv.getInt16(11, true) : 0;  // cm/s
+  const dv         = e.target.value;
+  const nowMs      = performance.now();
+  if (nowMs - lastTelemetryDumpMs >= 1000) {
+    lastTelemetryDumpMs = nowMs;
+    const bytes = Array.from(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength))
+      .map(v => v.toString(16).padStart(2, '0'))
+      .join(' ');
+    const mspRawHex = dv.byteLength >= 28
+      ? Array.from(new Uint8Array(dv.buffer, dv.byteOffset + 22, 6))
+          .map(v => v.toString(16).padStart(2, '0'))
+          .join(' ')
+      : '';
+    console.log('Telemetry length:', dv.byteLength, 'bytes:', bytes, 'mspAlt:', mspRawHex);
+  }
 
-  // Preflight panel (always visible)
-  const altM = (altCm / 100).toFixed(2);
-  const relValid = Math.abs(relCm) <= 10000000;  // >100 km = firmware mismatch
-  const relM = relValid ? (relCm / 100).toFixed(2) : '---';
-  document.getElementById('tel-alt').textContent   = altM + ' m  ↕  ' + relM + ' m';
-  document.getElementById('tel-state').textContent = STATE_NAMES[stateId] ?? stateId;
-  document.getElementById('tel-throt').textContent = throttle + ' µs';
-  document.getElementById('tel-alt').style.color   = altCm !== 0 ? 'var(--green)' : 'var(--red)';
+  const altCm      = dv.getInt32(0, true);
+  const relCm      = dv.getInt32(4, true);
+  const stateId    = dv.getUint8(8);
+  const throttle   = dv.getUint16(9, true);
+  const varioCs    = dv.byteLength >= 13 ? dv.getInt16(11, true) : 0;
+  const filtVarCs  = dv.byteLength >= 15 ? dv.getInt16(13, true) : 0;
+  const setptCm    = dv.byteLength >= 17 ? dv.getInt16(15, true) : 0;
+  const guardPhase = dv.byteLength >= 18 ? dv.getUint8(17)       : 2;
+  const fcVarioCs  = dv.byteLength >= 20 ? dv.getInt16(18, true) : varioCs;
+  const derivVarCs = dv.byteLength >= 22 ? dv.getInt16(20, true) : 0;
 
-  const isIdle = stateId === 0;
-  const isCal  = stateId === 7;
-  const color  = STATE_COLORS[stateId] || 'var(--text)';
+  const altM     = (altCm / 100).toFixed(2);
+  const relValid = Math.abs(relCm) <= 10000000;
+  const relM     = relValid ? (relCm / 100).toFixed(2) : '---';
+  const relMNum  = relValid ? relCm / 100 : 0;
+  const setptM   = setptCm / 100;
+  const altErrM  = setptM - relMNum;
 
-  // State strip — visible for any non-idle state
-  const strip = document.getElementById('state-strip');
+  const isIdle    = stateId === 0;
+  const isCal     = stateId === 7;
+  const isAltHold = stateId === 10;
+  const color     = STATE_COLORS[stateId] || 'var(--text)';
+
+  // ── State strip ─────────────────────────────────────
+  const strip = el('state-strip');
   strip.classList.toggle('active', !isIdle);
   strip.style.borderColor = isIdle ? '' : color;
-  document.getElementById('strip-state').textContent = STATE_NAMES[stateId] || '?';
-  document.getElementById('strip-state').style.color = color;
-  const isLanding = stateId === 8;
-  document.getElementById('strip-alt').textContent   = relValid ? 'ALT ' + relM + ' m' : 'ALT ---';
-  document.getElementById('strip-throt').textContent = isLanding
+  el('strip-state').textContent = STATE_NAMES[stateId] || '?';
+  el('strip-state').style.color = color;
+  el('strip-alt').textContent   = relValid ? 'ALT ' + relM + ' m' : 'ALT ---';
+  el('strip-throt').textContent = stateId === 8
     ? 'DESCENT ' + (varioCs / 100).toFixed(2) + ' m/s'
     : 'THROT ' + throttle;
 
-  // Cal progress panel — only during AUTO_HOVER_CAL (state 7)
-  document.getElementById('cal-panel').classList.toggle('active', isCal);
+  // ── Cal progress panel ───────────────────────────────
+  el('cal-panel').classList.toggle('active', isCal);
   if (isCal) {
-    const clampedRel = Math.max(0, Math.min(relCm, 50));
-    const altPct     = (clampedRel / 50) * 100;
-    const altFill    = document.getElementById('cal-alt-fill');
-    altFill.style.width      = altPct + '%';
+    const altFill = el('cal-alt-fill');
+    altFill.style.width      = (Math.max(0, Math.min(relCm, 50)) / 50 * 100) + '%';
     altFill.style.background = relCm >= CAL_LIFTOFF_CM ? 'var(--green)' : 'var(--cyan)';
-    document.getElementById('cal-alt-val').textContent = relCm + ' cm';
-
-    const throtPct = Math.max(0, Math.min((throttle - CAL_MIN_THROT) / (CAL_MAX_THROT - CAL_MIN_THROT) * 100, 100));
-    document.getElementById('cal-throt-fill').style.width = throtPct + '%';
-    document.getElementById('cal-throt-val').textContent  = throttle;
+    el('cal-alt-val').textContent   = relCm + ' cm';
+    el('cal-throt-fill').style.width = Math.max(0, Math.min((throttle - CAL_MIN_THROT) / (CAL_MAX_THROT - CAL_MIN_THROT) * 100, 100)) + '%';
+    el('cal-throt-val').textContent = throttle;
   }
 
-  // Cal result notification — fires on 7→anything transition
+  // ── ALTITUDE section ─────────────────────────────────
+  el('d-abs').textContent = altM;
+  el('d-rel').textContent = relM;
+  el('d-abs').style.color = altCm !== 0 ? 'var(--green)' : 'var(--text-mid)';
+  el('d-rel').style.color = !relValid   ? 'var(--text-mid)' :
+                            relCm > 20  ? 'var(--green)' :
+                            relCm < -20 ? 'var(--amber)'  : '#fff';
+
+  // Setpt / alt bars — ALT_HOLD only
+  el('d-bars').style.display = isAltHold ? '' : 'none';
+  if (isAltHold) {
+    const barPct = v => Math.max(0, Math.min(v / DBG_MAX_M * 100, 100)).toFixed(1) + '%';
+    el('d-sf').style.width = barPct(setptM);
+    el('d-af').style.width = barPct(Math.max(0, relMNum));
+    el('d-sv').textContent = setptM.toFixed(2) + 'm';
+    el('d-av').textContent = relM + 'm';
+  }
+
+  // Vario — always
+  el('d-vr').textContent = signedMs(varioCs);
+  el('d-vf').textContent = signedMs(filtVarCs);
+  el('d-vfc').textContent = signedMs(fcVarioCs);
+  el('d-vd').textContent = signedMs(derivVarCs);
+  el('d-vr').style.color = varColor(varioCs);
+  el('d-vf').style.color = varColor(filtVarCs);
+  el('d-vfc').style.color = varColor(fcVarioCs);
+  el('d-vd').style.color = varColor(derivVarCs);
+
+  // Alt error — shown in ALT_HOLD; "—" otherwise
+  if (isAltHold) {
+    const sign = altErrM >= 0 ? '+' : '';
+    el('d-ae').textContent = sign + altErrM.toFixed(2) + 'm';
+    el('d-ae').style.color = Math.abs(altErrM) < 0.10 ? 'var(--green)'
+                           : Math.abs(altErrM) < 0.50 ? 'var(--amber)' : 'var(--red)';
+  } else {
+    el('d-ae').textContent = '—';
+    el('d-ae').style.color = 'var(--text-dim)';
+  }
+
+  // ── CONTROL section ──────────────────────────────────
+  const hoverThrot = parseInt(el('slider-hover').value) || 1270;
+  const thrOff     = throttle - hoverThrot;
+  el('d-thr').textContent  = throttle + 'µs';
+  el('d-to').textContent   = (thrOff >= 0 ? '+' : '') + thrOff + 'µs';
+  el('d-to').style.color   = thrOffColor(thrOff);
+  el('d-st').textContent   = STATE_NAMES[stateId] || String(stateId);
+  el('d-st').style.color   = color;
+
+  // Guard phase pills — ALT_HOLD only
+  el('d-phases').style.display = isAltHold ? '' : 'none';
+  if (isAltHold) {
+    [0, 1, 2].forEach(i => el('d-ph' + i).classList.toggle('active', guardPhase === i));
+  }
+
+  // ── HOVER THROTTLE — always visible on FLIGHT tab ───
+  el('d-hover').style.display = '';
+
+  // ── ACTIVE GAINS — ALT_HOLD only ─────────────────────
+  el('d-gains').style.display = isAltHold ? '' : 'none';
+  if (isAltHold) {
+    el('d-kp').textContent = (parseInt(el('slider-kp').value) / 10).toFixed(1);
+    el('d-kd').textContent = (parseInt(el('slider-kd').value) / 10).toFixed(1);
+    el('d-ki').textContent = (parseInt(el('slider-ki').value) / 10).toFixed(1);
+  }
+
+  // ── Tab auto-switch ───────────────────────────────────
+  if ((stateId === 10 || stateId === 7) && prevStateId !== stateId) {
+    switchTab('pane-flight');
+  }
+
+  // ── Cal result notification (7 → anything) ────────────
   if (prevStateId === 7 && stateId !== 7) {
-    const hoverSlider = document.getElementById('slider-hover');
-    if (hoverSlider) {
-      hoverSlider.value = throttle;
-      document.getElementById('val-hover').textContent = throttle;
-      updateFill(hoverSlider);
-    }
-    document.getElementById('cal-result-val').textContent = throttle + ' µs';
-    document.getElementById('cal-result').classList.add('active');
-    document.getElementById('param-hover').classList.add('live');
+    const hs = el('slider-hover');
+    if (hs) { hs.value = throttle; el('val-hover').textContent = throttle; updateFill(hs); }
+    el('cal-result-val').textContent = throttle + ' µs';
+    el('cal-result').classList.add('active');
+    el('d-hover').classList.add('live');
   }
-
-  // Dismiss cal result when back to idle
   if (isIdle) {
-    document.getElementById('cal-result').classList.remove('active');
-    document.getElementById('param-hover').classList.remove('live');
+    el('cal-result').classList.remove('active');
+    el('d-hover').classList.remove('live');
   }
 
   prevStateId = stateId;

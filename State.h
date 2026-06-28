@@ -35,6 +35,9 @@ extern uint8_t      calLiftoffCount;
 extern float        launchAlt;
 extern float        currentRelAlt;
 extern int16_t      lastVario;
+extern int16_t      lastFcVario;
+extern int16_t      lastDerivedVario;
+extern uint8_t      lastMspAltitudePayload[6];
 extern uint32_t     lastVarioMs;
 extern float        internalSetpoint;
 extern float        filteredVario;
@@ -43,6 +46,7 @@ extern uint32_t     vspeedLastMs;
 extern float        benchAlt;
 extern uint32_t     benchLastMs;
 extern uint32_t     landingStartMs;
+extern float        landingStartAlt;
 extern volatile bool bleSafetyLand;
 
 // ── Tunable Parameters (BLE-writable) ────────────────────────

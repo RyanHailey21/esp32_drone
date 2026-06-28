@@ -34,217 +34,332 @@
     <button class="strip-disarm" id="strip-disarm">DISARM</button>
   </div>
 
-  <!-- ── AUTO HOVER CAL PROGRESS ─────────────────────── -->
-  <div class="cal-panel" id="cal-panel">
-    <div class="cal-panel-title">AUTO HOVER CAL — LIFTOFF DETECTION</div>
+  <!-- ── TABS ──────────────────────────────────────────── -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="pane-flight">FLIGHT</button>
+    <button class="tab-btn"        data-tab="pane-params">PARAMS</button>
+  </div>
 
-    <div class="cal-bar-row">
-      <div class="cal-bar-lbl">ALT</div>
-      <div class="cal-bar-track">
-        <div class="cal-bar-fill" id="cal-alt-fill"></div>
-        <div class="cal-threshold"></div>
+  <!-- ══════════════════════════════════════════════════ -->
+  <!--  FLIGHT TAB                                        -->
+  <!-- ══════════════════════════════════════════════════ -->
+  <div class="tab-pane active" id="pane-flight">
+
+    <!-- ── AUTO HOVER CAL PROGRESS ─────────────────── -->
+    <div class="cal-panel" id="cal-panel">
+      <div class="cal-panel-title">AUTO HOVER CAL — LIFTOFF DETECTION</div>
+      <div class="cal-bar-row">
+        <div class="cal-bar-lbl">ALT</div>
+        <div class="cal-bar-track">
+          <div class="cal-bar-fill" id="cal-alt-fill"></div>
+          <div class="cal-threshold"></div>
+        </div>
+        <div class="cal-bar-val" id="cal-alt-val">0 cm</div>
       </div>
-      <div class="cal-bar-val" id="cal-alt-val">0 cm</div>
-    </div>
-
-    <div class="cal-bar-row">
-      <div class="cal-bar-lbl">THROT</div>
-      <div class="cal-bar-track">
-        <div class="cal-bar-fill" id="cal-throt-fill" style="background:var(--amber)"></div>
-      </div>
-      <div class="cal-bar-val" id="cal-throt-val">1150</div>
-    </div>
-  </div>
-
-  <!-- ── CAL RESULT NOTIFICATION ─────────────────────── -->
-  <div class="cal-result" id="cal-result">
-    <div class="cal-result-head">HOVER THROTTLE DETECTED</div>
-    <div class="cal-result-val" id="cal-result-val">— µs</div>
-    <div class="cal-result-sub">Value synced · Drone settling to hover test</div>
-  </div>
-
-  <div id="ble-warning"></div>
-
-  <button id="connect-btn">Connect to Quad-Tuner</button>
-
-  <!-- ── PREFLIGHT TELEMETRY ─────────────────────────── -->
-  <div class="preflight" id="preflight">
-    <div class="pf-item" style="grid-column: 1 / -1">
-      <div class="pf-label">Altitude (abs ↕ rel)</div>
-      <div class="pf-val" id="tel-alt">—</div>
-    </div>
-    <div class="pf-item">
-      <div class="pf-label">State</div>
-      <div class="pf-val" id="tel-state">—</div>
-    </div>
-    <div class="pf-item">
-      <div class="pf-label">Throttle</div>
-      <div class="pf-val" id="tel-throt">—</div>
-    </div>
-  </div>
-
-  <!-- ── MISSION CONTROLS ────────────────────────────── -->
-  <div class="controls" id="mission-controls">
-    <button class="cmd-btn" id="btn-hover-test">Hover Test</button>
-    <button class="cmd-btn" id="btn-auto-hover">Auto Hover Cal</button>
-    <button class="cmd-btn" id="btn-alt-hold">Alt Hold</button>
-    <button class="cmd-btn primary wide" id="btn-start-mission">Start Mission</button>
-    <button class="cmd-btn danger wide"  id="btn-disarm">Disarm</button>
-    <button class="cmd-btn wide"    id="btn-bench-mode">Bench Mode: Off</button>
-    <button class="cmd-btn wide"    id="btn-sync">Sync Values from ESP32</button>
-  </div>
-
-  <!-- ── HOVER TEST ──────────────────────────────────── -->
-  <div class="sec">
-    <span class="sec-label">Hover Test</span>
-    <span class="badge b-hover">test only</span>
-    <span class="sec-line"></span>
-  </div>
-
-  <div class="param" id="param-hover">
-    <div class="param-head">
-      <span class="param-label">Hover Throttle</span>
-      <div class="param-readout">
-        <span class="param-value" id="val-hover">1320</span><span class="param-unit">µs</span>
+      <div class="cal-bar-row">
+        <div class="cal-bar-lbl">THROT</div>
+        <div class="cal-bar-track">
+          <div class="cal-bar-fill" id="cal-throt-fill" style="background:var(--amber)"></div>
+        </div>
+        <div class="cal-bar-val" id="cal-throt-val">1150</div>
       </div>
     </div>
-    <input type="range" class="hover-t" id="slider-hover" min="1000" max="1600" value="1320" step="5">
-    <div class="param-bounds"><span>1000 — zero</span><span>1600</span></div>
-    <div class="param-desc">Live during hover test. Slide to find neutral buoyancy. Pull to 1000 to zero throttle.</div>
-  </div>
 
-  <!-- ── SPRINT PHASE ────────────────────────────────── -->
-  <div class="sec">
-    <span class="sec-label">Sprint Phase</span>
-    <span class="badge b-sprint">full power to 60ft</span>
-    <span class="sec-line"></span>
-  </div>
-
-  <div class="param" id="param-sprint">
-    <div class="param-head">
-      <span class="param-label">Sprint Throttle</span>
-      <div class="param-readout">
-        <span class="param-value" id="val-sprint">1850</span><span class="param-unit">µs</span>
-      </div>
+    <!-- ── CAL RESULT NOTIFICATION ─────────────────── -->
+    <div class="cal-result" id="cal-result">
+      <div class="cal-result-head">HOVER THROTTLE DETECTED</div>
+      <div class="cal-result-val" id="cal-result-val">— µs</div>
+      <div class="cal-result-sub">Value synced · Drone settling to hover test</div>
     </div>
-    <input type="range" class="sprint" id="slider-sprint" min="1500" max="2000" value="1850" step="10">
-    <div class="param-bounds"><span>1500</span><span>2000</span></div>
-    <div class="param-desc">Full climb throttle. Higher = faster to 60ft = more punch time.</div>
-  </div>
 
-  <div class="param" id="param-cutoff">
-    <div class="param-head">
-      <span class="param-label">Sprint Cutoff</span>
-      <div class="param-readout">
-        <span class="param-value" id="val-cutoff">17.0</span><span class="param-unit">m</span>
+    <div id="ble-warning"></div>
+    <button id="connect-btn">Connect to Quad-Tuner</button>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!--  FLIGHT INSTRUMENT PANEL                       -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="dash">
+
+      <!-- ── ALTITUDE ────────────────────────────── -->
+      <div class="dash-sec">
+        <div class="dash-sec-hd">ALTITUDE</div>
+
+        <!-- Large abs / rel readout -->
+        <div class="dash-alt-pair">
+          <div class="dash-alt-cell">
+            <div class="dash-lbl">ABS</div>
+            <div class="dash-big" id="d-abs">—</div>
+            <div class="dash-unit">m</div>
+          </div>
+          <div class="dash-alt-sep">↕</div>
+          <div class="dash-alt-cell">
+            <div class="dash-lbl">REL</div>
+            <div class="dash-big" id="d-rel">—</div>
+            <div class="dash-unit">m</div>
+          </div>
+        </div>
+
+        <!-- Setpt / alt bars — visible in ALT_HOLD only -->
+        <div id="d-bars" style="display:none">
+          <div class="dash-bar-row">
+            <span class="dash-bar-lbl">SETPT</span>
+            <div class="dash-bar-track"><div class="dash-bar-fill dash-fill-s" id="d-sf"></div></div>
+            <span class="dash-bar-val" id="d-sv">—</span>
+          </div>
+          <div class="dash-bar-row">
+            <span class="dash-bar-lbl">ALT</span>
+            <div class="dash-bar-track"><div class="dash-bar-fill dash-fill-a" id="d-af"></div></div>
+            <span class="dash-bar-val" id="d-av">—</span>
+          </div>
+        </div>
+
+        <!-- Vario + alt error — always visible -->
+        <div class="dash-grid3">
+          <div class="dash-cell">
+            <div class="dash-lbl">VARIO USED</div>
+            <div class="dash-val" id="d-vr">—</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">VARIO FILT</div>
+            <div class="dash-val" id="d-vf">—</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">ALT ERROR</div>
+            <div class="dash-val" id="d-ae">—</div>
+          </div>
+        </div>
+        <div class="dash-grid2">
+          <div class="dash-cell">
+            <div class="dash-lbl">FC RAW</div>
+            <div class="dash-val" id="d-vfc">—</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">DERIVED</div>
+            <div class="dash-val" id="d-vd">—</div>
+          </div>
+        </div>
+      </div><!-- /altitude -->
+
+      <!-- ── CONTROL ────────────────────────────── -->
+      <div class="dash-sec">
+        <div class="dash-sec-hd">CONTROL</div>
+
+        <!-- Throttle / offset / state — always visible -->
+        <div class="dash-grid3">
+          <div class="dash-cell">
+            <div class="dash-lbl">THROTTLE</div>
+            <div class="dash-val" id="d-thr">—</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">THR OFFSET</div>
+            <div class="dash-val" id="d-to">—</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">STATE</div>
+            <div class="dash-val" id="d-st">—</div>
+          </div>
+        </div>
+
+        <!-- Guard phase pills — visible in ALT_HOLD only -->
+        <div class="dash-phases" id="d-phases" style="display:none">
+          <span class="dash-ph ph-guard" id="d-ph0">SETTLING</span>
+          <span class="dash-ph-sep">›</span>
+          <span class="dash-ph ph-guard" id="d-ph1">WAITING</span>
+          <span class="dash-ph-sep">›</span>
+          <span class="dash-ph" id="d-ph2">CASCADE</span>
+        </div>
+      </div><!-- /control -->
+
+      <!-- ── HOVER THROTTLE — visible in HOVER TEST only ── -->
+      <div class="dash-sec" id="d-hover" style="display:none">
+        <div class="dash-sec-hd">HOVER THROTTLE</div>
+        <div class="dash-hover-readout">
+          <span class="dash-hover-val" id="val-hover">1320</span>
+          <span class="dash-hover-unit">µs</span>
+        </div>
+        <input type="range" class="hover-t dash-hover-slider" id="slider-hover"
+               min="1000" max="1600" value="1320" step="5">
+        <div class="dash-hover-bounds">
+          <span>1000 — off</span><span>1600</span>
+        </div>
       </div>
+
+      <!-- ── ACTIVE GAINS — visible in ALT_HOLD only ── -->
+      <div class="dash-sec" id="d-gains" style="display:none">
+        <div class="dash-sec-hd">ACTIVE GAINS</div>
+        <div class="dash-grid3">
+          <div class="dash-cell">
+            <div class="dash-lbl">KP  alt→v</div>
+            <div class="dash-val" id="d-kp">—</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">KD  v err→thr</div>
+            <div class="dash-val" id="d-kd">—</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">KI  v integral</div>
+            <div class="dash-val" id="d-ki">—</div>
+          </div>
+        </div>
+      </div><!-- /gains -->
+
+    </div><!-- /dash -->
+
+    <!-- ── MISSION CONTROLS ──────────────────────────── -->
+    <div class="controls" id="mission-controls">
+      <button class="cmd-btn" id="btn-hover-test">Hover Test</button>
+      <button class="cmd-btn" id="btn-auto-hover">Auto Hover Cal</button>
+      <button class="cmd-btn" id="btn-alt-hold">Alt Hold</button>
+      <button class="cmd-btn primary wide" id="btn-start-mission">Start Mission</button>
+      <button class="cmd-btn danger wide"  id="btn-disarm">Disarm</button>
     </div>
-    <input type="range" class="sprint" id="slider-cutoff" min="1400" max="1820" value="1700" step="10">
-    <div class="param-bounds"><span>14m (~46ft)</span><span>18.2m (~60ft)</span></div>
-    <div class="param-desc">Altitude to stop sprinting. Keep below 60ft to absorb baro lag and avoid overshoot.</div>
-  </div>
 
-  <!-- ── HOLD PHASE ──────────────────────────────────── -->
-  <div class="sec">
-    <span class="sec-label">Hold Phase / Alt Hold</span>
-    <span class="badge b-hold">station-keep</span>
-    <span class="sec-line"></span>
-  </div>
+  </div><!-- /pane-flight -->
 
-  <div class="param" id="param-target-alt">
-    <div class="param-head">
-      <span class="param-label">Target Altitude</span>
-      <div class="param-readout">
-        <span class="param-value" id="val-target-alt">18.3</span><span class="param-unit">m</span>
+  <!-- ══════════════════════════════════════════════════ -->
+  <!--  PARAMS TAB                                        -->
+  <!-- ══════════════════════════════════════════════════ -->
+  <div class="tab-pane" id="pane-params">
+
+    <div class="param-utils" id="params-controls">
+      <button class="cmd-btn" id="btn-bench-mode">Bench Mode: Off</button>
+      <button class="cmd-btn" id="btn-sync">Sync from ESP32</button>
+    </div>
+
+    <!-- ── SPRINT PHASE ──────────────────────────────── -->
+    <div class="sec">
+      <span class="sec-label">Sprint Phase</span>
+      <span class="badge b-sprint">full power to 60ft</span>
+      <span class="sec-line"></span>
+    </div>
+
+    <div class="param" id="param-sprint">
+      <div class="param-head">
+        <span class="param-label">Sprint Throttle</span>
+        <div class="param-readout">
+          <span class="param-value" id="val-sprint">1850</span><span class="param-unit">µs</span>
+        </div>
       </div>
+      <input type="range" class="sprint" id="slider-sprint" min="1500" max="2000" value="1850" step="10">
+      <div class="param-bounds"><span>1500</span><span>2000</span></div>
+      <div class="param-desc">Full climb throttle. Higher = faster to 60ft = more punch time.</div>
     </div>
-    <input type="range" class="hold" id="slider-target-alt" min="10" max="250" value="183" step="1">
-    <div class="param-bounds"><span>1.0m</span><span>25.0m</span></div>
-    <div class="param-desc">Mission hold target used after sprint cutoff. 60ft = 18.3m.</div>
-  </div>
 
-  <div class="param" id="param-alt-hold-target">
-    <div class="param-head">
-      <span class="param-label">Alt Hold Test Target</span>
-      <div class="param-readout">
-        <span class="param-value" id="val-alt-hold-target">1.5</span><span class="param-unit">m</span>
+    <div class="param" id="param-cutoff">
+      <div class="param-head">
+        <span class="param-label">Sprint Cutoff</span>
+        <div class="param-readout">
+          <span class="param-value" id="val-cutoff">17.0</span><span class="param-unit">m</span>
+        </div>
       </div>
+      <input type="range" class="sprint" id="slider-cutoff" min="1400" max="1820" value="1700" step="10">
+      <div class="param-bounds"><span>14m (~46ft)</span><span>18.2m (~60ft)</span></div>
+      <div class="param-desc">Altitude to stop sprinting. Keep below 60ft to absorb baro lag and avoid overshoot.</div>
     </div>
-    <input type="range" class="hold" id="slider-alt-hold-target" min="5" max="20" value="15" step="1">
-    <div class="param-bounds"><span>0.5m</span><span>2.0m</span></div>
-    <div class="param-desc">Low-altitude target used only by the Alt Hold test command. BLE disconnect during Alt Hold triggers auto-land.</div>
-  </div>
 
-  <div class="param" id="param-kp">
-    <div class="param-head">
-      <span class="param-label">Alt Loop Kp</span>
-      <div class="param-readout">
-        <span class="param-value" id="val-kp">1.2</span>
+    <!-- ── HOLD PHASE ────────────────────────────────── -->
+    <div class="sec">
+      <span class="sec-label">Hold Phase / Alt Hold</span>
+      <span class="badge b-hold">station-keep</span>
+      <span class="sec-line"></span>
+    </div>
+
+    <div class="param" id="param-target-alt">
+      <div class="param-head">
+        <span class="param-label">Target Altitude</span>
+        <div class="param-readout">
+          <span class="param-value" id="val-target-alt">18.3</span><span class="param-unit">m</span>
+        </div>
       </div>
+      <input type="range" class="hold" id="slider-target-alt" min="10" max="250" value="183" step="1">
+      <div class="param-bounds"><span>1.0m</span><span>25.0m</span></div>
+      <div class="param-desc">Mission hold target used after sprint cutoff. 60ft = 18.3m.</div>
     </div>
-    <input type="range" class="hold" id="slider-kp" min="3" max="100" value="12" step="1">
-    <div class="param-bounds"><span>0.3</span><span>10.0</span></div>
-    <div class="param-desc">Outer loop: alt error (m) → desired climb speed (m/s). Start low. Too high = setpoint overshoot.</div>
-  </div>
 
-  <div class="param" id="param-ki">
-    <div class="param-head">
-      <span class="param-label">Speed Loop Ki</span>
-      <div class="param-readout">
-        <span class="param-value" id="val-ki">3.0</span>
+    <div class="param" id="param-alt-hold-target">
+      <div class="param-head">
+        <span class="param-label">Alt Hold Test Target</span>
+        <div class="param-readout">
+          <span class="param-value" id="val-alt-hold-target">1.5</span><span class="param-unit">m</span>
+        </div>
       </div>
+      <input type="range" class="hold" id="slider-alt-hold-target" min="5" max="20" value="15" step="1">
+      <div class="param-bounds"><span>0.5m</span><span>2.0m</span></div>
+      <div class="param-desc">Low-altitude target used only by the Alt Hold test command. BLE disconnect during Alt Hold triggers auto-land.</div>
     </div>
-    <input type="range" class="hold" id="slider-ki" min="0" max="200" value="30" step="5">
-    <div class="param-bounds"><span>0</span><span>20.0</span></div>
-    <div class="param-desc">Inner loop integral: removes steady-state speed bias. Add only after vehicle settles near target without large overshoot.</div>
-  </div>
 
-  <div class="param" id="param-kd">
-    <div class="param-head">
-      <span class="param-label">Speed Loop Kp</span>
-      <div class="param-readout">
-        <span class="param-value" id="val-kd">25.0</span>
+    <div class="param" id="param-kp">
+      <div class="param-head">
+        <span class="param-label">Alt Loop Kp</span>
+        <div class="param-readout">
+          <span class="param-value" id="val-kp">1.2</span>
+        </div>
       </div>
+      <input type="range" class="hold" id="slider-kp" min="3" max="100" value="12" step="1">
+      <div class="param-bounds"><span>0.3</span><span>10.0</span></div>
+      <div class="param-desc">Outer loop: alt error (m) → desired climb speed (m/s). Start low. Too high = setpoint overshoot.</div>
     </div>
-    <input type="range" class="hold" id="slider-kd" min="0" max="1500" value="250" step="25">
-    <div class="param-bounds"><span>0</span><span>150.0</span></div>
-    <div class="param-desc">Inner loop P: speed error (m/s) → throttle offset (µs). Tune this first with Ki=0.</div>
-  </div>
 
-  <!-- ── PUNCH PHASE ─────────────────────────────────── -->
-  <div class="sec">
-    <span class="sec-label">Punch Phase</span>
-    <span class="badge b-punch">max velocity before cut</span>
-    <span class="sec-line"></span>
-  </div>
-
-  <div class="param" id="param-punch-start">
-    <div class="param-head">
-      <span class="param-label">Punch Start</span>
-      <div class="param-readout">
-        <span class="param-value" id="val-punch-start">7.5</span><span class="param-unit">s</span>
+    <div class="param" id="param-ki">
+      <div class="param-head">
+        <span class="param-label">Speed Loop Ki</span>
+        <div class="param-readout">
+          <span class="param-value" id="val-ki">3.0</span>
+        </div>
       </div>
+      <input type="range" class="hold" id="slider-ki" min="0" max="200" value="30" step="5">
+      <div class="param-bounds"><span>0</span><span>20.0</span></div>
+      <div class="param-desc">Inner loop integral: removes steady-state speed bias. Add only after vehicle settles near target without large overshoot.</div>
     </div>
-    <input type="range" class="punch" id="slider-punch-start" min="6000" max="7800" value="7500" step="100">
-    <div class="param-bounds"><span>6.0s</span><span>7.8s</span></div>
-    <div class="param-desc">When to begin final burst. Later = more exit velocity. Must leave enough time to build speed before 8s cut.</div>
-  </div>
 
-  <div class="param" id="param-punch-throt">
-    <div class="param-head">
-      <span class="param-label">Punch Throttle</span>
-      <div class="param-readout">
-        <span class="param-value" id="val-punch-throt">2000</span><span class="param-unit">µs</span>
+    <div class="param" id="param-kd">
+      <div class="param-head">
+        <span class="param-label">Speed Loop Kp</span>
+        <div class="param-readout">
+          <span class="param-value" id="val-kd">25.0</span>
+        </div>
       </div>
+      <input type="range" class="hold" id="slider-kd" min="0" max="1500" value="250" step="25">
+      <div class="param-bounds"><span>0</span><span>150.0</span></div>
+      <div class="param-desc">Inner loop P: speed error (m/s) → throttle offset (µs). Tune this first with Ki=0.</div>
     </div>
-    <input type="range" class="punch" id="slider-punch-throt" min="1600" max="2000" value="2000" step="10">
-    <div class="param-bounds"><span>1600</span><span>2000 — max</span></div>
-    <div class="param-desc">Max throttle for the final burst. Leave at 2000 unless there's a reason to reduce.</div>
-  </div>
 
-  <div id="log"><span class="info">— ready —</span></div>
+    <!-- ── PUNCH PHASE ───────────────────────────────── -->
+    <div class="sec">
+      <span class="sec-label">Punch Phase</span>
+      <span class="badge b-punch">max velocity before cut</span>
+      <span class="sec-line"></span>
+    </div>
 
-</div>
+    <div class="param" id="param-punch-start">
+      <div class="param-head">
+        <span class="param-label">Punch Start</span>
+        <div class="param-readout">
+          <span class="param-value" id="val-punch-start">7.5</span><span class="param-unit">s</span>
+        </div>
+      </div>
+      <input type="range" class="punch" id="slider-punch-start" min="6000" max="7800" value="7500" step="100">
+      <div class="param-bounds"><span>6.0s</span><span>7.8s</span></div>
+      <div class="param-desc">When to begin final burst. Later = more exit velocity. Must leave enough time to build speed before 8s cut.</div>
+    </div>
+
+    <div class="param" id="param-punch-throt">
+      <div class="param-head">
+        <span class="param-label">Punch Throttle</span>
+        <div class="param-readout">
+          <span class="param-value" id="val-punch-throt">2000</span><span class="param-unit">µs</span>
+        </div>
+      </div>
+      <input type="range" class="punch" id="slider-punch-throt" min="1600" max="2000" value="2000" step="10">
+      <div class="param-bounds"><span>1600</span><span>2000 — max</span></div>
+      <div class="param-desc">Max throttle for the final burst. Leave at 2000 unless there's a reason to reduce.</div>
+    </div>
+
+    <div id="log"><span class="info">— ready —</span></div>
+
+  </div><!-- /pane-params -->
+
+</div><!-- /wrap -->
 
 <script src="quad_tuner.js"></script>
 </body>

@@ -79,30 +79,33 @@
 // HOLD_KI = inner I gain: speed integral    → throttle offset (µs)
 
 // Outer loop: setpoint ramp and speed limits
-#define ALT_RAMP_RATE_MPS       3.5f    // m/s — internal setpoint ramp rate
-#define MAX_CLIMB_MPS_TEST      1.5f    // max commanded climb, test mode
-#define MAX_DESCENT_MPS_TEST    1.0f    // max commanded descent, test mode
-#define MAX_CLIMB_MPS_HOLD      3.5f    // max commanded climb, competition HOLDING
-#define MAX_DESCENT_MPS_HOLD    2.0f    // max commanded descent, competition HOLDING
+#define ALT_RAMP_RATE_MPS       0.6f    // m/s internal setpoint ramp rate
+#define MAX_CLIMB_MPS_TEST      0.35f   // max commanded climb, test mode
+#define MAX_DESCENT_MPS_TEST    0.30f   // max commanded descent, test mode
+#define MAX_CLIMB_MPS_HOLD      0.8f    // max commanded climb, competition HOLDING
+#define MAX_DESCENT_MPS_HOLD    0.5f    // max commanded descent, competition HOLDING
 #define ALT_HOLD_TARGET_MIN_M   0.5f    // BLE Alt Hold test target lower bound
 #define ALT_HOLD_TARGET_MAX_M   2.0f    // BLE Alt Hold test target upper bound
 #define NEAR_TARGET_M           0.5f    // within this radius, scale down max speed
 #define NEAR_TARGET_FACTOR      0.35f   // minimum speed factor within near-target zone
 
 // Inner loop: vario filtering
-#define VARIO_ALPHA             0.25f   // low-pass weight (0=max smoothing, 1=raw)
+#define VARIO_TAU_S             0.30f   // seconds, time-based low-pass constant for vario
 #define VARIO_STALE_MS          500     // ms before vario reading is considered stale
 #define VARIO_MAX_PLAUSIBLE_CMS 800     // cm/s — implausible above this (~8 m/s)
-#define KI_VSPEED_LIMIT         40.0f   // anti-windup clamp on integrated speed error (m)
+#define VSPEED_I_MAX_US         50.0f   // max integral throttle contribution in us
 
 // Throttle authority around hover
 #define THR_UP_OFFSET_US        200     // max µs above HOVER_THROTTLE
 #define THR_DOWN_OFFSET_US      250     // max µs below HOVER_THROTTLE (more for braking)
+#define MIN_CONTROL_THROTTLE_US 1100    // lower bound to preserve attitude-control authority
 
 // Safety
 #define ALT_MAX_M               22.0f   // absolute ceiling — triggers landing above this
 #define LANDING_KP_VSPEED       30.0f   // fixed P gain for landing velocity controller
 
 // Takeoff ground guard — avoids integrator windup and baro-spike at liftoff
-#define TAKEOFF_ALT_M           0.3f    // altitude below which closed-loop is suppressed
-#define TAKEOFF_NUDGE_US        50      // µs above HOVER_THROTTLE for ground-phase thrust
+#define TAKEOFF_ALT_M            0.3f   // altitude below which closed-loop is suppressed
+#define TAKEOFF_NUDGE_US         50     // µs above HOVER_THROTTLE for ground-phase thrust
+#define BARO_SETTLE_MS           500    // ms after throttle step for baro to settle at hover pressure
+#define GROUND_GUARD_TIMEOUT_MS  2000   // ms before aborting if baro hasn't confirmed liftoff

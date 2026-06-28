@@ -238,7 +238,7 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 | Sync Values | Re-reads all parameters from ESP32. |
 | Bench Mode | Simulates altitude for desk testing. Never fly with this on. |
 
-**Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, and throttle at ~10Hz via BLE notify.
+**Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, throttle, selected vario, filtered vario, FC raw vario, and derived vario at ~10Hz via BLE notify.
 
 **Active state strip** appears whenever not idle — shows state name, altitude, throttle, and a DISARM button. During Auto Hover Cal an inline progress panel shows altitude bar (0–50cm with 15cm threshold marker) and throttle bar. On cal completion a notification shows the detected hover throttle and auto-syncs the slider.
 
@@ -270,18 +270,30 @@ The hold controller runs in both `HOLDING` (mission) and `ALT_HOLD` (test) state
 ```
 alt_error       = internal_setpoint - altitude
 desired_vspeed  = clamp(HOLD_KP * alt_error, -max_descent, max_climb)
-vario_ms        = FC_vario_cm_s / 100
-vspeed_error    = desired_vspeed - filtered_vario_ms
-vspeed_integral += vspeed_error × dt
+derived_vario   = smoothed derivative of MSP_ALTITUDE altitude
+filtered_vario  = time-based low-pass of derived_vario
+vspeed_error    = desired_vspeed - filtered_vario
+candidate_i     = output-limited(vspeed_integral + vspeed_error * dt)
 
 throttle = HOVER_THROTTLE
-         + HOLD_KD × vspeed_error
-         + HOLD_KI × vspeed_integral
+         + HOLD_KD * vspeed_error
+         + HOLD_KI * vspeed_integral
 ```
 
-The D term uses vertical velocity directly from the FC's MSP_ALTITUDE response (vario field), avoiding noisy numerical differentiation of the altitude signal.
+Betaflight 4.4.x on this FC reports `MSP_ALTITUDE` altitude correctly but has been observed to send `0` in the MSP vario field. The firmware therefore keeps FC raw vario as a diagnostic only and uses a smoothed altitude-derived vario for control.
 
-**Landing** uses a velocity controller targeting `DESCENT_RATE_MPS = 0.4 m/s` downward, also driven by FC vario. Motors cut when altitude drops below 15cm or after a 30s timeout.
+The vario filter is time-based (`VARIO_TAU_S = 0.30s`) so smoothing remains stable with loop-rate jitter. If vario becomes stale or implausible while altitude hold is active, the controller clears the integrator and transitions to `LANDING` instead of holding the last velocity estimate.
+
+Current conservative speed limits:
+
+| Mode | Max climb | Max descent |
+|---|---:|---:|
+| `ALT_HOLD` test | 0.35 m/s | 0.30 m/s |
+| Mission `HOLDING` | 0.8 m/s | 0.5 m/s |
+
+The internal setpoint ramps at `ALT_RAMP_RATE_MPS = 0.6 m/s`. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 50us`) and throttle is not allowed below `MIN_CONTROL_THROTTLE_US = 1100us` while closed-loop altitude hold is active.
+
+**Landing** uses a velocity controller targeting `DESCENT_RATE_MPS = 0.4 m/s` downward, driven by the same filtered derived vario. Motors cut when altitude drops below 15cm after actual descent is detected, or after a 30s timeout.
 
 ---
 
@@ -308,6 +320,8 @@ The D term uses vertical velocity directly from the FC's MSP_ALTITUDE response (
 - `launchAlt` is set at the ARMING→CAL transition (after 1500ms motor settle), not before, to avoid baro drift pre-triggering the threshold
 - Cal times out after 30s or at `CAL_MAX_THROTTLE = 1650 µs`
 
+`ALT_HOLD` test mode also has a takeoff ground guard. For the first 500ms after entering `ALT_HOLD`, `launchAlt` is refreshed while the barometer settles. If relative altitude remains below 30cm, the firmware commands `HOVER_THROTTLE + 50us` for up to 2s. If liftoff is still not confirmed after that window, it aborts to `LANDING` instead of forcing closed-loop control on an untrusted altitude signal.
+
 ---
 
 ## BLE Safety
@@ -327,7 +341,7 @@ flowchart LR
         W2["CBfloat\ncutoff / target alt / KP / KI / KD"]
         W3["CBu32\npunch start ms"]
         W4["CBcommand\nhover / cal / alt hold / mission / disarm"]
-        TEL["telemetryChar NOTIFY\n11-byte packet @10Hz\nabs_alt · rel_alt · state · throttle"]
+        TEL["telemetryChar NOTIFY\n28-byte packet @10Hz\nalt · state · throttle · vario diagnostics"]
     end
 
     subgraph PARAMS["VOLATILE PARAMS"]
@@ -344,12 +358,12 @@ flowchart LR
     end
 
     subgraph SENSOR["MSP SENSOR — UART1"]
-        ALT["getAltitude()\nMSP_ALTITUDE cmd 109\nalt_cm int32 + vario int16"]
+        ALT["getAltitude()\nMSP_ALTITUDE cmd 109\nalt_cm + FC raw vario\n+ derived vario fallback"]
     end
 
     subgraph SM["STATE MACHINE ~50Hz"]
         SPR["SPRINTING\nchannels[2] = ST"]
-        HLD["HOLDING / ALT_HOLD\nPID(KP,KI,KD,vario)"]
+        HLD["HOLDING / ALT_HOLD\nPID(KP,KI,KD,derived vario)"]
         PUN["PUNCHING\nchannels[2] = PT"]
         HVT["HOVER_TEST\nchannels[2] = HT"]
         AHC["AUTO_HOVER_CAL\nramp → liftoff → HT+50"]
@@ -367,7 +381,7 @@ flowchart LR
     W3 --> PS
     W4 -->|state transitions| SM
 
-    ALT -->|altitude m + vario cm/s| HLD & AHC & LND & SPR
+    ALT -->|altitude m + derived vario cm/s| HLD & AHC & LND & SPR
 
     HT --> HLD & HVT & AHC
     ST --> SPR

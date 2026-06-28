@@ -5,20 +5,31 @@
 #include "Control.h"
 #include "Ble.h"
 
+// 0=settling, 1=waiting for liftoff, 2=cascade active. Updated each ALT_HOLD iteration.
+static uint8_t altHoldGuardPhase = 2;
+
 static void pushTelemetry(float rawAlt, float altitude) {
     if (!telemetryChar) return;
     static uint8_t tick = 0;
     if (++tick < 5) return;
     tick = 0;
-    int32_t altCm = (int32_t)(rawAlt * 100.0f);
-    int32_t relCm = (int32_t)(altitude * 100.0f);
-    uint8_t pkt[13];
+    int32_t altCm     = (int32_t)(rawAlt * 100.0f);
+    int32_t relCm     = (int32_t)(altitude * 100.0f);
+    int16_t filtVarCs = (int16_t)constrain(filteredVario    * 100.0f, -32768.0f, 32767.0f);
+    int16_t setptCm   = (int16_t)constrain(internalSetpoint * 100.0f, -32768.0f, 32767.0f);
+    uint8_t pkt[28];
     memcpy(pkt,      &altCm,                 4);
     memcpy(pkt + 4,  &relCm,                 4);
     pkt[8] = (uint8_t)state;
     memcpy(pkt + 9,  &channels[CH_THROTTLE], 2);
     memcpy(pkt + 11, &lastVario,             2);
-    telemetryChar->setValue(pkt, 13);
+    memcpy(pkt + 13, &filtVarCs,             2);
+    memcpy(pkt + 15, &setptCm,              2);
+    pkt[17] = altHoldGuardPhase;
+    memcpy(pkt + 18, &lastFcVario,           2);
+    memcpy(pkt + 20, &lastDerivedVario,      2);
+    memcpy(pkt + 22, lastMspAltitudePayload, 6);
+    telemetryChar->setValue(pkt, 28);
     telemetryChar->notify();
 }
 
@@ -30,10 +41,26 @@ void runMissionLoop() {
 
     pushTelemetry(rawAlt, altitude);
 
-    // Keep vario filter current every loop so LANDING and other states see fresh data
-    if ((millis() - lastVarioMs) < VARIO_STALE_MS && abs(lastVario) <= VARIO_MAX_PLAUSIBLE_CMS) {
+    // Keep vario filter current every loop so LANDING and other states see fresh data.
+    // Use a time-based filter so smoothing does not change with loop-rate jitter.
+    bool varioFresh = (millis() - lastVarioMs) < VARIO_STALE_MS
+                      && abs(lastVario) <= VARIO_MAX_PLAUSIBLE_CMS;
+    if (varioFresh) {
+        static uint32_t varioFilterLastMs = 0;
+        uint32_t nowMs = millis();
+        if (varioFilterLastMs == 0) varioFilterLastMs = nowMs;
+        float dt = constrain((nowMs - varioFilterLastMs) / 1000.0f, 0.001f, 0.2f);
+        varioFilterLastMs = nowMs;
         float rawMs = lastVario / 100.0f;
-        filteredVario = VARIO_ALPHA * rawMs + (1.0f - VARIO_ALPHA) * filteredVario;
+        float alpha = dt / (VARIO_TAU_S + dt);
+        filteredVario += alpha * (rawMs - filteredVario);
+    } else if (state == ALT_HOLD || state == HOLDING) {
+        static uint32_t lastVarioWarnMs = 0;
+        if (millis() - lastVarioWarnMs >= 500) {
+            lastVarioWarnMs = millis();
+            Serial.printf("[VARIO] stale! lastVarioMs=%u raw=%d filtV=%.2f\n",
+                lastVarioMs, lastVario, filteredVario);
+        }
     }
 
     // BLE disconnect safety: land if triggered while in a test state
@@ -216,22 +243,44 @@ void runMissionLoop() {
             channels[CH_ANGLE] = 1800;
 
             uint16_t thr;
-            if (altitude < TAKEOFF_ALT_M) {
-                // Ground guard: while the drone is still on the ground, avoid running
-                // the cascade (which would wind up the integral against the floor and
-                // pick up baro noise). Reset every iteration so the cascade starts
-                // with clean state (integral=0, vario=0, setpoint=liftoff alt).
+            uint32_t timeInAltHold = millis() - (armTime + ARMING_MS);
+            if (timeInAltHold < BARO_SETTLE_MS) {
+                altHoldGuardPhase = 0;
+                launchAlt = rawAlt;
                 thr = HOVER_THROTTLE + TAKEOFF_NUDGE_US;
-                resetCascadeController(altitude);
+                resetCascadeController(0.0f);
+                if (timeInAltHold % 100 < 20)
+                    Serial.printf("[ALT_HOLD] settle  t=%ums rawAlt=%.2f launchAlt=%.2f rel=%.2f\n",
+                        timeInAltHold, rawAlt, launchAlt, altitude);
+            } else if (altitude < TAKEOFF_ALT_M && timeInAltHold < GROUND_GUARD_TIMEOUT_MS) {
+                altHoldGuardPhase = 1;
+                thr = HOVER_THROTTLE + TAKEOFF_NUDGE_US;
+                resetCascadeController(0.0f);
+                if (timeInAltHold % 100 < 20)
+                    Serial.printf("[ALT_HOLD] guard   t=%ums rawAlt=%.2f launchAlt=%.2f rel=%.2f\n",
+                        timeInAltHold, rawAlt, launchAlt, altitude);
+            } else if (altitude < TAKEOFF_ALT_M) {
+                altHoldGuardPhase = 1;
+                thr = HOVER_THROTTLE;
+                channels[CH_THROTTLE] = thr;
+                sendRC();
+                Serial.printf("[ALT_HOLD] ground guard expired without liftoff confirmation, landing rel=%.2f\n",
+                    altitude);
+                startLanding(altitude);
+                break;
             } else {
+                altHoldGuardPhase = 2;
                 thr = holdCascaded(altitude, false);
             }
             channels[CH_THROTTLE] = thr;
             sendRC();
             digitalWrite(STATUS_LED, millis() % 500 < 250);
 
-            if (altitude > ALT_MAX_M) {
-                Serial.printf("[ALT_HOLD] ceiling exceeded %.2fm, landing\n", altitude);
+            // Tight safety ceiling: if baro or controller misbehaves, land before getting dangerous.
+            float holdTarget  = constrain((float)ALT_HOLD_TARGET_M, ALT_HOLD_TARGET_MIN_M, ALT_HOLD_TARGET_MAX_M);
+            float safeCeiling = holdTarget + 2.0f;
+            if (altitude > safeCeiling) {
+                Serial.printf("[ALT_HOLD] safety ceiling %.1fm exceeded at %.2fm, landing\n", safeCeiling, altitude);
                 startLanding(altitude);
             }
             break;
@@ -243,7 +292,10 @@ void runMissionLoop() {
             channels[CH_ANGLE] = 1800;
             digitalWrite(STATUS_LED, millis() % 200 < 30);
 
-            if (altitude <= LANDING_GROUND_M) {
+            // Only trust baro ground detection after we've actually descended from start altitude.
+            // Guards against a stuck/zero baro reading killing motors mid-air.
+            bool hasDescended = (landingStartAlt - altitude) > 0.3f;
+            if (hasDescended && altitude <= LANDING_GROUND_M) {
                 disarmToIdle("[LANDING] ground detected");
                 break;
             }

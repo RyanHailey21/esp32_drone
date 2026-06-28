@@ -15,6 +15,9 @@ uint8_t  calLiftoffCount = 0;
 float    launchAlt       = 0;
 float    currentRelAlt   = 0;
 int16_t  lastVario       = 0;
+int16_t  lastFcVario     = 0;
+int16_t  lastDerivedVario = 0;
+uint8_t  lastMspAltitudePayload[6] = {0};
 uint32_t lastVarioMs     = 0;
 float    internalSetpoint = 0;
 float    filteredVario   = 0;
@@ -23,6 +26,7 @@ uint32_t vspeedLastMs    = 0;
 float    benchAlt        = 0;
 uint32_t benchLastMs     = 0;
 uint32_t landingStartMs  = 0;
+float    landingStartAlt = 0;
 volatile bool bleSafetyLand = false;
 
 // ── Tunable Parameters (BLE-writable) ────────────────────────
