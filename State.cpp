@@ -43,6 +43,7 @@ volatile uint16_t PUNCH_THROTTLE  = 2000;
 
 // Runtime BLE-controlled bench mode
 volatile uint8_t  BENCH_MODE_ENABLED = 0;
+volatile uint8_t  ANGLE_MODE_ENABLED = DEFAULT_ANGLE_MODE;
 
 // ── RC Channels ──────────────────────────────────────────────
 // CH1=Roll CH2=Pitch CH3=Throttle CH4=Yaw CH5=AUX1(Arm) CH6=AUX2(Angle)

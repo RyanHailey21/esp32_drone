@@ -150,7 +150,7 @@ float getAltitude() {
 
         case HOLDING:
         case ALT_HOLD:
-            benchAlt = launchAlt + TARGET_ALT_M;
+            benchAlt = launchAlt + (state == ALT_HOLD ? ALT_HOLD_TARGET_M : TARGET_ALT_M);
             lastVario   = 0;
             lastFcVario = 0;
             lastDerivedVario = 0;

@@ -234,9 +234,11 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 | Auto Hover Cal | Arms → ramps throttle until 5 consecutive readings above 15cm → writes `HOVER_THROTTLE` (with +50µs ground-effect offset) → stays in Hover Test. |
 | Alt Hold | Arms → PID holds `ALT_HOLD_TARGET_M`. BLE disconnect triggers auto-land. |
 | Start Mission | Arms → full sprint/hold/punch/cut sequence. BLE disconnect ignored during mission. |
-| Disarm | In test modes: smooth velocity-based landing. In mission: immediate disarm. |
+| Land | In test modes: smooth velocity-based landing. In mission/idle states: immediate disarm. |
+| Kill Motors | Immediate motor cut from any state. Use this as the emergency stop. |
 | Sync Values | Re-reads all parameters from ESP32. |
 | Bench Mode | Simulates altitude for desk testing. Never fly with this on. |
+| Angle Mode | Drives AUX2 high/low for Betaflight Angle mode. Can be changed only while idle or done. |
 
 **Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, throttle, selected vario, filtered vario, FC raw vario, and derived vario at ~10Hz via BLE notify.
 
@@ -250,7 +252,7 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 
 | Parameter | Default | Encoding | Description |
 |---|---|---|---|
-| `HOVER_THROTTLE` | 1270 µs | uint16 | Neutral hover throttle. Use Auto Hover Cal for first-pass, then fine-tune in Hover Test. |
+| `HOVER_THROTTLE` | 1255 µs | uint16 | Neutral hover throttle. Use Auto Hover Cal for first-pass, then fine-tune in Hover Test. |
 | `SPRINT_THROTTLE` | 1850 µs | uint16 | Full climb throttle during sprint. Higher = faster to 60ft = more punch time. |
 | `SPRINT_CUTOFF_M` | 17.0 m | float×100 | Altitude to stop sprinting. Keep below 18.3m to absorb baro lag. |
 | `TARGET_ALT_M` | 18.3 m | float×10 | Mission hold target. 60ft = 18.3m. Used by `HOLDING` after sprint cutoff. |
@@ -341,7 +343,7 @@ flowchart LR
         W2["CBfloat\ncutoff / target alt / KP / KI / KD"]
         W3["CBu32\npunch start ms"]
         W4["CBcommand\nhover / cal / alt hold / mission / disarm"]
-        TEL["telemetryChar NOTIFY\n28-byte packet @10Hz\nalt · state · throttle · vario diagnostics"]
+        TEL["telemetryChar NOTIFY\n30-byte packet @10Hz\nalt · state · throttle · vario · angle diagnostics"]
     end
 
     subgraph PARAMS["VOLATILE PARAMS"]
@@ -402,6 +404,14 @@ flowchart LR
 ## Bench Mode
 
 Toggle from `quad_tuner.html` while idle. Simulates altitude so mission flow and auto hover cal can be tested on the desk without a flight controller connected. Defaults off on every boot — never fly with it on.
+
+---
+
+## Angle Mode Toggle
+
+The tuner exposes a BLE `Angle Mode` button that controls AUX2 (`CH_ANGLE`) for all autonomous states. `Angle Mode: On` sends 1800us; `Angle Mode: Off` sends 1000us. The firmware rejects changes unless the state is `IDLE` or `DONE`, so pick the mode before starting Hover Test, Alt Hold, Auto Hover Cal, or the mission.
+
+The boot default is `DEFAULT_ANGLE_MODE = 0`, because this frame showed aggressive liftoff behavior with Betaflight Angle mode enabled. If Angle mode is needed later, tune Betaflight leveling behavior first and then enable it from the web UI before the run.
 
 ---
 

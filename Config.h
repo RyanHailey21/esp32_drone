@@ -37,6 +37,7 @@
 #define TELEMETRY_UUID      "ab0828bd-198e-4351-b779-901fa0e0371e"
 #define TARGET_ALT_UUID     "ab0828bf-198e-4351-b779-901fa0e0371e"
 #define ALT_HOLD_TARGET_UUID "ab0828c0-198e-4351-b779-901fa0e0371e"
+#define ANGLE_MODE_UUID     "ab0828c1-198e-4351-b779-901fa0e0371e"
 
 // ── BLE Command IDs ──────────────────────────────────────────
 #define CMD_HOVER_TEST      1
@@ -44,6 +45,7 @@
 #define CMD_DISARM          3
 #define CMD_AUTO_HOVER_CAL  4
 #define CMD_ALT_HOLD        5
+#define CMD_KILL            6
 
 // ── Auto Hover Calibration Constants ─────────────────────────
 #define CAL_START_THROTTLE  1150
@@ -72,6 +74,7 @@
 // µs added per loop iteration (~20ms) when ramping from arm-throttle to HOVER_THROTTLE.
 // 4 µs/iter × 50 Hz ≈ 200 µs/s → 270 µs step takes ~1.3 s, too slow to trigger ANTI_GRAVITY.
 #define HOVER_RAMP_STEP_US  4
+#define DEFAULT_ANGLE_MODE  0  // 0=acro/rate mode, 1=Angle mode
 
 // ── Cascaded Altitude Hold ────────────────────────────────────
 // HOLD_KP = outer P gain: altitude error (m) → desired vertical speed (m/s)

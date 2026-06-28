@@ -12,6 +12,7 @@ const PUNCH_THROT_UUID   = 'ab0828b9-198e-4351-b779-901fa0e0371e';
 const COMMAND_UUID       = 'ab0828ba-198e-4351-b779-901fa0e0371e';
 const BENCH_MODE_UUID    = 'ab0828bb-198e-4351-b779-901fa0e0371e';
 const TELEMETRY_UUID     = 'ab0828bd-198e-4351-b779-901fa0e0371e';
+const ANGLE_MODE_UUID    = 'ab0828c1-198e-4351-b779-901fa0e0371e';
 
 const STATE_NAMES  = ['IDLE','ARMING','SPRINTING','HOLDING','PUNCHING','CUT','HOVER TEST','AUTO HOVER CAL','LANDING','DONE','ALT HOLD'];
 const STATE_COLORS = ['','var(--amber)','var(--amber)','var(--green)','var(--red)','var(--red)','var(--cyan)','var(--cyan)','var(--amber)','var(--text-mid)','var(--green)'];
@@ -21,6 +22,7 @@ const CMD_START_MISSION  = 2;
 const CMD_DISARM         = 3;
 const CMD_AUTO_HOVER_CAL = 4;
 const CMD_ALT_HOLD       = 5;
+const CMD_KILL           = 6;
 
 const CAL_LIFTOFF_CM = 15;
 const CAL_MIN_THROT  = 1150;
@@ -29,6 +31,7 @@ const CAL_MAX_THROT  = 1650;
 let chars = {};
 let device = null, connected = false;
 let benchMode = 0;
+let angleMode = 0;
 let prevStateId = -1;
 
 // Serialise all BLE writes — prevents "GATT operation already in progress"
@@ -40,6 +43,7 @@ const statusDot  = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
 const logEl      = document.getElementById('log');
 const benchBtn   = document.getElementById('btn-bench-mode');
+const angleBtn   = document.getElementById('btn-angle-mode');
 
 if (!navigator.bluetooth) {
   const ua  = navigator.userAgent;
@@ -122,6 +126,7 @@ async function connect() {
     chars.punchThrot = await service.getCharacteristic(PUNCH_THROT_UUID);
     chars.command    = await service.getCharacteristic(COMMAND_UUID);
     chars.benchMode  = await service.getCharacteristic(BENCH_MODE_UUID);
+    chars.angleMode  = await service.getCharacteristic(ANGLE_MODE_UUID);
     chars.telemetry  = await service.getCharacteristic(TELEMETRY_UUID);
 
     await chars.telemetry.startNotifications();
@@ -150,8 +155,10 @@ function disconnect() {
 function onDisconnected() {
   connected = false; chars = {};
   benchMode = 0;
+  angleMode = 0;
   _bleQ = Promise.resolve();
   setBenchButton();
+  setAngleButton();
   setStatus('', 'disconnected');
   connectBtn.textContent = 'Connect to Quad-Tuner';
   connectBtn.classList.remove('active');
@@ -173,6 +180,7 @@ async function readAll() {
     const punchStart = new DataView((await chars.punchStart.readValue()).buffer).getUint32(0, true);
     const punchThrot = new DataView((await chars.punchThrot.readValue()).buffer).getUint16(0, true);
     benchMode        = new DataView((await chars.benchMode.readValue()).buffer).getUint8(0);
+    angleMode        = new DataView((await chars.angleMode.readValue()).buffer).getUint8(0);
 
     setParam('hover',       hover,      v => v,                   v => v);
     setParam('sprint',      sprint,     v => v,                   v => v);
@@ -186,6 +194,7 @@ async function readAll() {
     setParam('punch-throt', punchThrot, v => v,                   v => v);
 
     setBenchButton();
+    setAngleButton();
     log('Values read from ESP32', 'ok');
   } catch(e) { log('Read failed: ' + e.message, 'err'); }
 }
@@ -210,6 +219,11 @@ function u8buf(v)  { const b = new ArrayBuffer(1); new DataView(b).setUint8(0, v
 function setBenchButton() {
   benchBtn.textContent = benchMode ? 'Bench Mode: On' : 'Bench Mode: Off';
   benchBtn.classList.toggle('bench-on', !!benchMode);
+}
+
+function setAngleButton() {
+  angleBtn.textContent = angleMode ? 'Angle Mode: On' : 'Angle Mode: Off';
+  angleBtn.classList.toggle('angle-on', !!angleMode);
 }
 
 function sendCommand(cmd, label) {
@@ -238,10 +252,13 @@ document.getElementById('btn-start-mission').addEventListener('click', () =>
   sendCommand(CMD_START_MISSION, 'Mission start command sent'));
 
 document.getElementById('btn-disarm').addEventListener('click', () =>
-  sendCommand(CMD_DISARM, 'Disarm command sent'));
+  sendCommand(CMD_DISARM, 'Land command sent'));
+
+document.getElementById('btn-kill').addEventListener('click', () =>
+  sendCommand(CMD_KILL, 'Kill command sent'));
 
 document.getElementById('strip-disarm').addEventListener('click', () =>
-  sendCommand(CMD_DISARM, 'Disarm command sent (strip)'));
+  sendCommand(CMD_KILL, 'Kill command sent (strip)'));
 
 document.getElementById('btn-sync').addEventListener('click', async () => {
   if (!connected) return;
@@ -260,6 +277,21 @@ benchBtn.addEventListener('click', () => {
       log(benchMode ? 'Bench mode enabled' : 'Bench mode disabled', benchMode ? 'err' : 'ok');
     } catch(e) {
       log('Bench mode failed: ' + e.message, 'err');
+    }
+  });
+});
+
+angleBtn.addEventListener('click', () => {
+  if (!connected) return;
+  const next = angleMode ? 0 : 1;
+  bleWrite(async () => {
+    try {
+      await chars.angleMode.writeValue(u8buf(next));
+      angleMode = new DataView((await chars.angleMode.readValue()).buffer).getUint8(0);
+      setAngleButton();
+      log(angleMode ? 'Angle mode enabled' : 'Angle mode disabled', 'ok');
+    } catch(e) {
+      log('Angle mode failed: ' + e.message, 'err');
     }
   });
 });
@@ -350,6 +382,7 @@ function onTelemetry(e) {
   const guardPhase = dv.byteLength >= 18 ? dv.getUint8(17)       : 2;
   const fcVarioCs  = dv.byteLength >= 20 ? dv.getInt16(18, true) : varioCs;
   const derivVarCs = dv.byteLength >= 22 ? dv.getInt16(20, true) : 0;
+  const angleAux   = dv.byteLength >= 30 ? dv.getUint16(28, true) : (angleMode ? 1800 : 1000);
 
   const altM     = (altCm / 100).toFixed(2);
   const relValid = Math.abs(relCm) <= 10000000;
@@ -425,13 +458,16 @@ function onTelemetry(e) {
   }
 
   // ── CONTROL section ──────────────────────────────────
-  const hoverThrot = parseInt(el('slider-hover').value) || 1270;
+  const hoverThrot = parseInt(el('slider-hover').value) || 1255;
   const thrOff     = throttle - hoverThrot;
   el('d-thr').textContent  = throttle + 'µs';
   el('d-to').textContent   = (thrOff >= 0 ? '+' : '') + thrOff + 'µs';
   el('d-to').style.color   = thrOffColor(thrOff);
   el('d-st').textContent   = STATE_NAMES[stateId] || String(stateId);
   el('d-st').style.color   = color;
+  el('d-ang').textContent  = angleAux + 'µs';
+  el('d-am').textContent   = angleAux >= 1700 ? 'ON' : 'OFF';
+  el('d-am').style.color   = angleAux >= 1700 ? 'var(--cyan)' : 'var(--text-mid)';
 
   // Guard phase pills — ALT_HOLD only
   el('d-phases').style.display = isAltHold ? '' : 'none';

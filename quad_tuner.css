@@ -293,6 +293,12 @@ header {
   background: var(--red-dim);
 }
 
+.cmd-btn.angle-on {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: var(--cyan-dim);
+}
+
 /* ── SECTION LABELS ─────────────────────────────────── */
 .sec {
   display: flex;

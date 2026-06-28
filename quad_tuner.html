@@ -31,7 +31,7 @@
       <span id="strip-alt">ALT —</span>
       <span id="strip-throt">THROT —</span>
     </div>
-    <button class="strip-disarm" id="strip-disarm">DISARM</button>
+    <button class="strip-disarm" id="strip-disarm">KILL</button>
   </div>
 
   <!-- ── TABS ──────────────────────────────────────────── -->
@@ -159,6 +159,16 @@
             <div class="dash-val" id="d-st">—</div>
           </div>
         </div>
+        <div class="dash-grid2">
+          <div class="dash-cell">
+            <div class="dash-lbl">ANGLE AUX</div>
+            <div class="dash-val" id="d-ang">—</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">ANGLE MODE</div>
+            <div class="dash-val" id="d-am">—</div>
+          </div>
+        </div>
 
         <!-- Guard phase pills — visible in ALT_HOLD only -->
         <div class="dash-phases" id="d-phases" style="display:none">
@@ -207,11 +217,13 @@
 
     <!-- ── MISSION CONTROLS ──────────────────────────── -->
     <div class="controls" id="mission-controls">
+      <button class="cmd-btn wide" id="btn-angle-mode">Angle Mode: Off</button>
       <button class="cmd-btn" id="btn-hover-test">Hover Test</button>
       <button class="cmd-btn" id="btn-auto-hover">Auto Hover Cal</button>
       <button class="cmd-btn" id="btn-alt-hold">Alt Hold</button>
       <button class="cmd-btn primary wide" id="btn-start-mission">Start Mission</button>
-      <button class="cmd-btn danger wide"  id="btn-disarm">Disarm</button>
+      <button class="cmd-btn" id="btn-disarm">Land</button>
+      <button class="cmd-btn danger wide" id="btn-kill">Kill Motors</button>
     </div>
 
   </div><!-- /pane-flight -->

@@ -8,6 +8,10 @@
 // 0=settling, 1=waiting for liftoff, 2=cascade active. Updated each ALT_HOLD iteration.
 static uint8_t altHoldGuardPhase = 2;
 
+static uint16_t angleModeChannelValue() {
+    return ANGLE_MODE_ENABLED ? 1800 : 1000;
+}
+
 static void pushTelemetry(float rawAlt, float altitude) {
     if (!telemetryChar) return;
     static uint8_t tick = 0;
@@ -17,7 +21,7 @@ static void pushTelemetry(float rawAlt, float altitude) {
     int32_t relCm     = (int32_t)(altitude * 100.0f);
     int16_t filtVarCs = (int16_t)constrain(filteredVario    * 100.0f, -32768.0f, 32767.0f);
     int16_t setptCm   = (int16_t)constrain(internalSetpoint * 100.0f, -32768.0f, 32767.0f);
-    uint8_t pkt[28];
+    uint8_t pkt[30];
     memcpy(pkt,      &altCm,                 4);
     memcpy(pkt + 4,  &relCm,                 4);
     pkt[8] = (uint8_t)state;
@@ -29,7 +33,8 @@ static void pushTelemetry(float rawAlt, float altitude) {
     memcpy(pkt + 18, &lastFcVario,           2);
     memcpy(pkt + 20, &lastDerivedVario,      2);
     memcpy(pkt + 22, lastMspAltitudePayload, 6);
-    telemetryChar->setValue(pkt, 28);
+    memcpy(pkt + 28, &channels[CH_ANGLE],    2);
+    telemetryChar->setValue(pkt, 30);
     telemetryChar->notify();
 }
 
@@ -74,6 +79,7 @@ void runMissionLoop() {
 
         // ── IDLE ─────────────────────────────────────────────
         case IDLE:
+            channels[CH_ANGLE] = angleModeChannelValue();
             sendRC();
             digitalWrite(STATUS_LED, millis() % 1000 < 100);
             break;
@@ -81,7 +87,7 @@ void runMissionLoop() {
         // ── ARMING ───────────────────────────────────────────
         case ARMING:
             channels[CH_ARM]      = 1800;
-            channels[CH_ANGLE]    = 1800;
+            channels[CH_ANGLE]    = angleModeChannelValue();
             channels[CH_THROTTLE] = 1000;
             sendRC();
             digitalWrite(STATUS_LED, millis() % 200 < 100);
@@ -122,6 +128,7 @@ void runMissionLoop() {
 
         // ── SPRINTING ────────────────────────────────────────
         case SPRINTING:
+            channels[CH_ANGLE]    = angleModeChannelValue();
             channels[CH_THROTTLE] = SPRINT_THROTTLE;
             sendRC();
             digitalWrite(STATUS_LED, millis() % 100 < 50);
@@ -142,6 +149,7 @@ void runMissionLoop() {
 
         // ── HOLDING ──────────────────────────────────────────
         case HOLDING: {
+            channels[CH_ANGLE]    = angleModeChannelValue();
             uint16_t thr          = holdCascaded(altitude, true);
             channels[CH_THROTTLE] = thr;
             sendRC();
@@ -161,6 +169,7 @@ void runMissionLoop() {
 
         // ── PUNCHING ─────────────────────────────────────────
         case PUNCHING:
+            channels[CH_ANGLE]    = angleModeChannelValue();
             channels[CH_THROTTLE] = PUNCH_THROTTLE;
             sendRC();
             digitalWrite(STATUS_LED, millis() % 50 < 25);
@@ -187,7 +196,7 @@ void runMissionLoop() {
         // ── HOVER TEST ───────────────────────────────────────
         case HOVER_TEST:
             channels[CH_ARM]   = 1800;
-            channels[CH_ANGLE] = 1800;
+            channels[CH_ANGLE] = angleModeChannelValue();
             // Ramp toward HOVER_THROTTLE at ~200 µs/s so a rapid step from the
             // ARMING low-throttle doesn't trigger Betaflight's ANTI_GRAVITY I-term boost.
             if (channels[CH_THROTTLE] < (uint16_t)HOVER_THROTTLE) {
@@ -199,14 +208,14 @@ void runMissionLoop() {
             sendRC();
             digitalWrite(STATUS_LED, millis() % 500 < 250);
 
-            Serial.printf("[HOVER] throttle=%d  target=%d\n",
-                channels[CH_THROTTLE], (int)HOVER_THROTTLE);
+            Serial.printf("[HOVER] throttle=%d  target=%d  angleAux=%d\n",
+                channels[CH_THROTTLE], (int)HOVER_THROTTLE, channels[CH_ANGLE]);
             break;
 
         // ── AUTO HOVER CAL ───────────────────────────────────
         case AUTO_HOVER_CAL:
             channels[CH_ARM]      = 1800;
-            channels[CH_ANGLE]    = 1800;
+            channels[CH_ANGLE]    = angleModeChannelValue();
             channels[CH_THROTTLE] = calThrottle;
             sendRC();
             digitalWrite(STATUS_LED, millis() % 300 < 150);
@@ -240,7 +249,7 @@ void runMissionLoop() {
         // ── ALT HOLD ─────────────────────────────────────────
         case ALT_HOLD: {
             channels[CH_ARM]   = 1800;
-            channels[CH_ANGLE] = 1800;
+            channels[CH_ANGLE] = angleModeChannelValue();
 
             uint16_t thr;
             uint32_t timeInAltHold = millis() - (armTime + ARMING_MS);
@@ -289,7 +298,7 @@ void runMissionLoop() {
         // ── LANDING ──────────────────────────────────────────
         case LANDING: {
             channels[CH_ARM]   = 1800;
-            channels[CH_ANGLE] = 1800;
+            channels[CH_ANGLE] = angleModeChannelValue();
             digitalWrite(STATUS_LED, millis() % 200 < 30);
 
             // Only trust baro ground detection after we've actually descended from start altitude.

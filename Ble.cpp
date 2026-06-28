@@ -71,6 +71,10 @@ public:
                     disarmToIdle("[BLE] Disarm command");
                 break;
 
+            case CMD_KILL:
+                disarmToIdle("[BLE] Kill command");
+                break;
+
             case CMD_AUTO_HOVER_CAL:
                 if (state == IDLE || state == DONE) startAutoHoverCal();
                 else Serial.println("[BLE] Ignored auto hover calibration command: not idle");
@@ -119,6 +123,25 @@ public:
         if (BENCH_MODE_ENABLED) {
             Serial.println("[BLE] WARNING: simulated altitude only. DO NOT FLY.");
         }
+    }
+};
+
+class CBangleMode : public NimBLECharacteristicCallbacks {
+public:
+    void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
+        if (c->getValue().length() < 1) return;
+
+        uint8_t requested = c->getValue()[0] ? 1 : 0;
+        if (state != IDLE && state != DONE) {
+            Serial.println("[BLE] Ignored angle mode change: not idle");
+            c->setValue((uint8_t*)&ANGLE_MODE_ENABLED, 1);
+            return;
+        }
+
+        ANGLE_MODE_ENABLED = requested;
+        channels[CH_ANGLE] = ANGLE_MODE_ENABLED ? 1800 : 1000;
+        c->setValue((uint8_t*)&ANGLE_MODE_ENABLED, 1);
+        Serial.printf("[BLE] ANGLE_MODE = %s\n", ANGLE_MODE_ENABLED ? "ON" : "OFF");
     }
 };
 
@@ -175,6 +198,10 @@ void setupBLE() {
     makeChar(svc, BENCH_MODE_UUID,
         new CBbenchMode(),
         (uint8_t*)&BENCH_MODE_ENABLED, 1);
+
+    makeChar(svc, ANGLE_MODE_UUID,
+        new CBangleMode(),
+        (uint8_t*)&ANGLE_MODE_ENABLED, 1);
 
     // Telemetry: read + notify, pushed from ESP32 side (no write callback)
     telemetryChar = svc->createCharacteristic(TELEMETRY_UUID,
