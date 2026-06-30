@@ -74,7 +74,7 @@
 // µs added per loop iteration (~20ms) when ramping from arm-throttle to HOVER_THROTTLE.
 // 4 µs/iter × 50 Hz ≈ 200 µs/s → 270 µs step takes ~1.3 s, too slow to trigger ANTI_GRAVITY.
 #define HOVER_RAMP_STEP_US  4
-#define DEFAULT_ANGLE_MODE  0  // 0=acro/rate mode, 1=Angle mode
+#define DEFAULT_ANGLE_MODE  1  // 0=acro/rate mode, 1=Angle mode
 
 // ── Cascaded Altitude Hold ────────────────────────────────────
 // HOLD_KP = outer P gain: altitude error (m) → desired vertical speed (m/s)
@@ -82,13 +82,13 @@
 // HOLD_KI = inner I gain: speed integral    → throttle offset (µs)
 
 // Outer loop: setpoint ramp and speed limits
-#define ALT_RAMP_RATE_MPS       0.6f    // m/s internal setpoint ramp rate
-#define MAX_CLIMB_MPS_TEST      0.35f   // max commanded climb, test mode
-#define MAX_DESCENT_MPS_TEST    0.30f   // max commanded descent, test mode
-#define MAX_CLIMB_MPS_HOLD      0.8f    // max commanded climb, competition HOLDING
-#define MAX_DESCENT_MPS_HOLD    0.5f    // max commanded descent, competition HOLDING
+#define ALT_RAMP_RATE_MPS       1.0f    // m/s internal setpoint ramp rate
+#define MAX_CLIMB_MPS_TEST      0.60f   // max commanded climb, test mode
+#define MAX_DESCENT_MPS_TEST    0.45f   // max commanded descent, test mode
+#define MAX_CLIMB_MPS_HOLD      1.20f   // max commanded climb, competition HOLDING
+#define MAX_DESCENT_MPS_HOLD    0.80f   // max commanded descent, competition HOLDING
 #define ALT_HOLD_TARGET_MIN_M   0.5f    // BLE Alt Hold test target lower bound
-#define ALT_HOLD_TARGET_MAX_M   2.0f    // BLE Alt Hold test target upper bound
+#define ALT_HOLD_TARGET_MAX_M   5.0f    // BLE Alt Hold test target upper bound
 #define NEAR_TARGET_M           0.5f    // within this radius, scale down max speed
 #define NEAR_TARGET_FACTOR      0.35f   // minimum speed factor within near-target zone
 
@@ -99,9 +99,9 @@
 #define VSPEED_I_MAX_US         50.0f   // max integral throttle contribution in us
 
 // Throttle authority around hover
-#define THR_UP_OFFSET_US        200     // max µs above HOVER_THROTTLE
-#define THR_DOWN_OFFSET_US      250     // max µs below HOVER_THROTTLE (more for braking)
-#define MIN_CONTROL_THROTTLE_US 1100    // lower bound to preserve attitude-control authority
+#define THR_UP_OFFSET_US        300     // max µs above HOVER_THROTTLE
+#define THR_DOWN_OFFSET_US      300     // max µs below HOVER_THROTTLE (more for braking)
+#define MIN_CONTROL_THROTTLE_US 1050    // lower bound to preserve attitude-control authority
 
 // Safety
 #define ALT_MAX_M               22.0f   // absolute ceiling — triggers landing above this

@@ -242,7 +242,7 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 
 **Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, throttle, selected vario, filtered vario, FC raw vario, and derived vario at ~10Hz via BLE notify.
 
-**Active state strip** appears whenever not idle — shows state name, altitude, throttle, and a DISARM button. During Auto Hover Cal an inline progress panel shows altitude bar (0–50cm with 15cm threshold marker) and throttle bar. On cal completion a notification shows the detected hover throttle and auto-syncs the slider.
+**Active state strip** appears whenever not idle — shows state name, altitude, throttle, and a KILL button. During Auto Hover Cal an inline progress panel shows altitude bar (0–50cm with 15cm threshold marker) and throttle bar. On cal completion a notification shows the detected hover throttle and auto-syncs the slider.
 
 ---
 
@@ -256,7 +256,7 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 | `SPRINT_THROTTLE` | 1850 µs | uint16 | Full climb throttle during sprint. Higher = faster to 60ft = more punch time. |
 | `SPRINT_CUTOFF_M` | 17.0 m | float×100 | Altitude to stop sprinting. Keep below 18.3m to absorb baro lag. |
 | `TARGET_ALT_M` | 18.3 m | float×10 | Mission hold target. 60ft = 18.3m. Used by `HOLDING` after sprint cutoff. |
-| `ALT_HOLD_TARGET_M` | 1.5 m | float×10 | Low-altitude target used only by the BLE `ALT_HOLD` test command; firmware clamps active command to 0.5–2.0m. |
+| `ALT_HOLD_TARGET_M` | 1.5 m | float×10 | Test target used only by the BLE `ALT_HOLD` command; firmware clamps active command to 0.5–5.0m. |
 | `HOLD_KP` | 1.2 | float×10 | Outer altitude P: altitude error (m) to desired vertical speed (m/s). |
 | `HOLD_KI` | 3.0 | float×10 | Inner speed I: integrated vertical-speed error to throttle offset (µs). Keep low to avoid windup. |
 | `HOLD_KD` | 25.0 | float×10 | Inner speed P: vertical-speed error (m/s) to throttle offset (µs). Tune before adding integral. |
@@ -286,14 +286,14 @@ Betaflight 4.4.x on this FC reports `MSP_ALTITUDE` altitude correctly but has be
 
 The vario filter is time-based (`VARIO_TAU_S = 0.30s`) so smoothing remains stable with loop-rate jitter. If vario becomes stale or implausible while altitude hold is active, the controller clears the integrator and transitions to `LANDING` instead of holding the last velocity estimate.
 
-Current conservative speed limits:
+Current speed limits:
 
 | Mode | Max climb | Max descent |
 |---|---:|---:|
-| `ALT_HOLD` test | 0.35 m/s | 0.30 m/s |
-| Mission `HOLDING` | 0.8 m/s | 0.5 m/s |
+| `ALT_HOLD` test | 0.60 m/s | 0.45 m/s |
+| Mission `HOLDING` | 1.20 m/s | 0.80 m/s |
 
-The internal setpoint ramps at `ALT_RAMP_RATE_MPS = 0.6 m/s`. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 50us`) and throttle is not allowed below `MIN_CONTROL_THROTTLE_US = 1100us` while closed-loop altitude hold is active.
+The internal setpoint ramps at `ALT_RAMP_RATE_MPS = 1.0 m/s`. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 50us`) and throttle is not allowed below `MIN_CONTROL_THROTTLE_US = 1050us` while closed-loop altitude hold is active.
 
 **Landing** uses a velocity controller targeting `DESCENT_RATE_MPS = 0.4 m/s` downward, driven by the same filtered derived vario. Motors cut when altitude drops below 15cm after actual descent is detected, or after a 30s timeout.
 
@@ -411,7 +411,7 @@ Toggle from `quad_tuner.html` while idle. Simulates altitude so mission flow and
 
 The tuner exposes a BLE `Angle Mode` button that controls AUX2 (`CH_ANGLE`) for all autonomous states. `Angle Mode: On` sends 1800us; `Angle Mode: Off` sends 1000us. The firmware rejects changes unless the state is `IDLE` or `DONE`, so pick the mode before starting Hover Test, Alt Hold, Auto Hover Cal, or the mission.
 
-The boot default is `DEFAULT_ANGLE_MODE = 0`, because this frame showed aggressive liftoff behavior with Betaflight Angle mode enabled. If Angle mode is needed later, tune Betaflight leveling behavior first and then enable it from the web UI before the run.
+The boot default is `DEFAULT_ANGLE_MODE = 1`, so autonomous test modes and the mission start with Betaflight Angle mode enabled unless the web UI toggle is changed while idle.
 
 ---
 
