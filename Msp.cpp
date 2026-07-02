@@ -36,27 +36,45 @@ float getAltitude() {
         static float lastAlt = 0;
         while (fcSerial.available()) fcSerial.read();
         sendMSP(MSP_ALTITUDE, nullptr, 0);
-        uint32_t timeout = millis() + 25;
+        uint32_t timeout = millis() + 60;
+        uint16_t rxBytes = 0;
+        uint8_t lastByte = 0;
         while (millis() < timeout) {
             uint8_t b = 0;
             if (!readByteUntil(b, timeout)) break;
+            rxBytes++;
+            lastByte = b;
             if (b != '$') continue;
-            if (!readByteUntil(b, timeout) || b != 'M') continue;
-            if (!readByteUntil(b, timeout) || b != '>') continue;
+            if (!readByteUntil(b, timeout)) break;
+            rxBytes++;
+            lastByte = b;
+            if (b != 'M') continue;
+            if (!readByteUntil(b, timeout)) break;
+            rxBytes++;
+            lastByte = b;
+            if (b != '>') continue;
 
             uint8_t len = 0, cmd = 0;
             if (!readByteUntil(len, timeout)) break;
+            rxBytes++;
+            lastByte = len;
             if (!readByteUntil(cmd, timeout)) break;
+            rxBytes++;
+            lastByte = cmd;
 
             uint8_t checksum = len ^ cmd;
             uint8_t payload[16];
             bool keepPayload = (cmd == MSP_ALTITUDE && len == 6);
             for (uint8_t i = 0; i < len; i++) {
                 if (!readByteUntil(b, timeout)) return lastAlt;
+                rxBytes++;
+                lastByte = b;
                 checksum ^= b;
                 if (keepPayload && i < sizeof(payload)) payload[i] = b;
             }
             if (!readByteUntil(b, timeout)) break;
+            rxBytes++;
+            lastByte = b;
             if (checksum != b) continue;
             if (!keepPayload) continue;
 
@@ -117,6 +135,13 @@ float getAltitude() {
                     lastAlt, vario, heldDerivedVario, usedVario);
             }
             return lastAlt;
+        }
+        static uint32_t mspTimeoutLogMs = 0;
+        uint32_t nowMs = millis();
+        if (nowMs - mspTimeoutLogMs >= 500) {
+            mspTimeoutLogMs = nowMs;
+            Serial.printf("[MSP_ALTITUDE] no valid response rxBytes=%u last=0x%02X lastAlt=%.2f\n",
+                rxBytes, lastByte, lastAlt);
         }
         return lastAlt;
     }

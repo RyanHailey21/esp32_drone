@@ -2,7 +2,7 @@
 
 Autonomous competition launch system for a 3" FPV quadcopter. The goal is to maximize total air time under a strict **8-second powered flight limit** and **60ft altitude requirement**.
 
-The quad sprints to 60ft as fast as possible, holds altitude while the clock runs down, then punches full throttle in the final moments to build upward velocity before motor cut. Descent is handled by an onboard autorotation device that is pre-spun by a brushed DC motor during the climb. No RC transmitter or receiver is used — an ESP32-C3 acts as the flight controller's RC input via MSP over UART.
+The quad sprints to 60ft as fast as possible, holds altitude while the clock runs down, then punches full throttle in the final moments to build upward velocity before motor cut. Descent is handled by an onboard autorotation device that is pre-spun by a brushed DC motor during the climb. No RC transmitter or receiver is used — an ESP32-S3 acts as the flight controller's RC input via MSP over UART.
 
 ---
 
@@ -14,7 +14,7 @@ The quad sprints to 60ft as fast as possible, holds altitude while the clock run
 | HQProp T3×2×3 | Props |
 | GNB 300mAh 2–3S 80C LiHV XT30 | Power |
 | BetaFPV F4 2-3S AIO | FC + ESC |
-| ESP32-C3 Super Mini | Mission controller |
+| ESP32-S3 Super Mini | Mission controller |
 | Brushed DC motor (3–12V) | Autorotation pre-spin |
 | 2N2222 NPN transistor + 1N4148 + 100Ω | Brushed motor driver |
 
@@ -42,16 +42,17 @@ NPN transistor circuit (brushed autorotation motor):
   100µF cap across 9V pad and GND
 ```
 
-**ESP32-C3 Pin Assignment**
+**ESP32-S3 Super Mini Pin Assignment**
 
 | GPIO | Function |
 |---|---|
 | 4 | UART1 TX → FC RX (MSP UART) |
 | 5 | UART1 RX ← FC TX (MSP UART) |
 | 6 | PWM → 2N2222 base (via 100Ω) |
-| 8 | Status LED (built-in) |
-| 9 | Do not use (boot pin) |
-| 20/21 | USB debug (keep free) |
+| 8 | Optional external status LED output |
+| 48 | Onboard WS2812/RGB LED, not used by the current `digitalWrite()` status code |
+| 43/44 | Hardware UART0 TX/RX pins; keep free unless intentionally debugging over UART |
+| USB | Native USB serial for flashing and monitor |
 
 ---
 
@@ -96,21 +97,37 @@ Flash target: `BETAFPVF4` (select in Betaflight Configurator firmware flasher �
 
 **CLI**
 ```
-# Replace <N> with the UART number wired to the ESP32 (check Ports tab)
-serial <N> 1 115200 57600 0 115200
-
-# Battery
-set vbat_max_cell_voltage = 435
-set battery_cell_count = 3
+# T1/R1 pads are UART1. Betaflight CLI serial port IDs are zero-based:
+# UART1 = 0, UART2 = 1, UART3 = 2, etc.
+serial 0 1 115200 57600 0 115200
 
 # Board alignment — right-side up, arrow pointing forward
 set align_board_roll = 0
 set align_board_pitch = 0
 set align_board_yaw = 0   # confirmed: FC arrow points toward front of frame
 
+# Receiver / MSP control
+feature RX_MSP
+
+# Modes
+# ARM on AUX1 high, ANGLE on AUX2 high, HORIZON disabled.
+# AUX3 is beeper, AUX4 is flip-over-after-crash; ESP32 keeps both low.
+aux 0 0 0 1700 2100 0 0
+aux 1 1 1 1700 2100 0 0
+aux 2 2 1 900 900 0 0
+aux 3 13 2 1700 2100 0 0
+aux 4 35 3 1650 2100 0 0
+
 # Throttle / motor idle
 set min_check = 1005
 set dshot_idle_value = 800   # default 550 — raised to 800 to prevent low-RPM desync/dropout
+
+# Disable throttle/PID helpers that can fight the ESP32 altitude controller
+set throttle_boost = 0
+set anti_gravity_gain = 0
+set iterm_relax = RP
+set airmode_start_throttle_percent = 0
+set crash_recovery = OFF
 
 # RPM filter — requires bidirectional DSHOT
 # Confirmed working on BetaFPV F4: RPM readouts visible in Motors tab
@@ -128,8 +145,6 @@ feature -AIRMODE
 
 save
 ```
-
-> Running 3S. For LiHV packs `vbat_max_cell_voltage = 435` (4.35V/cell) is correct regardless of cell count.
 
 > If you can't connect Betaflight Configurator, open a serial terminal on the ESP32's COM port at 115200, type `#` to enter the FC CLI directly.
 
@@ -375,7 +390,7 @@ flowchart LR
     subgraph OUT["OUTPUTS"]
         MSP_OUT["UART1 MSP_SET_RAW_RC"]
         PWM["GPIO6 PWM\nautorotation motor"]
-        LED["GPIO8 LED"]
+        LED["GPIO8 optional status LED"]
     end
 
     W1 --> HT & ST & PT
@@ -432,7 +447,7 @@ arduino-cli lib install "NimBLE-Arduino"
 
 **Compile**
 ```pwsh
-arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc .
+arduino-cli compile --fqbn esp32:esp32:esp32s3:CDCOnBoot=cdc .
 ```
 
 > `CDCOnBoot=cdc` is required — without it `Serial` does not map to the USB port.
@@ -440,7 +455,7 @@ arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc .
 **Upload**
 ```pwsh
 arduino-cli board list
-arduino-cli upload --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc --port COM11 .
+arduino-cli upload --fqbn esp32:esp32:esp32s3:CDCOnBoot=cdc --port COM11 .
 ```
 
 **Monitor**
@@ -448,7 +463,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc --port COM11 .
 arduino-cli monitor --port COM11 --config baudrate=115200
 ```
 
-> The ESP32-C3 Super Mini uses USB CDC — no separate UART chip. The port may re-enumerate on a new COM number after flashing; re-run `board list` if it disappears.
+> The ESP32-S3 Super Mini uses native USB CDC. The port may re-enumerate on a new COM number after flashing; re-run `board list` if it disappears.
 
 ---
 
