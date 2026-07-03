@@ -1,4 +1,5 @@
 #include "Msp.h"
+#include "Tof.h"
 
 static void sendMSP(uint8_t cmd, const uint8_t* data, uint8_t len) {
     uint8_t cs = 0;
@@ -20,6 +21,38 @@ static bool readByteUntil(uint8_t& value, uint32_t deadline) {
 
 static int16_t constrainVario(float cms) {
     return (int16_t)constrain(cms, -32768.0f, 32767.0f);
+}
+
+static float fuseAltitude(float baroAltM) {
+    static bool baroOffsetInitialized = false;
+    static float baroToTofOffsetM = 0.0f;
+
+    float tofAltM = 0.0f;
+    bool tofValid = readTofAltitude(tofAltM);
+    float tofWeight = tofBlendWeight(tofAltM, tofValid);
+
+    if (tofValid && tofWeight >= 0.25f) {
+        float measuredOffset = tofAltM - baroAltM;
+        if (!baroOffsetInitialized) {
+            baroToTofOffsetM = measuredOffset;
+            baroOffsetInitialized = true;
+        } else {
+            baroToTofOffsetM += TOF_OFFSET_ALPHA * (measuredOffset - baroToTofOffsetM);
+        }
+    }
+
+    float correctedBaroM = baroAltM + (baroOffsetInitialized ? baroToTofOffsetM : 0.0f);
+    float fusedAltM = tofValid
+        ? correctedBaroM + tofWeight * (tofAltM - correctedBaroM)
+        : correctedBaroM;
+
+    lastTofValid = tofValid;
+    lastTofAltM = tofValid ? tofAltM : 0.0f;
+    lastTofWeightPct = (uint8_t)constrain(tofWeight * 100.0f + 0.5f, 0.0f, 100.0f);
+    lastBaroAltM = baroAltM;
+    lastFusedAltM = fusedAltM;
+
+    return fusedAltM;
 }
 
 void sendRC() {
@@ -98,23 +131,26 @@ float getAltitude() {
                 Serial.printf("alt=%ld fcVario=%d\n", (long)alt_cm, vario);
             }
 
-            // If Betaflight sends 0 vario, derive speed from a longer altitude
+            float baroAltM = alt_cm / 100.0f;
+            float fusedAltM = fuseAltitude(baroAltM);
+
+            // If Betaflight sends 0 vario, derive speed from a longer fused-altitude
             // window and smooth it. MSP altitude is quantized, so short-window
             // derivatives flicker between 0 and large pulses.
-            static int32_t derivBaseAltCm = 0;
+            static float derivBaseAltM = 0.0f;
             static uint32_t derivBaseMs = 0;
             static int16_t heldDerivedVario = 0;
             static float filteredDerivedCms = 0.0f;
             if (derivBaseMs == 0) {
-                derivBaseAltCm = alt_cm;
+                derivBaseAltM = fusedAltM;
                 derivBaseMs = nowMs;
             } else if (nowMs - derivBaseMs >= 400) {
                 float dtSec = (nowMs - derivBaseMs) / 1000.0f;
-                float rawDerivedCms = (alt_cm - derivBaseAltCm) / dtSec;
+                float rawDerivedCms = (fusedAltM - derivBaseAltM) * 100.0f / dtSec;
                 constexpr float DERIVED_ALPHA = 0.25f;
                 filteredDerivedCms += DERIVED_ALPHA * (rawDerivedCms - filteredDerivedCms);
                 heldDerivedVario = constrainVario(filteredDerivedCms);
-                derivBaseAltCm = alt_cm;
+                derivBaseAltM = fusedAltM;
                 derivBaseMs = nowMs;
             }
 
@@ -123,7 +159,7 @@ float getAltitude() {
             // diagnostics, but use the derived/smoothed estimate for control.
             int16_t usedVario = heldDerivedVario;
 
-            lastAlt     = alt_cm / 100.0f;
+            lastAlt     = fusedAltM;
             lastVario   = usedVario;
             lastFcVario = vario;
             lastDerivedVario = heldDerivedVario;
@@ -131,8 +167,9 @@ float getAltitude() {
             static uint32_t varioLogMs = 0;
             if (nowMs - varioLogMs >= 500) {
                 varioLogMs = nowMs;
-                Serial.printf("[MSP] alt=%.2f fc_vario=%d derived=%d used=%d cm/s\n",
-                    lastAlt, vario, heldDerivedVario, usedVario);
+                Serial.printf("[ALT] fused=%.2f baro=%.2f tof=%s%.2f w=%u%% fc_vario=%d derived=%d used=%d cm/s\n",
+                    lastAlt, baroAltM, lastTofValid ? "" : "invalid:",
+                    lastTofAltM, lastTofWeightPct, vario, heldDerivedVario, usedVario);
             }
             return lastAlt;
         }
@@ -191,6 +228,12 @@ float getAltitude() {
         case DONE:
             break;
     }
+
+    lastBaroAltM = benchAlt;
+    lastFusedAltM = benchAlt;
+    lastTofValid = false;
+    lastTofAltM = 0.0f;
+    lastTofWeightPct = 0;
 
     return benchAlt;
 }

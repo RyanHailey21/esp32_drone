@@ -15,6 +15,7 @@ The quad sprints to 60ft as fast as possible, holds altitude while the clock run
 | GNB 300mAh 2–3S 80C LiHV XT30 | Power |
 | BetaFPV F4 2-3S AIO | FC + ESC |
 | ESP32-S3 Super Mini | Mission controller |
+| VL53L1X ToF sensor | Low-altitude AGL altitude reference |
 | Brushed DC motor (3–12V) | Autorotation pre-spin |
 | 2N2222 NPN transistor + 1N4148 + 100Ω | Brushed motor driver |
 
@@ -34,6 +35,14 @@ BetaFPV F4 2-3S
   ├── UARTx RX → ESP32 GPIO4
   └── 5V or 9V pad → Brushed motor (+)  (check available BEC voltage on this board)
 
+VL53L1X ToF sensor
+  ├── VIN/VCC → ESP32 3V3  (sensor operating range is 2.6–3.5V; do not power a bare LGA sensor from 5V)
+  ├── GND     → ESP32 GND
+  ├── SDA     → ESP32 GPIO10
+  ├── SCL     → ESP32 GPIO11
+  ├── INT     → not connected
+  └── SHUT    → not connected by default (`TOF_SHUT_PIN = -1`)
+
 NPN transistor circuit (brushed autorotation motor):
   ESP32 GPIO6 → 100Ω → 2N2222 base
   2N2222 emitter → GND
@@ -50,6 +59,8 @@ NPN transistor circuit (brushed autorotation motor):
 | 5 | UART1 RX ← FC TX (MSP UART) |
 | 6 | PWM → 2N2222 base (via 100Ω) |
 | 8 | Optional external status LED output |
+| 10 | I2C SDA → VL53L1X SDA |
+| 11 | I2C SCL → VL53L1X SCL |
 | 48 | Onboard WS2812/RGB LED, not used by the current `digitalWrite()` status code |
 | 43/44 | Hardware UART0 TX/RX pins; keep free unless intentionally debugging over UART |
 | USB | Native USB serial for flashing and monitor |
@@ -255,7 +266,7 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 | Bench Mode | Simulates altitude for desk testing. Never fly with this on. |
 | Angle Mode | Drives AUX2 high/low for Betaflight Angle mode. Can be changed only while idle or done. |
 
-**Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, throttle, selected vario, filtered vario, FC raw vario, and derived vario at ~10Hz via BLE notify.
+**Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, throttle, selected vario, filtered vario, FC raw vario, derived vario, ToF altitude, ToF blend weight, and baro altitude at ~10Hz via BLE notify.
 
 **Active state strip** appears whenever not idle — shows state name, altitude, throttle, and a KILL button. During Auto Hover Cal an inline progress panel shows altitude bar (0–50cm with 15cm threshold marker) and throttle bar. On cal completion a notification shows the detected hover throttle and auto-syncs the slider.
 
@@ -285,9 +296,10 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 The hold controller runs in both `HOLDING` (mission) and `ALT_HOLD` (test) states. Mission `HOLDING` uses `TARGET_ALT_M`; BLE `ALT_HOLD` test mode uses the separate `ALT_HOLD_TARGET_M`.
 
 ```
-alt_error       = internal_setpoint - altitude
+fused_altitude  = ToF/baro blend at low altitude, corrected baro above ToF range
+alt_error       = internal_setpoint - fused_altitude
 desired_vspeed  = clamp(HOLD_KP * alt_error, -max_descent, max_climb)
-derived_vario   = smoothed derivative of MSP_ALTITUDE altitude
+derived_vario   = smoothed derivative of fused_altitude
 filtered_vario  = time-based low-pass of derived_vario
 vspeed_error    = desired_vspeed - filtered_vario
 candidate_i     = output-limited(vspeed_integral + vspeed_error * dt)
@@ -297,7 +309,9 @@ throttle = HOVER_THROTTLE
          + HOLD_KI * vspeed_integral
 ```
 
-Betaflight 4.4.x on this FC reports `MSP_ALTITUDE` altitude correctly but has been observed to send `0` in the MSP vario field. The firmware therefore keeps FC raw vario as a diagnostic only and uses a smoothed altitude-derived vario for control.
+The VL53L1X ToF sensor is the primary low-altitude source. It is trusted fully below `TOF_BLEND_FULL_M = 2.5m`, blended out to baro by `TOF_BLEND_ZERO_M = 3.5m`, and ignored when invalid/out of range above `TOF_VALID_MAX_M = 3.8m`. Out-of-range readings are never treated as "4m"; the controller falls back to baro with a learned baro-to-ToF offset.
+
+Betaflight 4.4.x on this FC reports `MSP_ALTITUDE` altitude correctly but has been observed to send `0` in the MSP vario field. The firmware therefore keeps FC raw vario as a diagnostic only and uses a smoothed fused-altitude-derived vario for control.
 
 The vario filter is time-based (`VARIO_TAU_S = 0.30s`) so smoothing remains stable with loop-rate jitter. If vario becomes stale or implausible while altitude hold is active, the controller clears the integrator and transitions to `LANDING` instead of holding the last velocity estimate.
 
@@ -358,7 +372,7 @@ flowchart LR
         W2["CBfloat\ncutoff / target alt / KP / KI / KD"]
         W3["CBu32\npunch start ms"]
         W4["CBcommand\nhover / cal / alt hold / mission / disarm"]
-        TEL["telemetryChar NOTIFY\n30-byte packet @10Hz\nalt · state · throttle · vario · angle diagnostics"]
+        TEL["telemetryChar NOTIFY\n38-byte packet @10Hz\nalt, state, throttle, vario, angle, ToF diagnostics"]
     end
 
     subgraph PARAMS["VOLATILE PARAMS"]
@@ -374,8 +388,10 @@ flowchart LR
         PT["PUNCH_THROTTLE"]
     end
 
-    subgraph SENSOR["MSP SENSOR — UART1"]
-        ALT["getAltitude()\nMSP_ALTITUDE cmd 109\nalt_cm + FC raw vario\n+ derived vario fallback"]
+    subgraph SENSOR["ALTITUDE SENSORS"]
+        MSPALT["MSP_ALTITUDE over UART1\nbaro alt_cm + FC raw vario"]
+        TOFALT["VL53L1X over I2C\nlow-altitude AGL"]
+        ALT["getAltitude()\nfused altitude\n+ derived vario fallback"]
     end
 
     subgraph SM["STATE MACHINE ~50Hz"]
@@ -398,6 +414,8 @@ flowchart LR
     W3 --> PS
     W4 -->|state transitions| SM
 
+    MSPALT --> ALT
+    TOFALT --> ALT
     ALT -->|altitude m + derived vario cm/s| HLD & AHC & LND & SPR
 
     HT --> HLD & HVT & AHC
@@ -443,6 +461,7 @@ arduino-cli core install esp32:esp32
 **Install dependencies**
 ```pwsh
 arduino-cli lib install "NimBLE-Arduino"
+arduino-cli lib install "VL53L1X"
 ```
 
 **Compile**
@@ -474,6 +493,7 @@ esp32_drone/
   esp32_drone.ino    — Entrypoint: setup() and loop() only
   Config.h           — All compile-time constants (pins, UUIDs, command IDs, cal/landing params)
   State.h / .cpp     — MissionState enum, volatile tunable params, runtime globals, fcSerial
+  Tof.h / .cpp       — VL53L1X setup/read helpers and blend weighting
   Msp.h / .cpp       — sendMSP(), sendRC(), getAltitude() with bench-mode sim
   Control.h / .cpp   — holdPID(), disarmToIdle(), all start*() state transition functions
   Ble.h / .cpp       — NimBLE callback classes, setupBLE(), telemetry notify

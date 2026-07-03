@@ -21,7 +21,11 @@ static void pushTelemetry(float rawAlt, float altitude) {
     int32_t relCm     = (int32_t)(altitude * 100.0f);
     int16_t filtVarCs = (int16_t)constrain(filteredVario    * 100.0f, -32768.0f, 32767.0f);
     int16_t setptCm   = (int16_t)constrain(internalSetpoint * 100.0f, -32768.0f, 32767.0f);
-    uint8_t pkt[30];
+    int16_t tofCm     = lastTofValid ? (int16_t)constrain(lastTofAltM * 100.0f, -32768.0f, 32767.0f) : -1;
+    int32_t baroCm    = (int32_t)(lastBaroAltM * 100.0f);
+    uint8_t tofValid  = lastTofValid ? 1 : 0;
+
+    uint8_t pkt[38];
     memcpy(pkt,      &altCm,                 4);
     memcpy(pkt + 4,  &relCm,                 4);
     pkt[8] = (uint8_t)state;
@@ -34,7 +38,11 @@ static void pushTelemetry(float rawAlt, float altitude) {
     memcpy(pkt + 20, &lastDerivedVario,      2);
     memcpy(pkt + 22, lastMspAltitudePayload, 6);
     memcpy(pkt + 28, &channels[CH_ANGLE],    2);
-    telemetryChar->setValue(pkt, 30);
+    memcpy(pkt + 30, &tofCm,                 2);
+    pkt[32] = lastTofWeightPct;
+    pkt[33] = tofValid;
+    memcpy(pkt + 34, &baroCm,                4);
+    telemetryChar->setValue(pkt, 38);
     telemetryChar->notify();
 }
 

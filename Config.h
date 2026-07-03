@@ -6,6 +6,23 @@
 #define MOTOR_PWM_PIN   6
 #define STATUS_LED      8
 
+// ToF altitude sensor (VL53L1X, I2C address is 0x29 in 7-bit Arduino form;
+// some datasheets list the same device as 0x52 in 8-bit form).
+#define TOF_ENABLED       1
+#define TOF_SDA_PIN       10
+#define TOF_SCL_PIN       11
+#define TOF_SHUT_PIN      -1   // optional VL53L1X SHUT/XSHUT pin; -1 = not connected
+#define TOF_I2C_HZ        400000
+#define TOF_TIMEOUT_MS    50
+#define TOF_PERIOD_MS     50
+#define TOF_TIMING_BUDGET_US 50000
+#define TOF_VALID_MIN_M   0.04f
+#define TOF_VALID_MAX_M   3.80f
+#define TOF_BLEND_FULL_M  2.50f
+#define TOF_BLEND_ZERO_M  3.50f
+#define TOF_STALE_MS      150
+#define TOF_OFFSET_ALPHA  0.02f
+
 // ── Brushed Motor PWM ────────────────────────────────────────
 #define PWM_FREQ        25000
 #define PWM_RESOLUTION  8

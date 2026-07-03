@@ -383,6 +383,10 @@ function onTelemetry(e) {
   const fcVarioCs  = dv.byteLength >= 20 ? dv.getInt16(18, true) : varioCs;
   const derivVarCs = dv.byteLength >= 22 ? dv.getInt16(20, true) : 0;
   const angleAux   = dv.byteLength >= 30 ? dv.getUint16(28, true) : (angleMode ? 1800 : 1000);
+  const tofCm      = dv.byteLength >= 32 ? dv.getInt16(30, true) : -1;
+  const tofWeight  = dv.byteLength >= 33 ? dv.getUint8(32) : 0;
+  const tofValid   = dv.byteLength >= 34 ? !!dv.getUint8(33) : false;
+  const baroCm     = dv.byteLength >= 38 ? dv.getInt32(34, true) : altCm;
 
   const altM     = (altCm / 100).toFixed(2);
   const relValid = Math.abs(relCm) <= 10000000;
@@ -445,6 +449,13 @@ function onTelemetry(e) {
   el('d-vf').style.color = varColor(filtVarCs);
   el('d-vfc').style.color = varColor(fcVarioCs);
   el('d-vd').style.color = varColor(derivVarCs);
+  el('d-tof').textContent = tofValid && tofCm >= 0 ? (tofCm / 100).toFixed(2) + 'm' : 'INVALID';
+  el('d-tw').textContent = tofWeight + '%';
+  el('d-baro').textContent = (baroCm / 100).toFixed(2) + 'm';
+  el('d-tof').style.color = tofValid ? 'var(--cyan)' : 'var(--text-dim)';
+  el('d-tw').style.color = tofWeight > 70 ? 'var(--cyan)'
+                         : tofWeight > 0  ? 'var(--amber)' : 'var(--text-dim)';
+  el('d-baro').style.color = tofWeight === 0 ? 'var(--green)' : 'var(--text-mid)';
 
   // Alt error — shown in ALT_HOLD; "—" otherwise
   if (isAltHold) {
