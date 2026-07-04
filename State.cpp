@@ -31,6 +31,7 @@ int16_t  lastFcMagZ      = 0;
 int16_t  lastFcRollDeciDeg = 0;
 int16_t  lastFcPitchDeciDeg = 0;
 int16_t  lastFcYawDeg    = 0;
+uint32_t lastFcAttitudeMs = 0;
 uint16_t lastFcCycleTimeUs = 0;
 uint16_t lastFcI2cErrors = 0;
 uint16_t lastFcSensorsMask = 0;

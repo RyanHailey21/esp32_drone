@@ -51,6 +51,7 @@ extern int16_t      lastFcMagZ;
 extern int16_t      lastFcRollDeciDeg;
 extern int16_t      lastFcPitchDeciDeg;
 extern int16_t      lastFcYawDeg;
+extern uint32_t     lastFcAttitudeMs;
 extern uint16_t     lastFcCycleTimeUs;
 extern uint16_t     lastFcI2cErrors;
 extern uint16_t     lastFcSensorsMask;

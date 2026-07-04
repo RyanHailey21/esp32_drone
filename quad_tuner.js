@@ -20,6 +20,7 @@ const STATE_NAMES  = ['IDLE','ARMING','SPRINTING','HOLDING','PUNCHING','CUT','HO
 const STATE_COLORS = ['','var(--amber)','var(--amber)','var(--green)','var(--red)','var(--red)','var(--cyan)','var(--cyan)','var(--amber)','var(--text-mid)','var(--green)'];
 const ALT_SOURCE_NAMES = ['BARO', 'TOF', 'BLEND', 'TOF HOLD'];
 const VARIO_SOURCE_NAMES = ['DERIVED', 'BF VARIO'];
+const PARAM_PRESET_KEY = 'quad-tuner-param-preset-v1';
 
 const CMD_HOVER_TEST     = 1;
 const CMD_START_MISSION  = 2;
@@ -37,6 +38,7 @@ let device = null, connected = false;
 let benchMode = 0;
 let angleMode = 0;
 let prevStateId = -1;
+let suppressPresetAutosave = false;
 
 // Serialise all BLE writes — prevents "GATT operation already in progress"
 let _bleQ = Promise.resolve();
@@ -145,6 +147,7 @@ async function connect() {
     connectBtn.textContent = 'Disconnect';
     connectBtn.classList.add('active');
     enableAll(true);
+    updatePresetButtons();
     log('Connected to ' + device.name, 'ok');
   } catch(e) {
     setStatus('error', 'failed');
@@ -169,6 +172,7 @@ function onDisconnected() {
   connectBtn.textContent = 'Connect to Quad-Tuner';
   connectBtn.classList.remove('active');
   enableAll(false);
+  updatePresetButtons();
   log('Disconnected', 'err');
 }
 
@@ -244,6 +248,102 @@ function sendCommand(cmd, label) {
   });
 }
 
+function getSliderConfig(id) {
+  return SLIDERS.find(s => s.id === id);
+}
+
+function readPreset() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PARAM_PRESET_KEY) || 'null');
+    return parsed && parsed.values ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function updatePresetButtons() {
+  const hasPreset = !!readPreset();
+  const applyBtn = document.getElementById('btn-apply-preset');
+  const clearBtn = document.getElementById('btn-clear-preset');
+  if (applyBtn) applyBtn.disabled = !hasPreset || !connected;
+  if (clearBtn) clearBtn.disabled = !hasPreset;
+}
+
+function collectPresetValues() {
+  const values = {};
+  SLIDERS.forEach(({ id }) => {
+    const slider = document.getElementById('slider-' + id);
+    if (slider) values[id] = parseInt(slider.value);
+  });
+  return values;
+}
+
+function saveBrowserPreset() {
+  const preset = {
+    savedAt: new Date().toISOString(),
+    values: collectPresetValues()
+  };
+  localStorage.setItem(PARAM_PRESET_KEY, JSON.stringify(preset));
+  updatePresetButtons();
+  log('Browser preset saved', 'ok');
+}
+
+function autosaveBrowserPreset() {
+  if (suppressPresetAutosave) return;
+  const preset = {
+    savedAt: new Date().toISOString(),
+    values: collectPresetValues()
+  };
+  localStorage.setItem(PARAM_PRESET_KEY, JSON.stringify(preset));
+  updatePresetButtons();
+}
+
+async function writeSliderValue(id, value, sourceLabel = 'preset') {
+  const cfg = getSliderConfig(id);
+  const slider = document.getElementById('slider-' + id);
+  const valEl = document.getElementById('val-' + id);
+  if (!cfg || !slider || !chars[cfg.char]) return false;
+  const min = parseInt(slider.min);
+  const max = parseInt(slider.max);
+  const stepped = Math.max(min, Math.min(max, parseInt(value)));
+  suppressPresetAutosave = true;
+  slider.value = stepped;
+  if (valEl) valEl.textContent = cfg.fmt(stepped);
+  updateFill(slider);
+  suppressPresetAutosave = false;
+  await chars[cfg.char].writeValue(cfg.enc(stepped));
+  log(sourceLabel + ': ' + cfg.label(stepped), 'ok');
+  return true;
+}
+
+async function applyBrowserPreset() {
+  if (!connected) return;
+  const preset = readPreset();
+  if (!preset) {
+    log('No browser preset saved', 'err');
+    updatePresetButtons();
+    return;
+  }
+  const entries = Object.entries(preset.values || {});
+  let count = 0;
+  await bleWrite(async () => {
+    for (const [id, value] of entries) {
+      try {
+        if (await writeSliderValue(id, value, 'preset')) count++;
+      } catch(e) {
+        log('Preset write failed for ' + id + ': ' + e.message, 'err');
+      }
+    }
+  });
+  log('Applied browser preset (' + count + ' values)', count ? 'ok' : 'err');
+}
+
+function clearBrowserPreset() {
+  localStorage.removeItem(PARAM_PRESET_KEY);
+  updatePresetButtons();
+  log('Browser preset cleared', 'ok');
+}
+
 // ── COMMAND BUTTONS ──────────────────────────────────────
 document.getElementById('btn-hover-test').addEventListener('click', () =>
   sendCommand(CMD_HOVER_TEST, 'Hover test command sent'));
@@ -263,6 +363,9 @@ document.getElementById('btn-disarm').addEventListener('click', () =>
 document.getElementById('btn-kill').addEventListener('click', () =>
   sendCommand(CMD_KILL, 'Kill command sent'));
 
+document.getElementById('strip-land').addEventListener('click', () =>
+  sendCommand(CMD_DISARM, 'Land command sent (strip)'));
+
 document.getElementById('strip-disarm').addEventListener('click', () =>
   sendCommand(CMD_KILL, 'Kill command sent (strip)'));
 
@@ -271,6 +374,10 @@ document.getElementById('btn-sync').addEventListener('click', async () => {
   log('Syncing values from ESP32...');
   await readAll();
 });
+
+document.getElementById('btn-save-preset').addEventListener('click', saveBrowserPreset);
+document.getElementById('btn-apply-preset').addEventListener('click', applyBrowserPreset);
+document.getElementById('btn-clear-preset').addEventListener('click', clearBrowserPreset);
 
 document.getElementById('btn-download-log').addEventListener('click', async () => {
   if (!connected || !chars.logOffset || !chars.logChunk) return;
@@ -367,6 +474,7 @@ SLIDERS.forEach(({ id, char: charKey, enc, fmt, label, ms }) => {
     const v = parseInt(this.value);
     if (valEl) valEl.textContent = fmt(v);
     updateFill(this);
+    autosaveBrowserPreset();
     debounce(id, () => {
       if (!connected || !chars[charKey]) return;
       bleWrite(async () => {
@@ -376,6 +484,8 @@ SLIDERS.forEach(({ id, char: charKey, enc, fmt, label, ms }) => {
     }, ms);
   });
 });
+
+updatePresetButtons();
 
 // ── TELEMETRY ────────────────────────────────────────────
 const DBG_MAX_M = 3.5;  // bar full-scale (m) — matches safety ceiling
@@ -461,11 +571,18 @@ function onTelemetry(e) {
   const isIdle    = stateId === 0;
   const isCal     = stateId === 7;
   const isAltHold = stateId === 10;
+  const isDone    = stateId === 9;
+  const isLanding = stateId === 8;
+  const isTestMode = stateId === 6 || stateId === 7 || stateId === 10;
+  const isMissionMode = stateId === 2 || stateId === 3 || stateId === 4 || stateId === 5;
   const color     = STATE_COLORS[stateId] || 'var(--text)';
 
   // ── State strip ─────────────────────────────────────
   const strip = el('state-strip');
-  strip.classList.toggle('active', !isIdle);
+  strip.classList.toggle('active', !isIdle && !isDone);
+  strip.classList.toggle('test-active', isTestMode);
+  strip.classList.toggle('mission-active', isMissionMode);
+  strip.classList.toggle('landing-active', isLanding);
   strip.style.borderColor = isIdle ? '' : color;
   el('strip-state').textContent = STATE_NAMES[stateId] || '?';
   el('strip-state').style.color = color;
@@ -473,6 +590,15 @@ function onTelemetry(e) {
   el('strip-throt').textContent = stateId === 8
     ? 'DESCENT ' + (varioCs / 100).toFixed(2) + ' m/s'
     : 'THROT ' + throttle;
+  const stripLand = el('strip-land');
+  stripLand.disabled = !(isTestMode || isLanding);
+  stripLand.textContent = isLanding ? 'Landing' : (isMissionMode ? 'No Land' : 'Land');
+  el('btn-hover-test').disabled = !connected || (!isIdle && !isDone);
+  el('btn-auto-hover').disabled = !connected || (!isIdle && !isDone);
+  el('btn-alt-hold').disabled = !connected || (!isIdle && !isDone);
+  el('btn-start-mission').disabled = !connected || (!isIdle && !isDone);
+  el('btn-disarm').disabled = !connected || isMissionMode;
+  el('btn-kill').disabled = !connected;
 
   // ── Cal progress panel ───────────────────────────────
   el('cal-panel').classList.toggle('active', isCal);

@@ -90,16 +90,28 @@ static int16_t constrainVario(float cms) {
 }
 
 static int16_t selectVarioForControl(int16_t fcVario, int16_t derivedVario) {
-    // Near the ground, the ToF derivative leads the FC/baro vario by enough to
-    // matter. Use it while ToF has high confidence; use Betaflight vario above
-    // ToF range where the derived estimate falls back to baro.
-    if (lastTofValid && lastTofWeightPct >= 80 && abs(derivedVario) <= VARIO_MAX_PLAUSIBLE_CMS) {
-        lastVarioSource = 0;
-        return derivedVario;
+    bool derivedPlausible = abs(derivedVario) <= VARIO_MAX_PLAUSIBLE_CMS;
+#if USE_BF_VARIO_PRIMARY
+    bool fcPlausible = abs(fcVario) >= BF_VARIO_MIN_VALID_CMS
+        && abs(fcVario) <= VARIO_MAX_PLAUSIBLE_CMS;
+    bool tofPrimary = lastTofValid && lastTofWeightPct >= 80;
+
+    // ToF remains authoritative for low-altitude AGL. BF vario is baro/FC
+    // fused and can be polluted by prop wash or ground pressure near the floor,
+    // so only let it assist once ToF is clearly above that zone.
+    if (fcPlausible && tofPrimary && lastTofAltM >= BF_VARIO_GROUND_EFFECT_M) {
+        bool sameDirection = derivedPlausible
+            && derivedVario != 0
+            && ((fcVario > 0) == (derivedVario > 0));
+        bool tofIndecisive = !derivedPlausible || abs(derivedVario) <= BF_VARIO_TOF_INDECISIVE_CMS;
+        if (sameDirection || tofIndecisive) {
+            lastVarioSource = 1;
+            return fcVario;
+        }
     }
 
-#if USE_BF_VARIO_PRIMARY
-    if (abs(fcVario) <= VARIO_MAX_PLAUSIBLE_CMS) {
+    // Above ToF's useful range, use the FC's fused vario if it is available.
+    if (fcPlausible && !tofPrimary) {
         lastVarioSource = 1;
         return fcVario;
     }
@@ -151,6 +163,7 @@ static void pollFcDiagnostics(uint32_t nowMs) {
                 lastFcRollDeciDeg = readS16(payload + 0);
                 lastFcPitchDeciDeg = readS16(payload + 2);
                 lastFcYawDeg = readS16(payload + 4);
+                lastFcAttitudeMs = nowMs;
                 lastFcDiagMask |= bit;
                 lastFcDiagMs = nowMs;
             }
@@ -216,6 +229,9 @@ static float fuseAltitude(float baroAltM) {
 
     bool tofValid = rawTofValid || tofHoldoverValid;
     float tofWeight = tofBlendWeight(tofAltM, tofValid);
+    if (tofHoldoverValid) {
+        tofWeight = min(tofWeight, (float)TOF_HOLDOVER_WEIGHT_PCT / 100.0f);
+    }
 
     if (rawTofValid && tofWeight >= 0.25f) {
         float measuredOffset = tofAltM - baroAltM;
@@ -344,10 +360,10 @@ float getAltitude() {
                 if (tofDerivBaseMs == 0) {
                     tofDerivBaseAltM = lastTofAltM;
                     tofDerivBaseMs = nowMs;
-                } else if (nowMs - tofDerivBaseMs >= 100) {
+                } else if (nowMs - tofDerivBaseMs >= 180) {
                     float dtSec = (nowMs - tofDerivBaseMs) / 1000.0f;
                     float rawTofCms = (lastTofAltM - tofDerivBaseAltM) * 100.0f / dtSec;
-                    constexpr float TOF_DERIVED_ALPHA = 0.55f;
+                    constexpr float TOF_DERIVED_ALPHA = 0.30f;
                     filteredTofDerivedCms += TOF_DERIVED_ALPHA * (rawTofCms - filteredTofDerivedCms);
                     heldDerivedVario = constrainVario(filteredTofDerivedCms);
                     tofDerivBaseAltM = lastTofAltM;

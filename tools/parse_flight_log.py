@@ -143,12 +143,25 @@ def logs_needing_preview(log_dir: Path) -> list[Path]:
 
 def write_preview(path: Path, run: str, rows, output: Path, jump_threshold_m: float):
     points = []
+    last_ms = None
+    last_plot_ms = 0.0
+    last_dt_ms = 80.0
+    time_offset_ms = 0.0
     for row in rows:
         ms = number_or_none(row, "ms")
         if ms is None:
             continue
+        if last_ms is not None:
+            if ms < last_ms:
+                time_offset_ms = last_plot_ms + last_dt_ms - ms
+            else:
+                last_dt_ms = max(1.0, ms - last_ms)
+        plot_ms = time_offset_ms + ms
+        last_ms = ms
+        last_plot_ms = plot_ms
         points.append({
             "ms": ms,
+            "t": plot_ms / 1000.0,
             "phase": str(row.get("phase", "")),
             "alt": number_or_none(row, "alt"),
             "lowRel": number_or_none(row, "lowRel"),
@@ -207,6 +220,7 @@ def write_preview(path: Path, run: str, rows, output: Path, jump_threshold_m: fl
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(path.name)} preview</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
 body {{ margin: 0; font-family: system-ui, Segoe UI, Arial, sans-serif; background: #101316; color: #e8eef2; }}
 main {{ max-width: 1180px; margin: 0 auto; padding: 24px; }}
@@ -218,7 +232,9 @@ h1 {{ margin: 0 0 6px; font-size: 22px; }}
 .value {{ font-size: 18px; margin-top: 3px; }}
 .plot {{ background: #151a1f; border: 1px solid #2a343c; border-radius: 8px; margin: 14px 0; padding: 12px; }}
 .plot-title {{ display: flex; justify-content: space-between; color: #cbd5dc; font-size: 13px; margin-bottom: 8px; }}
-svg {{ display: block; width: 100%; height: 320px; background: #0d1115; border-radius: 4px; }}
+.chart-wrap {{ height: 360px; background: #0d1115; border-radius: 4px; padding: 10px; }}
+.chart-wrap.compact {{ height: 240px; }}
+canvas {{ width: 100% !important; height: 100% !important; }}
 .legend {{ display: flex; gap: 14px; flex-wrap: wrap; color: #9fb0bd; font-size: 12px; margin-top: 8px; }}
 .key {{ display: inline-flex; align-items: center; gap: 6px; }}
 .sw {{ width: 18px; height: 3px; border-radius: 2px; }}
@@ -233,106 +249,216 @@ svg {{ display: block; width: 100%; height: 320px; background: #0d1115; border-r
   <div class="grid" id="stats"></div>
   <section class="plot">
     <div class="plot-title"><span>Altitude Sources</span><span>meters vs time</span></div>
-    <svg id="altPlot" viewBox="0 0 1100 320" role="img" aria-label="Altitude plot"></svg>
-    <div class="legend">
-      <span class="key"><span class="sw" style="background:#39d98a"></span>alt</span>
-      <span class="key"><span class="sw" style="background:#61dafb"></span>tof</span>
-      <span class="key"><span class="sw" style="background:#f7b955"></span>baro</span>
-      <span class="key"><span class="sw" style="background:#b084f5"></span>corrected baro</span>
-      <span class="key"><span class="sw" style="background:#ffffff"></span>setpoint</span>
-    </div>
+    <div class="chart-wrap"><canvas id="altPlot" role="img" aria-label="Altitude plot"></canvas></div>
   </section>
   <section class="plot">
-    <div class="plot-title"><span>Control</span><span>throttle us, vertical speed m/s</span></div>
-    <svg id="ctrlPlot" viewBox="0 0 1100 320" role="img" aria-label="Control plot"></svg>
-    <div class="legend">
-      <span class="key"><span class="sw" style="background:#ff6b6b"></span>throttle</span>
-      <span class="key"><span class="sw" style="background:#61dafb"></span>filtered vario</span>
-      <span class="key"><span class="sw" style="background:#f7b955"></span>desired speed</span>
-      <span class="key"><span class="sw" style="background:#39d98a"></span>used vario</span>
-    </div>
+    <div class="plot-title"><span>Control</span><span>left: vertical speed m/s, right: throttle us</span></div>
+    <div class="chart-wrap"><canvas id="ctrlPlot" role="img" aria-label="Control plot"></canvas></div>
   </section>
   <section class="plot">
     <div class="plot-title"><span>Altitude Source</span><span>0 baro, 1 tof, 2 blend, 3 tof hold</span></div>
-    <svg id="srcPlot" viewBox="0 0 1100 180" role="img" aria-label="Source plot"></svg>
+    <div class="chart-wrap compact"><canvas id="srcPlot" role="img" aria-label="Source plot"></canvas></div>
     <div class="hint">Red vertical markers indicate parsed altitude jumps above the configured threshold.</div>
   </section>
   <section class="plot">
     <div class="plot-title"><span>FC IMU / Attitude</span><span>raw accel, roll/pitch degrees</span></div>
-    <svg id="imuPlot" viewBox="0 0 1100 320" role="img" aria-label="IMU plot"></svg>
-    <div class="legend">
-      <span class="key"><span class="sw" style="background:#39d98a"></span>accZ</span>
-      <span class="key"><span class="sw" style="background:#61dafb"></span>accX</span>
-      <span class="key"><span class="sw" style="background:#f7b955"></span>accY</span>
-      <span class="key"><span class="sw" style="background:#ffffff"></span>roll</span>
-      <span class="key"><span class="sw" style="background:#b084f5"></span>pitch</span>
-    </div>
+    <div class="chart-wrap"><canvas id="imuPlot" role="img" aria-label="IMU plot"></canvas></div>
   </section>
 </main>
 <script>
 const DATA = {payload_json};
-const W = 1100, H = 320, M = {{l:54, r:16, t:16, b:30}};
 const COLORS = {{ alt:'#39d98a', tof:'#61dafb', baro:'#f7b955', cbaro:'#b084f5', setpt:'#fff', thr:'#ff6b6b', fV:'#61dafb', usedV:'#39d98a', desV:'#f7b955', src:'#39d98a', accX:'#61dafb', accY:'#f7b955', accZ:'#39d98a', roll:'#ffffff', pitch:'#b084f5', jump:'#ff4d4d' }};
 const pts = DATA.points;
 function finite(v) {{ return typeof v === 'number' && Number.isFinite(v); }}
-function extent(keys) {{
-  let vals = [];
-  for (const p of pts) for (const k of keys) if (finite(p[k]) && !(k === 'tof' && p[k] < 0)) vals.push(p[k]);
-  if (!vals.length) return [0, 1];
-  let lo = Math.min(...vals), hi = Math.max(...vals);
-  if (lo === hi) {{ lo -= 1; hi += 1; }}
-  const pad = (hi - lo) * 0.08;
-  return [lo - pad, hi + pad];
+function seriesData(key, scale=1) {{
+  return pts.map(p => finite(p[key]) ? p[key] * scale : null);
 }}
-function xScale(ms) {{
-  const first = pts[0]?.ms ?? 0, last = pts[pts.length - 1]?.ms ?? 1;
-  return M.l + (ms - first) / Math.max(1, last - first) * (W - M.l - M.r);
+function timeLabels() {{
+  return pts.map(p => (p.t ?? ((p.ms - (pts[0]?.ms ?? 0)) / 1000)).toFixed(2));
 }}
-function yScale(v, lo, hi, height=H) {{ return M.t + (hi - v) / (hi - lo) * (height - M.t - M.b); }}
-function linePath(key, lo, hi, height=H) {{
-  let d = '', open = false;
-  for (const p of pts) {{
-    let v = p[key];
-    if (!finite(v) || (key === 'tof' && v < 0)) {{ open = false; continue; }}
-    const cmd = open ? 'L' : 'M';
-    d += `${{cmd}}${{xScale(p.ms).toFixed(1)}},${{yScale(v, lo, hi, height).toFixed(1)}}`;
-    open = true;
+const jumpLinePlugin = {{
+  id: 'jumpLines',
+  afterDatasetsDraw(chart, args, opts) {{
+    if (!opts || !opts.enabled || !DATA.jumps.length || !pts.length) return;
+    const xScale = chart.scales.x;
+    const yArea = chart.chartArea;
+    const firstMs = pts[0].ms;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = COLORS.jump;
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 1;
+    for (const jump of DATA.jumps) {{
+      const x = xScale.getPixelForValue(((jump.to - firstMs) / 1000).toFixed(2));
+      ctx.beginPath();
+      ctx.moveTo(x, yArea.top);
+      ctx.lineTo(x, yArea.bottom);
+      ctx.stroke();
+    }}
+    ctx.restore();
   }}
-  return d;
+}};
+function chartOptions(yTitle, extraScales={{}}, jumpLines=false) {{
+  return {{
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {{ mode: 'index', intersect: false }},
+    plugins: {{
+      legend: {{ labels: {{ color: '#cbd5dc', usePointStyle: true, boxWidth: 8 }} }},
+      jumpLines: {{ enabled: jumpLines }},
+      tooltip: {{
+        callbacks: {{
+          title: items => items.length ? `t=${{items[0].label}}s` : ''
+        }}
+      }}
+    }},
+    scales: Object.assign({{
+      x: {{
+        title: {{ display: true, text: 'time s', color: '#91a1ad' }},
+        ticks: {{ color: '#91a1ad', maxTicksLimit: 10 }},
+        grid: {{ color: '#1f2930' }}
+      }},
+      y: {{
+        title: {{ display: true, text: yTitle, color: '#91a1ad' }},
+        ticks: {{ color: '#91a1ad' }},
+        grid: {{ color: '#1f2930' }}
+      }}
+    }}, extraScales)
+  }};
 }}
-function drawAxes(svg, lo, hi, height=H) {{
-  const plotW = W - M.l - M.r, plotH = height - M.t - M.b;
-  svg.innerHTML = `<line x1="${{M.l}}" y1="${{M.t}}" x2="${{M.l}}" y2="${{M.t+plotH}}" stroke="#33414a"/>
-    <line x1="${{M.l}}" y1="${{M.t+plotH}}" x2="${{M.l+plotW}}" y2="${{M.t+plotH}}" stroke="#33414a"/>`;
-  for (let i=0; i<=4; i++) {{
-    const y = M.t + plotH * i / 4;
-    const v = hi - (hi - lo) * i / 4;
-    svg.innerHTML += `<line x1="${{M.l}}" y1="${{y}}" x2="${{M.l+plotW}}" y2="${{y}}" stroke="#1f2930"/>
-      <text x="8" y="${{y+4}}" fill="#91a1ad" font-size="11">${{v.toFixed(2)}}</text>`;
-  }}
+function dataset(label, key, color, opts={{}}) {{
+  return Object.assign({{
+    label,
+    data: seriesData(key, opts.scale ?? 1),
+    yAxisID: opts.yAxisID || 'y',
+    borderColor: color,
+    backgroundColor: color,
+    pointRadius: opts.pointRadius ?? 0,
+    borderWidth: opts.borderWidth ?? 2,
+    borderDash: opts.borderDash,
+    hidden: opts.hidden || false,
+    tension: opts.tension ?? 0.15,
+    stepped: opts.stepped || false
+  }}, opts.chart || {{}});
 }}
-function drawLines(id, keys) {{
-  const svg = document.getElementById(id);
-  const [lo, hi] = extent(keys);
-  drawAxes(svg, lo, hi);
-  for (const j of DATA.jumps) {{
-    const x = xScale(j.to);
-    svg.innerHTML += `<line x1="${{x}}" y1="${{M.t}}" x2="${{x}}" y2="${{H-M.b}}" stroke="${{COLORS.jump}}" stroke-opacity=".45"/>`;
-  }}
-  for (const key of keys) {{
-    svg.innerHTML += `<path d="${{linePath(key, lo, hi)}}" fill="none" stroke="${{COLORS[key]}}" stroke-width="2"/>`;
-  }}
+function drawChart(id, datasets, yTitle, options={{}}) {{
+  const ctx = document.getElementById(id);
+  if (!window.Chart || !ctx) return;
+  new Chart(ctx, {{
+    type: 'line',
+    data: {{ labels: timeLabels(), datasets }},
+    options: chartOptions(yTitle, options.scales || {{}}, !!options.jumpLines),
+    plugins: [jumpLinePlugin]
+  }});
 }}
-function drawSource() {{
-  const svg = document.getElementById('srcPlot');
-  const height = 180, lo = -0.2, hi = 3.2;
-  drawAxes(svg, lo, hi, height);
-  for (const p of pts) {{
-    if (!finite(p.src)) continue;
-    const x = xScale(p.ms), y = yScale(p.src, lo, hi, height);
-    const color = ['#f7b955','#61dafb','#b084f5','#39d98a'][p.src] || '#999';
-    svg.innerHTML += `<circle cx="${{x.toFixed(1)}}" cy="${{y.toFixed(1)}}" r="3" fill="${{color}}"/>`;
-  }}
+function drawAltitudeChart() {{
+  drawChart('altPlot', [
+    dataset('Altitude', 'alt', COLORS.alt),
+    dataset('ToF', 'tof', COLORS.tof),
+    dataset('Baro', 'baro', COLORS.baro),
+    dataset('Corrected baro', 'cbaro', COLORS.cbaro),
+    dataset('Setpoint', 'setpt', COLORS.setpt)
+  ], 'meters', {{ jumpLines: true }});
+}}
+function drawControlChart() {{
+  const ctx = document.getElementById('ctrlPlot');
+  if (!window.Chart || !ctx) return;
+  new Chart(ctx, {{
+    type: 'line',
+    data: {{
+      labels: timeLabels(),
+      datasets: [
+        {{ label: 'Throttle', data: seriesData('thr'), yAxisID: 'thr', borderColor: COLORS.thr, backgroundColor: COLORS.thr, pointRadius: 0, borderWidth: 2, tension: 0.15 }},
+        {{ label: 'Filtered vario', data: seriesData('fV'), yAxisID: 'v', borderColor: COLORS.fV, backgroundColor: COLORS.fV, pointRadius: 0, borderWidth: 2, tension: 0.15 }},
+        {{ label: 'Used vario', data: seriesData('usedV', 0.01), yAxisID: 'v', borderColor: COLORS.usedV, backgroundColor: COLORS.usedV, pointRadius: 0, borderWidth: 2, tension: 0.15 }},
+        {{ label: 'BF vario', data: seriesData('bfV', 0.01), yAxisID: 'v', borderColor: '#b084f5', backgroundColor: '#b084f5', pointRadius: 0, borderWidth: 1.5, borderDash: [5, 4], tension: 0.15, hidden: true }},
+        {{ label: 'Desired speed', data: seriesData('desV'), yAxisID: 'v', borderColor: COLORS.desV, backgroundColor: COLORS.desV, pointRadius: 0, borderWidth: 2, tension: 0.15 }}
+      ]
+    }},
+    options: {{
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {{ mode: 'index', intersect: false }},
+      plugins: {{
+        legend: {{ labels: {{ color: '#cbd5dc', usePointStyle: true, boxWidth: 8 }} }},
+        tooltip: {{
+          callbacks: {{
+            title: items => items.length ? `t=${{items[0].label}}s` : '',
+            label: item => {{
+              const unit = item.dataset.yAxisID === 'thr' ? ' us' : ' m/s';
+              return `${{item.dataset.label}}: ${{Number(item.raw).toFixed(item.dataset.yAxisID === 'thr' ? 0 : 2)}}${{unit}}`;
+            }}
+          }}
+        }}
+      }},
+      scales: {{
+        x: {{
+          title: {{ display: true, text: 'time s', color: '#91a1ad' }},
+          ticks: {{ color: '#91a1ad', maxTicksLimit: 10 }},
+          grid: {{ color: '#1f2930' }}
+        }},
+        v: {{
+          position: 'left',
+          title: {{ display: true, text: 'vertical speed m/s', color: '#91a1ad' }},
+          ticks: {{ color: '#91a1ad' }},
+          grid: {{ color: '#1f2930' }},
+          suggestedMin: -1.5,
+          suggestedMax: 1.5
+        }},
+        thr: {{
+          position: 'right',
+          title: {{ display: true, text: 'throttle us', color: '#91a1ad' }},
+          ticks: {{ color: '#91a1ad' }},
+          grid: {{ drawOnChartArea: false }}
+        }}
+      }}
+    }},
+    plugins: [jumpLinePlugin]
+  }});
+}}
+function drawSourceChart() {{
+  drawChart('srcPlot', [
+    dataset('Altitude source', 'src', COLORS.src, {{ stepped: true, pointRadius: 2 }})
+  ], 'source id', {{
+    jumpLines: true,
+    scales: {{
+      y: {{
+        min: -0.2,
+        max: 3.2,
+        title: {{ display: true, text: 'source id', color: '#91a1ad' }},
+        ticks: {{
+          color: '#91a1ad',
+          stepSize: 1,
+          callback: value => ({{0:'BARO',1:'TOF',2:'BLEND',3:'HOLD'}}[value] ?? value)
+        }},
+        grid: {{ color: '#1f2930' }}
+      }}
+    }}
+  }});
+}}
+function drawImuChart() {{
+  drawChart('imuPlot', [
+    dataset('accZ', 'accZ', COLORS.accZ, {{ yAxisID: 'acc' }}),
+    dataset('accX', 'accX', COLORS.accX, {{ yAxisID: 'acc', hidden: true }}),
+    dataset('accY', 'accY', COLORS.accY, {{ yAxisID: 'acc', hidden: true }}),
+    dataset('roll', 'roll', COLORS.roll, {{ yAxisID: 'att' }}),
+    dataset('pitch', 'pitch', COLORS.pitch, {{ yAxisID: 'att' }})
+  ], 'raw accel', {{
+    scales: {{
+      acc: {{
+        position: 'left',
+        title: {{ display: true, text: 'raw accel', color: '#91a1ad' }},
+        ticks: {{ color: '#91a1ad' }},
+        grid: {{ color: '#1f2930' }}
+      }},
+      att: {{
+        position: 'right',
+        title: {{ display: true, text: 'attitude deg', color: '#91a1ad' }},
+        ticks: {{ color: '#91a1ad' }},
+        grid: {{ drawOnChartArea: false }}
+      }}
+    }}
+  }});
 }}
 function stat(label, value) {{
   return `<div class="card"><div class="label">${{label}}</div><div class="value">${{value}}</div></div>`;
@@ -344,10 +470,10 @@ document.getElementById('stats').innerHTML = [
   stat('Altitude jumps', DATA.jumps.length + ' >= ' + DATA.jumpThreshold.toFixed(2) + 'm'),
   stat('Diag mask', pts.length ? '0x' + (pts[pts.length-1].diag ?? 0).toString(16) : 'n/a')
 ].join('');
-drawLines('altPlot', ['alt','tof','baro','cbaro','setpt']);
-drawLines('ctrlPlot', ['thr','fV','usedV','desV']);
-drawSource();
-drawLines('imuPlot', ['accZ','accX','accY','roll','pitch']);
+drawAltitudeChart();
+drawControlChart();
+drawSourceChart();
+drawImuChart();
 </script>
 </body>
 </html>

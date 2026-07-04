@@ -17,6 +17,13 @@ static uint16_t angleModeChannelValue() {
     return ANGLE_MODE_ENABLED ? 1800 : 1000;
 }
 
+static bool attitudeAbortActive() {
+    if ((lastFcDiagMask & (1 << 1)) == 0) return false;
+    if (millis() - lastFcAttitudeMs > ATTITUDE_ABORT_MAX_AGE_MS) return false;
+    return fabsf(lastFcRollDeciDeg / 10.0f) >= ATTITUDE_ABORT_DEG
+        || fabsf(lastFcPitchDeciDeg / 10.0f) >= ATTITUDE_ABORT_DEG;
+}
+
 static void updateAltHoldTofBaseline() {
     if (lastTofValid && !altHoldTofBaselineValid) {
         altHoldTofBaselineValid = true;
@@ -445,7 +452,7 @@ void runMissionLoop() {
                 if (altHoldLiftoffCount >= TAKEOFF_CONFIRM_SAMPLES) {
                     altHoldCascadeLatched = true;
                     altHoldGuardPhase = 2;
-                    resetCascadeController(controlAlt);
+                    primeCascadeController(controlAlt);
                     thr = holdCascaded(controlAlt, false);
 #if SERIAL_FLIGHT_DEBUG
                     Serial.printf("[ALT_HOLD] ToF liftoff latched rel=%.2f tofRel=%.2f tof=%.2f count=%u\n",
@@ -453,7 +460,7 @@ void runMissionLoop() {
 #endif
                 } else if (timeInAltHold < GROUND_GUARD_TIMEOUT_MS) {
                     thr = takeoffGuardThrottle(timeInAltHold, lastTofValid);
-                    resetCascadeController(controlAlt);
+                    primeCascadeController(controlAlt);
                     if (timeInAltHold % 100 < 20) {
 #if SERIAL_FLIGHT_DEBUG
                         Serial.printf("[ALT_HOLD] guard   t=%ums rawAlt=%.2f launchAlt=%.2f rel=%.2f tofRel=%.2f tofW=%u count=%u thr=%u\n",
@@ -502,6 +509,9 @@ void runMissionLoop() {
 #endif
                 startLanding(controlAlt);
             }
+            if (attitudeAbortActive()) {
+                disarmToIdle("[ALT_HOLD] attitude abort");
+            }
             break;
         }
 
@@ -510,6 +520,10 @@ void runMissionLoop() {
             channels[CH_ARM]   = 1800;
             channels[CH_ANGLE] = angleModeChannelValue();
             digitalWrite(STATUS_LED, millis() % 200 < 30);
+            if (attitudeAbortActive()) {
+                disarmToIdle("[LANDING] attitude abort");
+                break;
+            }
 
             // ToF can detect ground immediately. Baro/fused fallback must first
             // show real descent so a stale zero cannot kill motors mid-air.
@@ -528,16 +542,29 @@ void runMissionLoop() {
                 break;
             }
 
-            float rateError           = (-DESCENT_RATE_MPS) - filteredVario;
+            float targetDescentMps = DESCENT_RATE_MPS;
+            float landingOffsetUs = LANDING_THROTTLE_OFFSET_US;
+            if (landingAlt <= LANDING_FINAL_ALT_M) {
+                targetDescentMps = LANDING_FINAL_DESCENT_MPS;
+                landingOffsetUs = LANDING_FINAL_OFFSET_US;
+            } else if (landingAlt <= LANDING_FLARE_ALT_M) {
+                float u = (landingAlt - LANDING_FINAL_ALT_M) / (LANDING_FLARE_ALT_M - LANDING_FINAL_ALT_M);
+                targetDescentMps = LANDING_FINAL_DESCENT_MPS
+                    + u * (LANDING_FLARE_DESCENT_MPS - LANDING_FINAL_DESCENT_MPS);
+                landingOffsetUs = LANDING_FINAL_OFFSET_US
+                    + u * (LANDING_FLARE_OFFSET_US - LANDING_FINAL_OFFSET_US);
+            }
+
+            float rateError           = (-targetDescentMps) - filteredVario;
             int16_t correction        = (int16_t)(LANDING_KP_VSPEED * rateError);
             float landingBaseThrottle = max((float)MIN_ALT_HOLD_THROTTLE_US,
-                                            (float)HOVER_THROTTLE - LANDING_THROTTLE_OFFSET_US);
+                                            (float)HOVER_THROTTLE - landingOffsetUs);
             float landingRawThrottle  = landingBaseThrottle + correction;
-            float landingMinThrottle  = max(1000.0f, (float)HOVER_THROTTLE - THR_DOWN_OFFSET_US);
-            float landingMaxThrottle  = (float)HOVER_THROTTLE + 50.0f;
+            float landingMinThrottle  = max(1000.0f, (float)HOVER_THROTTLE - 220.0f);
+            float landingMaxThrottle  = (float)HOVER_THROTTLE + 80.0f;
             channels[CH_THROTTLE]     = (uint16_t)constrain(landingRawThrottle, landingMinThrottle, landingMaxThrottle);
             lastAltError = 0.0f;
-            lastDesiredVspeed = -DESCENT_RATE_MPS;
+            lastDesiredVspeed = -targetDescentMps;
             lastVspeedError = rateError;
             lastControlPUs = correction;
             lastControlIUs = 0.0f;

@@ -22,6 +22,12 @@ void resetCascadeController(float currentAlt) {
     lastVarioMs      = millis();
 }
 
+void primeCascadeController(float currentAlt) {
+    internalSetpoint = currentAlt;
+    vspeedIntegral   = 0.0f;
+    vspeedLastMs     = millis();
+}
+
 uint16_t holdCascaded(float altitude, bool isMission) {
     uint32_t now = millis();
     float dt = (now - vspeedLastMs) / 1000.0f;
@@ -77,6 +83,9 @@ uint16_t holdCascaded(float altitude, bool isMission) {
         maxDesc  *= factor;
     }
     float desiredVspeed = constrain(HOLD_KP * altError, -maxDesc, maxClimb);
+    if (!isMission && altitude < target - ALT_HOLD_CAPTURE_MARGIN_M) {
+        desiredVspeed = max(desiredVspeed, min((float)ALT_HOLD_CAPTURE_MIN_CLIMB_MPS, maxClimb));
+    }
 
     // filteredVario is maintained by runMissionLoop() every iteration.
     // Sensor validity is checked above before throttle corrections are made.
@@ -102,6 +111,13 @@ uint16_t holdCascaded(float altitude, bool isMission) {
     float finalThrottle = (float)HOVER_THROTTLE + HOLD_KD * vspeedError + HOLD_KI * vspeedIntegral;
     float clampedThrottle = constrain(finalThrottle, thrMin, thrMax);
     int8_t sat = finalThrottle > thrMax ? 1 : (finalThrottle < thrMin ? -1 : 0);
+    if (!isMission && altitude < target - ALT_HOLD_CAPTURE_MARGIN_M) {
+        float captureMinThrottle = min(thrMax, (float)HOVER_THROTTLE + ALT_HOLD_CAPTURE_MIN_OFFSET_US);
+        if (clampedThrottle < captureMinThrottle) {
+            clampedThrottle = captureMinThrottle;
+            sat = 1;
+        }
+    }
 
     lastAltError = altError;
     lastDesiredVspeed = desiredVspeed;

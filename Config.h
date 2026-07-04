@@ -22,6 +22,7 @@
 #define TOF_BLEND_ZERO_M  3.80f
 #define TOF_STALE_MS      150
 #define TOF_HOLDOVER_MS   300    // bridge brief low-altitude ToF dropouts instead of swapping to baro
+#define TOF_HOLDOVER_WEIGHT_PCT 35 // holdover is continuity, not a fresh range sample
 #define TOF_MAX_STEP_MIN_M 0.18f // reject sudden single-sample range jumps near the ground
 #define TOF_MAX_STEP_MPS   3.0f
 #define TOF_OFFSET_ALPHA  0.12f  // align corrected baro quickly while full-weight ToF is available
@@ -92,10 +93,16 @@
 #define CAL_TIMEOUT_MS      30000
 
 // ── Landing Constants ────────────────────────────────────────
-#define LANDING_GROUND_M    0.15f  // altitude threshold → cut motors
+#define LANDING_GROUND_M    0.06f  // altitude threshold → cut motors
 #define LANDING_TIMEOUT_MS  30000  // safety: force disarm if landing takes too long
-#define DESCENT_RATE_MPS    0.4f   // target descent speed m/s
-#define LANDING_THROTTLE_OFFSET_US 180  // nominal throttle below hover while landing
+#define DESCENT_RATE_MPS    0.35f  // target descent speed m/s above flare
+#define LANDING_FLARE_ALT_M 0.45f  // below this, slow descent and raise throttle
+#define LANDING_FINAL_ALT_M 0.20f  // below this, use final soft touchdown target
+#define LANDING_FLARE_DESCENT_MPS 0.22f
+#define LANDING_FINAL_DESCENT_MPS 0.07f
+#define LANDING_THROTTLE_OFFSET_US 140  // nominal throttle below hover while landing
+#define LANDING_FLARE_OFFSET_US 90
+#define LANDING_FINAL_OFFSET_US 40
 
 // ── Bench-Mode Simulation Constants ──────────────────────────
 #define BENCH_SPRINT_RATE_MPS     9.0f
@@ -118,21 +125,27 @@
 // HOLD_KI = inner I gain: speed integral    → throttle offset (µs)
 
 // Outer loop: setpoint ramp and speed limits
-#define ALT_RAMP_RATE_MPS       1.0f    // m/s internal setpoint ramp rate
-#define MAX_CLIMB_MPS_TEST      0.60f   // max commanded climb, test mode
-#define MAX_DESCENT_MPS_TEST    0.45f   // max commanded descent, test mode
+#define ALT_RAMP_RATE_MPS       0.4f    // m/s internal setpoint ramp rate
+#define MAX_CLIMB_MPS_TEST      0.25f   // max commanded climb, test mode
+#define MAX_DESCENT_MPS_TEST    0.20f   // max commanded descent, test mode
 #define MAX_CLIMB_MPS_HOLD      1.20f   // max commanded climb, competition HOLDING
 #define MAX_DESCENT_MPS_HOLD    0.80f   // max commanded descent, competition HOLDING
 #define ALT_HOLD_TARGET_MIN_M   0.5f    // BLE Alt Hold test target lower bound
 #define ALT_HOLD_TARGET_MAX_M   5.0f    // BLE Alt Hold test target upper bound
 #define NEAR_TARGET_M           0.5f    // within this radius, scale down max speed
 #define NEAR_TARGET_FACTOR      0.35f   // minimum speed factor within near-target zone
+#define ALT_HOLD_CAPTURE_MARGIN_M 0.25f // below target by this much, keep climbing
+#define ALT_HOLD_CAPTURE_MIN_CLIMB_MPS 0.16f
+#define ALT_HOLD_CAPTURE_MIN_OFFSET_US 35 // minimum above-hover throttle while materially below target
 
 // Inner loop: vario filtering
 #define VARIO_TAU_S             0.05f   // seconds, light low-pass; avoid lag on low-alt ToF vario
 #define VARIO_STALE_MS          500     // ms before vario reading is considered stale
-#define VARIO_MAX_PLAUSIBLE_CMS 800     // cm/s — implausible above this (~8 m/s)
-#define USE_BF_VARIO_PRIMARY    1       // use BF vario above ToF range; ToF-derived vario wins near ground
+#define VARIO_MAX_PLAUSIBLE_CMS 400     // cm/s — reject ToF/FC spikes above ~4 m/s
+#define USE_BF_VARIO_PRIMARY    1       // use Betaflight vario as a low-altitude assist and above ToF range
+#define BF_VARIO_MIN_VALID_CMS  3       // below this, treat FC vario as zero/idle and use derived fallback
+#define BF_VARIO_GROUND_EFFECT_M 0.45f  // below this, ignore BF vario and trust ToF-derived speed
+#define BF_VARIO_TOF_INDECISIVE_CMS 8   // above ground-effect zone, BF can override tiny ToF derivative
 #define VSPEED_I_MAX_US         150.0f  // max integral throttle contribution in us
 
 // Throttle authority around hover
@@ -143,13 +156,15 @@
 
 // Safety
 #define ALT_MAX_M               22.0f   // absolute ceiling — triggers landing above this
+#define ATTITUDE_ABORT_DEG      45.0f   // disarm if ALT_HOLD/LANDING gets knocked badly off-level
+#define ATTITUDE_ABORT_MAX_AGE_MS 300
 #define LANDING_KP_VSPEED       120.0f  // fixed P gain for landing velocity controller
 
 // Takeoff ground guard — avoids integrator windup and baro-spike at liftoff
-#define TAKEOFF_ALT_M            0.12f  // ToF-confirmed liftoff threshold before closed-loop engages
-#define TAKEOFF_NUDGE_US         15     // us above HOVER_THROTTLE for ground-phase thrust
-#define TAKEOFF_RAMP_US_PER_S    30     // additional takeoff throttle ramp while waiting for liftoff
-#define TAKEOFF_MAX_OFFSET_US    140    // max takeoff throttle above HOVER_THROTTLE
+#define TAKEOFF_ALT_M            0.25f  // ToF-confirmed altitude before closed-loop engages
+#define TAKEOFF_NUDGE_US         10     // us above HOVER_THROTTLE for ground-phase thrust
+#define TAKEOFF_RAMP_US_PER_S    25     // additional takeoff throttle ramp while waiting for liftoff
+#define TAKEOFF_MAX_OFFSET_US    65     // max takeoff throttle above HOVER_THROTTLE
 #define TAKEOFF_INVALID_TOF_MAX_OFFSET_US 60   // cap takeoff thrust until ToF confirms altitude
 #define TAKEOFF_CONFIRM_SAMPLES  3      // consecutive ToF-valid samples before cascade latch
 #define BARO_SETTLE_MS           500    // ms after throttle step for baro to settle at hover pressure

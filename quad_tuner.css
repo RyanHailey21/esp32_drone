@@ -278,9 +278,19 @@ header {
   transition: all 0.15s;
 }
 .cmd-btn:hover { border-color: var(--border-mid); color: #fff; }
+.cmd-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  color: var(--text-dim);
+  border-color: var(--border);
+  box-shadow: none;
+}
 
 .cmd-btn.primary { border-color: #2a1800; color: var(--amber); }
 .cmd-btn.primary:hover { border-color: var(--amber); box-shadow: 0 0 10px var(--amber-dim), inset 0 0 12px var(--amber-dim); }
+
+.cmd-btn.land { border-color: rgba(0,224,122,0.45); color: var(--green); }
+.cmd-btn.land:hover { border-color: var(--green); box-shadow: 0 0 10px var(--green-dim), inset 0 0 12px var(--green-dim); }
 
 .cmd-btn.danger { border-color: #1e0508; color: var(--red); }
 .cmd-btn.danger:hover { border-color: var(--red); box-shadow: 0 0 10px rgba(255,40,68,0.15), inset 0 0 12px var(--red-dim); }
@@ -488,6 +498,9 @@ input[type=range]::-moz-range-thumb {
   transition: border-color 0.3s;
 }
 .state-strip.active { display: flex; }
+.state-strip.test-active { background: linear-gradient(90deg, rgba(0,194,255,0.12), var(--surface) 55%); }
+.state-strip.landing-active { background: linear-gradient(90deg, rgba(0,224,122,0.14), var(--surface) 55%); }
+.state-strip.mission-active { background: linear-gradient(90deg, rgba(247,185,85,0.14), var(--surface) 55%); }
 
 .strip-state {
   font-family: var(--font-hd);
@@ -505,18 +518,37 @@ input[type=range]::-moz-range-thumb {
   font-size: 11px;
   color: var(--text);
 }
+.strip-land,
 .strip-disarm {
   padding: 7px 14px;
-  background: var(--red-dim);
-  border: 1px solid var(--red);
   border-radius: 3px;
-  color: var(--red);
   font-family: var(--font-hd);
   font-size: 9px;
   letter-spacing: 0.2em;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s;
+}
+
+.strip-land {
+  min-width: 118px;
+  background: rgba(0,224,122,0.12);
+  border: 1px solid var(--green);
+  color: var(--green);
+}
+.strip-land:hover { background: rgba(0,224,122,0.2); }
+.strip-land:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  color: var(--text-dim);
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.strip-disarm {
+  background: var(--red-dim);
+  border: 1px solid var(--red);
+  color: var(--red);
 }
 .strip-disarm:hover { background: rgba(255,40,68,0.18); }
 
@@ -935,6 +967,27 @@ input[type=range]::-moz-range-thumb {
   .wrap {
     max-width: 100%;
     padding: 14px 10px 48px;
+  }
+
+  .state-strip {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .strip-state {
+    width: 100%;
+  }
+
+  .strip-telem {
+    order: 2;
+    width: 100%;
+    flex: 1 0 100%;
+  }
+
+  .strip-land,
+  .strip-disarm {
+    flex: 1;
+    min-width: 0;
   }
 
   .dash-grid3,
