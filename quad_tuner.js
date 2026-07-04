@@ -19,6 +19,7 @@ const FLIGHT_LOG_CHUNK_UUID  = 'ab0828c3-198e-4351-b779-901fa0e0371e';
 const STATE_NAMES  = ['IDLE','ARMING','SPRINTING','HOLDING','PUNCHING','CUT','HOVER TEST','AUTO HOVER CAL','LANDING','DONE','ALT HOLD'];
 const STATE_COLORS = ['','var(--amber)','var(--amber)','var(--green)','var(--red)','var(--red)','var(--cyan)','var(--cyan)','var(--amber)','var(--text-mid)','var(--green)'];
 const ALT_SOURCE_NAMES = ['BARO', 'TOF', 'BLEND', 'TOF HOLD'];
+const VARIO_SOURCE_NAMES = ['DERIVED', 'BF VARIO'];
 
 const CMD_HOVER_TEST     = 1;
 const CMD_START_MISSION  = 2;
@@ -431,6 +432,24 @@ function onTelemetry(e) {
   const baroCm     = dv.byteLength >= 38 ? dv.getInt32(34, true) : altCm;
   const altSource  = dv.byteLength >= 39 ? dv.getUint8(38) : (tofWeight > 70 ? 1 : (tofWeight > 0 ? 2 : 0));
   const cbaroCm    = dv.byteLength >= 43 ? dv.getInt32(39, true) : baroCm;
+  const fcDiagMask = dv.byteLength >= 45 ? dv.getUint16(43, true) : 0;
+  const fcAccX     = dv.byteLength >= 47 ? dv.getInt16(45, true) : 0;
+  const fcAccY     = dv.byteLength >= 49 ? dv.getInt16(47, true) : 0;
+  const fcAccZ     = dv.byteLength >= 51 ? dv.getInt16(49, true) : 0;
+  const fcGyroX    = dv.byteLength >= 53 ? dv.getInt16(51, true) : 0;
+  const fcGyroY    = dv.byteLength >= 55 ? dv.getInt16(53, true) : 0;
+  const fcGyroZ    = dv.byteLength >= 57 ? dv.getInt16(55, true) : 0;
+  const fcRoll     = dv.byteLength >= 59 ? dv.getInt16(57, true) / 10 : 0;
+  const fcPitch    = dv.byteLength >= 61 ? dv.getInt16(59, true) / 10 : 0;
+  const fcYaw      = dv.byteLength >= 63 ? dv.getInt16(61, true) : 0;
+  const fcCycle    = dv.byteLength >= 65 ? dv.getUint16(63, true) : 0;
+  const fcSensors  = dv.byteLength >= 67 ? dv.getUint16(65, true) : 0;
+  const fcRcThr    = dv.byteLength >= 69 ? dv.getUint16(67, true) : 0;
+  const fcRcArm    = dv.byteLength >= 71 ? dv.getUint16(69, true) : 0;
+  const fcRcAngle  = dv.byteLength >= 73 ? dv.getUint16(71, true) : 0;
+  const fcVbat     = dv.byteLength >= 74 ? dv.getUint8(73) / 10 : 0;
+  const fcAmps     = dv.byteLength >= 76 ? dv.getInt16(74, true) / 100 : 0;
+  const varioSource = dv.byteLength >= 77 ? dv.getUint8(76) : 0;
 
   const altM     = (altCm / 100).toFixed(2);
   const relValid = Math.abs(relCm) <= 10000000;
@@ -489,10 +508,12 @@ function onTelemetry(e) {
   el('d-vf').textContent = signedMs(filtVarCs);
   el('d-vfc').textContent = signedMs(fcVarioCs);
   el('d-vd').textContent = signedMs(derivVarCs);
+  el('d-vsrc').textContent = VARIO_SOURCE_NAMES[varioSource] || String(varioSource);
   el('d-vr').style.color = varColor(varioCs);
   el('d-vf').style.color = varColor(filtVarCs);
   el('d-vfc').style.color = varColor(fcVarioCs);
   el('d-vd').style.color = varColor(derivVarCs);
+  el('d-vsrc').style.color = varioSource === 1 ? 'var(--green)' : 'var(--amber)';
   el('d-tof').textContent = tofValid && tofCm >= 0 ? (tofCm / 100).toFixed(2) + 'm' : 'INVALID';
   el('d-tw').textContent = tofWeight + '%';
   el('d-baro').textContent = (baroCm / 100).toFixed(2) + 'm';
@@ -528,6 +549,24 @@ function onTelemetry(e) {
   el('d-ang').textContent  = angleAux + 'µs';
   el('d-am').textContent   = angleAux >= 1700 ? 'ON' : 'OFF';
   el('d-am').style.color   = angleAux >= 1700 ? 'var(--cyan)' : 'var(--text-mid)';
+  const maskHex = '0x' + fcDiagMask.toString(16).padStart(2, '0');
+  el('d-fc-msp').textContent = maskHex;
+  el('d-fc-msp').style.color = fcDiagMask === 0x1f ? 'var(--green)'
+                            : fcDiagMask ? 'var(--amber)' : 'var(--red)';
+  el('d-fc-att').textContent = fcDiagMask & 0x02
+    ? fcRoll.toFixed(1) + ',' + fcPitch.toFixed(1) + ',' + fcYaw
+    : 'NO ATT';
+  el('d-fc-acc').textContent = fcDiagMask & 0x01
+    ? fcAccX + ',' + fcAccY + ',' + fcAccZ
+    : 'NO IMU';
+  el('d-fc-gyro').textContent = fcDiagMask & 0x01
+    ? fcGyroX + ',' + fcGyroY + ',' + fcGyroZ
+    : 'NO GYRO';
+  el('d-fc-rc').textContent = fcDiagMask & 0x10
+    ? fcRcThr + '/' + fcRcArm + '/' + fcRcAngle
+    : 'NO RC';
+  el('d-fc-status').textContent = (fcDiagMask & 0x04 ? fcCycle + 'us s=' + fcSensors.toString(16) + ' ' : 'NO STATUS ')
+    + (fcDiagMask & 0x08 ? fcVbat.toFixed(1) + 'V ' + fcAmps.toFixed(1) + 'A' : '');
 
   // Guard phase pills — ALT_HOLD only
   el('d-phases').style.display = isAltHold ? '' : 'none';

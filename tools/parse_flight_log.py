@@ -15,8 +15,10 @@ from statistics import mean
 
 NUMERIC_FIELDS = {
     "ms", "state", "alt", "lowRel", "tof", "tofW", "baro", "setpt", "fV",
-    "cbaro", "src", "rawV", "desV", "aErr", "vErr", "P", "I", "rawThr",
-    "thr", "minThr", "maxThr", "sat",
+    "cbaro", "src", "rawV", "usedV", "bfV", "derV", "vsrc", "desV", "aErr", "vErr", "P", "I", "rawThr",
+    "thr", "minThr", "maxThr", "sat", "accX", "accY", "accZ", "gyroX",
+    "gyroY", "gyroZ", "roll", "pitch", "yaw", "cycle", "sensors", "rcThr",
+    "rcArm", "rcAngle", "vbat", "amps", "diag",
 }
 
 
@@ -60,7 +62,14 @@ def fmt(value: float | None, digits: int = 3) -> str:
 
 
 def span(rows, key: str):
-    vals = [row[key] for row in rows if isinstance(row.get(key), float)]
+    alias = {"usedV": "rawV"}
+    vals = []
+    for row in rows:
+        value = row.get(key)
+        if value is None and key in alias:
+            value = row.get(alias[key])
+        if isinstance(value, float):
+            vals.append(value)
     if not vals:
         return None, None
     return min(vals), max(vals)
@@ -132,10 +141,30 @@ def write_preview(path: Path, run: str, rows, output: Path, jump_threshold_m: fl
             "cbaro": number_or_none(row, "cbaro"),
             "setpt": number_or_none(row, "setpt"),
             "fV": number_or_none(row, "fV"),
+            "usedV": number_or_none(row, "usedV") if number_or_none(row, "usedV") is not None else number_or_none(row, "rawV"),
+            "bfV": number_or_none(row, "bfV"),
+            "derV": number_or_none(row, "derV"),
+            "vsrc": number_or_none(row, "vsrc"),
             "desV": number_or_none(row, "desV"),
             "thr": number_or_none(row, "thr"),
             "sat": number_or_none(row, "sat"),
             "src": number_or_none(row, "src"),
+            "accX": number_or_none(row, "accX"),
+            "accY": number_or_none(row, "accY"),
+            "accZ": number_or_none(row, "accZ"),
+            "gyroX": number_or_none(row, "gyroX"),
+            "gyroY": number_or_none(row, "gyroY"),
+            "gyroZ": number_or_none(row, "gyroZ"),
+            "roll": number_or_none(row, "roll"),
+            "pitch": number_or_none(row, "pitch"),
+            "yaw": number_or_none(row, "yaw"),
+            "cycle": number_or_none(row, "cycle"),
+            "rcThr": number_or_none(row, "rcThr"),
+            "rcArm": number_or_none(row, "rcArm"),
+            "rcAngle": number_or_none(row, "rcAngle"),
+            "vbat": number_or_none(row, "vbat"),
+            "amps": number_or_none(row, "amps"),
+            "diag": number_or_none(row, "diag"),
         })
 
     jumps = source_jump_count(rows, jump_threshold_m)
@@ -203,6 +232,7 @@ svg {{ display: block; width: 100%; height: 320px; background: #0d1115; border-r
       <span class="key"><span class="sw" style="background:#ff6b6b"></span>throttle</span>
       <span class="key"><span class="sw" style="background:#61dafb"></span>filtered vario</span>
       <span class="key"><span class="sw" style="background:#f7b955"></span>desired speed</span>
+      <span class="key"><span class="sw" style="background:#39d98a"></span>used vario</span>
     </div>
   </section>
   <section class="plot">
@@ -210,11 +240,22 @@ svg {{ display: block; width: 100%; height: 320px; background: #0d1115; border-r
     <svg id="srcPlot" viewBox="0 0 1100 180" role="img" aria-label="Source plot"></svg>
     <div class="hint">Red vertical markers indicate parsed altitude jumps above the configured threshold.</div>
   </section>
+  <section class="plot">
+    <div class="plot-title"><span>FC IMU / Attitude</span><span>raw accel, roll/pitch degrees</span></div>
+    <svg id="imuPlot" viewBox="0 0 1100 320" role="img" aria-label="IMU plot"></svg>
+    <div class="legend">
+      <span class="key"><span class="sw" style="background:#39d98a"></span>accZ</span>
+      <span class="key"><span class="sw" style="background:#61dafb"></span>accX</span>
+      <span class="key"><span class="sw" style="background:#f7b955"></span>accY</span>
+      <span class="key"><span class="sw" style="background:#ffffff"></span>roll</span>
+      <span class="key"><span class="sw" style="background:#b084f5"></span>pitch</span>
+    </div>
+  </section>
 </main>
 <script>
 const DATA = {payload_json};
 const W = 1100, H = 320, M = {{l:54, r:16, t:16, b:30}};
-const COLORS = {{ alt:'#39d98a', tof:'#61dafb', baro:'#f7b955', cbaro:'#b084f5', setpt:'#fff', thr:'#ff6b6b', fV:'#61dafb', desV:'#f7b955', src:'#39d98a', jump:'#ff4d4d' }};
+const COLORS = {{ alt:'#39d98a', tof:'#61dafb', baro:'#f7b955', cbaro:'#b084f5', setpt:'#fff', thr:'#ff6b6b', fV:'#61dafb', usedV:'#39d98a', desV:'#f7b955', src:'#39d98a', accX:'#61dafb', accY:'#f7b955', accZ:'#39d98a', roll:'#ffffff', pitch:'#b084f5', jump:'#ff4d4d' }};
 const pts = DATA.points;
 function finite(v) {{ return typeof v === 'number' && Number.isFinite(v); }}
 function extent(keys) {{
@@ -283,11 +324,13 @@ document.getElementById('stats').innerHTML = [
   stat('Rows', pts.length),
   stat('Duration', pts.length ? ((pts[pts.length-1].ms - pts[0].ms)/1000).toFixed(2) + 's' : 'n/a'),
   stat('Source counts', DATA.sourceSummary),
-  stat('Altitude jumps', DATA.jumps.length + ' >= ' + DATA.jumpThreshold.toFixed(2) + 'm')
+  stat('Altitude jumps', DATA.jumps.length + ' >= ' + DATA.jumpThreshold.toFixed(2) + 'm'),
+  stat('Diag mask', pts.length ? '0x' + (pts[pts.length-1].diag ?? 0).toString(16) : 'n/a')
 ].join('');
 drawLines('altPlot', ['alt','tof','baro','cbaro','setpt']);
-drawLines('ctrlPlot', ['thr','fV','desV']);
+drawLines('ctrlPlot', ['thr','fV','usedV','desV']);
 drawSource();
+drawLines('imuPlot', ['accZ','accX','accY','roll','pitch']);
 </script>
 </body>
 </html>
@@ -323,7 +366,8 @@ def summarize(path: Path, jump_threshold_m: float):
         suffix = " ..." if len(invalid_runs) > 8 else ""
         print(f"ToF invalid runs: {len(invalid_runs)}, longest={longest}ms, {preview}{suffix}")
 
-    for key in ("alt", "lowRel", "tof", "baro", "cbaro", "setpt", "fV", "desV", "thr"):
+    for key in ("alt", "lowRel", "tof", "baro", "cbaro", "setpt", "fV", "usedV", "bfV", "derV", "vsrc", "desV", "thr",
+                "accZ", "roll", "pitch", "cycle", "rcThr", "vbat"):
         low, high = span(rows, key)
         print(f"{key}: min={fmt(low)} max={fmt(high)}")
 

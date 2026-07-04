@@ -46,8 +46,10 @@ uint16_t holdCascaded(float altitude, bool isMission) {
         lastThrMax = HOVER_THROTTLE;
         lastClampedThrottle = HOVER_THROTTLE;
         lastThrottleSat = 0;
+#if SERIAL_FLIGHT_DEBUG
         Serial.printf("[CASCADE] invalid sensor data: alt=%.2f filtV=%.2f age=%ums -> LANDING\n",
             altitude, filteredVario, now - lastVarioMs);
+#endif
         startLanding(altitude);
         return HOVER_THROTTLE;
     }
@@ -112,6 +114,7 @@ uint16_t holdCascaded(float altitude, bool isMission) {
     lastClampedThrottle = (uint16_t)clampedThrottle;
     lastThrottleSat = sat;
 
+#if SERIAL_FLIGHT_DEBUG
     static uint32_t lastLogMs = 0;
     if (now - lastLogMs >= 100) {
         lastLogMs = now;
@@ -121,6 +124,7 @@ uint16_t holdCascaded(float altitude, bool isMission) {
             lastControlPUs, lastControlIUs, finalThrottle, clampedThrottle, thrMin, thrMax,
             sat > 0 ? "HI" : (sat < 0 ? "LO" : "ok"));
     }
+#endif
 
     return (uint16_t)clampedThrottle;
 }

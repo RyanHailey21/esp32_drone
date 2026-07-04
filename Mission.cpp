@@ -17,6 +17,16 @@ static uint16_t angleModeChannelValue() {
     return ANGLE_MODE_ENABLED ? 1800 : 1000;
 }
 
+static void updateAltHoldTofBaseline() {
+    if (lastTofValid && !altHoldTofBaselineValid) {
+        altHoldTofBaselineValid = true;
+        altHoldTofBaselineM = lastTofAltM;
+#if SERIAL_FLIGHT_DEBUG
+        Serial.printf("[ALT_HOLD] ToF baseline acquired late at %.2fm\n", altHoldTofBaselineM);
+#endif
+    }
+}
+
 static float lowAltitudeRelM(float fusedRelM) {
     if (lastTofValid && altHoldTofBaselineValid) {
         return max(0.0f, lastTofAltM - altHoldTofBaselineM);
@@ -39,11 +49,13 @@ static void printFlightLogHeader(const char* label) {
     flightLogAppendf("[RUN] %s hover=%u target=%.2f kp=%.2f ki=%.2f kd=%.2f tofFull=%.2f tofZero=%.2f\n",
         label, HOVER_THROTTLE, (float)ALT_HOLD_TARGET_M, (float)HOLD_KP, (float)HOLD_KI,
         (float)HOLD_KD, (float)TOF_BLEND_FULL_M, (float)TOF_BLEND_ZERO_M);
-    flightLogAppend("[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,rawV,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat\n");
+    flightLogAppend("[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,usedV,bfV,derV,vsrc,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat,accX,accY,accZ,gyroX,gyroY,gyroZ,roll,pitch,yaw,cycle,sensors,rcThr,rcArm,rcAngle,vbat,amps,diag\n");
+#if SERIAL_FLIGHT_DEBUG
     Serial.printf("[RUN] %s hover=%u target=%.2f kp=%.2f ki=%.2f kd=%.2f tofFull=%.2f tofZero=%.2f\n",
         label, HOVER_THROTTLE, (float)ALT_HOLD_TARGET_M, (float)HOLD_KP, (float)HOLD_KI,
         (float)HOLD_KD, (float)TOF_BLEND_FULL_M, (float)TOF_BLEND_ZERO_M);
-    Serial.println("[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,rawV,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat");
+    Serial.println("[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,usedV,bfV,derV,vsrc,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat,accX,accY,accZ,gyroX,gyroY,gyroZ,roll,pitch,yaw,cycle,sensors,rcThr,rcArm,rcAngle,vbat,amps,diag");
+#endif
 }
 
 static void logFlightSample(uint32_t elapsedMs, const char* phase, float altitude,
@@ -51,7 +63,7 @@ static void logFlightSample(uint32_t elapsedMs, const char* phase, float altitud
     static uint32_t lastLogMs = 0;
     if (elapsedMs < lastLogMs || elapsedMs - lastLogMs >= 50) {
         lastLogMs = elapsedMs;
-        flightLogAppendf("[FLT] %lu,%d,%s,%.3f,%.3f,%.3f,%u,%.3f,%.3f,%u,%.3f,%.3f,%d,%.3f,%.3f,%.3f,%.0f,%.0f,%.0f,%u,%.0f,%.0f,%d\n",
+        flightLogAppendf("[FLT] %lu,%d,%s,%.3f,%.3f,%.3f,%u,%.3f,%.3f,%u,%.3f,%.3f,%d,%d,%d,%u,%.3f,%.3f,%.3f,%.0f,%.0f,%.0f,%u,%.0f,%.0f,%d,%d,%d,%d,%d,%d,%d,%.1f,%.1f,%d,%u,%u,%u,%u,%u,%.1f,%.2f,%u\n",
             (unsigned long)elapsedMs,
             (int)state,
             phase,
@@ -65,6 +77,9 @@ static void logFlightSample(uint32_t elapsedMs, const char* phase, float altitud
             internalSetpoint,
             filteredVario,
             lastVario,
+            lastFcVario,
+            lastDerivedVario,
+            lastVarioSource,
             lastDesiredVspeed,
             lastAltError,
             lastVspeedError,
@@ -74,31 +89,24 @@ static void logFlightSample(uint32_t elapsedMs, const char* phase, float altitud
             throttle,
             lastThrMin,
             lastThrMax,
-            (int)lastThrottleSat);
-        Serial.printf("[FLT] %lu,%d,%s,%.3f,%.3f,%.3f,%u,%.3f,%.3f,%u,%.3f,%.3f,%d,%.3f,%.3f,%.3f,%.0f,%.0f,%.0f,%u,%.0f,%.0f,%d\n",
-            (unsigned long)elapsedMs,
-            (int)state,
-            phase,
-            altitude,
-            lowRel,
-            lastTofValid ? lastTofAltM : -1.0f,
-            lastTofWeightPct,
-            lastBaroAltM,
-            lastCorrectedBaroAltM,
-            lastAltitudeSource,
-            internalSetpoint,
-            filteredVario,
-            lastVario,
-            lastDesiredVspeed,
-            lastAltError,
-            lastVspeedError,
-            lastControlPUs,
-            lastControlIUs,
-            lastRawThrottle,
-            throttle,
-            lastThrMin,
-            lastThrMax,
-            (int)lastThrottleSat);
+            (int)lastThrottleSat,
+            lastFcAccX,
+            lastFcAccY,
+            lastFcAccZ,
+            lastFcGyroX,
+            lastFcGyroY,
+            lastFcGyroZ,
+            lastFcRollDeciDeg / 10.0f,
+            lastFcPitchDeciDeg / 10.0f,
+            lastFcYawDeg,
+            lastFcCycleTimeUs,
+            lastFcSensorsMask,
+            lastFcRcThrottle,
+            lastFcRcArm,
+            lastFcRcAngle,
+            lastFcVbatDeciV / 10.0f,
+            lastFcAmperageCentiA / 100.0f,
+            lastFcDiagMask);
     }
 }
 
@@ -117,7 +125,7 @@ static void pushTelemetry(float rawAlt, float altitude) {
 
     int32_t cbaroCm   = (int32_t)(lastCorrectedBaroAltM * 100.0f);
 
-    uint8_t pkt[43];
+    uint8_t pkt[77];
     memcpy(pkt,      &altCm,                 4);
     memcpy(pkt + 4,  &relCm,                 4);
     pkt[8] = (uint8_t)state;
@@ -136,7 +144,25 @@ static void pushTelemetry(float rawAlt, float altitude) {
     memcpy(pkt + 34, &baroCm,                4);
     pkt[38] = lastAltitudeSource;
     memcpy(pkt + 39, &cbaroCm,               4);
-    telemetryChar->setValue(pkt, 43);
+    memcpy(pkt + 43, &lastFcDiagMask,        2);
+    memcpy(pkt + 45, &lastFcAccX,            2);
+    memcpy(pkt + 47, &lastFcAccY,            2);
+    memcpy(pkt + 49, &lastFcAccZ,            2);
+    memcpy(pkt + 51, &lastFcGyroX,           2);
+    memcpy(pkt + 53, &lastFcGyroY,           2);
+    memcpy(pkt + 55, &lastFcGyroZ,           2);
+    memcpy(pkt + 57, &lastFcRollDeciDeg,     2);
+    memcpy(pkt + 59, &lastFcPitchDeciDeg,    2);
+    memcpy(pkt + 61, &lastFcYawDeg,          2);
+    memcpy(pkt + 63, &lastFcCycleTimeUs,     2);
+    memcpy(pkt + 65, &lastFcSensorsMask,     2);
+    memcpy(pkt + 67, &lastFcRcThrottle,      2);
+    memcpy(pkt + 69, &lastFcRcArm,           2);
+    memcpy(pkt + 71, &lastFcRcAngle,         2);
+    pkt[73] = lastFcVbatDeciV;
+    memcpy(pkt + 74, &lastFcAmperageCentiA,  2);
+    pkt[76] = lastVarioSource;
+    telemetryChar->setValue(pkt, 77);
     telemetryChar->notify();
 }
 
@@ -165,8 +191,10 @@ void runMissionLoop() {
         static uint32_t lastVarioWarnMs = 0;
         if (millis() - lastVarioWarnMs >= 500) {
             lastVarioWarnMs = millis();
-            Serial.printf("[VARIO] stale! lastVarioMs=%u raw=%d filtV=%.2f\n",
-                lastVarioMs, lastVario, filteredVario);
+#if SERIAL_FLIGHT_DEBUG
+        Serial.printf("[VARIO] stale! lastVarioMs=%u raw=%d filtV=%.2f\n",
+            lastVarioMs, lastVario, filteredVario);
+#endif
         }
     }
 
@@ -243,8 +271,10 @@ void runMissionLoop() {
             sendRC();
             digitalWrite(STATUS_LED, millis() % 100 < 50);
 
+#if SERIAL_FLIGHT_DEBUG
             Serial.printf("[SPRINT] t=%dms  alt=%.2fm  throttle=%d\n",
                 missionTime, altitude, channels[CH_THROTTLE]);
+#endif
 
             if (missionTime >= 8000) { state = CUT; break; }
 
@@ -265,8 +295,10 @@ void runMissionLoop() {
             sendRC();
             digitalWrite(STATUS_LED, HIGH);
 
+#if SERIAL_FLIGHT_DEBUG
             Serial.printf("[HOLD] t=%dms  alt=%.2fm  setpt=%.2fm  thr=%d\n",
                 missionTime, altitude, internalSetpoint, thr);
+#endif
 
             if (missionTime >= 8000) { state = CUT; break; }
 
@@ -284,8 +316,10 @@ void runMissionLoop() {
             sendRC();
             digitalWrite(STATUS_LED, millis() % 50 < 25);
 
+#if SERIAL_FLIGHT_DEBUG
             Serial.printf("[PUNCH] t=%dms  alt=%.2fm  throttle=%d\n",
                 missionTime, altitude, channels[CH_THROTTLE]);
+#endif
 
             if (missionTime >= 8000) {
                 state = CUT;
@@ -298,8 +332,10 @@ void runMissionLoop() {
             channels[CH_ARM]      = 1000;
             channels[CH_THROTTLE] = 1000;
             sendRC();
+#if SERIAL_FLIGHT_DEBUG
             Serial.printf("[CUT] Final alt=%.2fm  mission_time=%dms\n",
                 altitude, missionTime);
+#endif
             state = DONE;
             break;
 
@@ -318,8 +354,10 @@ void runMissionLoop() {
             sendRC();
             digitalWrite(STATUS_LED, millis() % 500 < 250);
 
+#if SERIAL_FLIGHT_DEBUG
             Serial.printf("[HOVER] throttle=%d  target=%d  angleAux=%d\n",
                 channels[CH_THROTTLE], (int)HOVER_THROTTLE, channels[CH_ANGLE]);
+#endif
             break;
 
         // ── AUTO HOVER CAL ───────────────────────────────────
@@ -335,7 +373,9 @@ void runMissionLoop() {
                 if (calThrottle < CAL_MAX_THROTTLE) calThrottle += CAL_STEP_US;
             }
 
+#if SERIAL_FLIGHT_DEBUG
             Serial.printf("[AUTO_HOVER] alt=%.2fm  throttle=%d\n", altitude, calThrottle);
+#endif
 
             if (altitude >= CAL_LIFTOFF_M) calLiftoffCount++;
             else                            calLiftoffCount = 0;
@@ -346,8 +386,10 @@ void runMissionLoop() {
                 channels[CH_THROTTLE] = HOVER_THROTTLE;
                 sendRC();
                 state = HOVER_TEST;
+#if SERIAL_FLIGHT_DEBUG
                 Serial.printf("[AUTO_HOVER] liftoff confirmed (%d counts), HOVER_THROTTLE=%d -> HOVER TEST\n",
                     calLiftoffCount, HOVER_THROTTLE);
+#endif
                 break;
             }
 
@@ -363,6 +405,7 @@ void runMissionLoop() {
 
             uint16_t thr;
             uint32_t timeInAltHold = millis() - (armTime + ARMING_MS);
+            updateAltHoldTofBaseline();
             float lowRel = lowAltitudeRelM(altitude);
             float controlAlt = lastTofValid && lastTofWeightPct >= 80 ? lowRel : altitude;
             if (timeInAltHold < BARO_SETTLE_MS) {
@@ -376,9 +419,12 @@ void runMissionLoop() {
                 altHoldLiftoffCount = 0;
                 thr = takeoffGuardThrottle(timeInAltHold, lastTofValid);
                 resetCascadeController(0.0f);
-                if (timeInAltHold % 100 < 20)
+                if (timeInAltHold % 100 < 20) {
+#if SERIAL_FLIGHT_DEBUG
                     Serial.printf("[ALT_HOLD] settle  t=%ums rawAlt=%.2f launchAlt=%.2f rel=%.2f tofRel=%.2f tofW=%u\n",
                         timeInAltHold, rawAlt, launchAlt, altitude, lowRel, lastTofWeightPct);
+#endif
+                }
             } else if (!altHoldCascadeLatched) {
                 altHoldGuardPhase = 1;
                 bool tofConfirmed = lastTofValid && lastTofWeightPct >= 80 && lowRel >= TAKEOFF_ALT_M;
@@ -393,20 +439,27 @@ void runMissionLoop() {
                     altHoldGuardPhase = 2;
                     resetCascadeController(controlAlt);
                     thr = holdCascaded(controlAlt, false);
+#if SERIAL_FLIGHT_DEBUG
                     Serial.printf("[ALT_HOLD] ToF liftoff latched rel=%.2f tofRel=%.2f tof=%.2f count=%u\n",
                         altitude, lowRel, lastTofAltM, altHoldLiftoffCount);
+#endif
                 } else if (timeInAltHold < GROUND_GUARD_TIMEOUT_MS) {
                     thr = takeoffGuardThrottle(timeInAltHold, lastTofValid);
                     resetCascadeController(controlAlt);
-                    if (timeInAltHold % 100 < 20)
+                    if (timeInAltHold % 100 < 20) {
+#if SERIAL_FLIGHT_DEBUG
                         Serial.printf("[ALT_HOLD] guard   t=%ums rawAlt=%.2f launchAlt=%.2f rel=%.2f tofRel=%.2f tofW=%u count=%u thr=%u\n",
                             timeInAltHold, rawAlt, launchAlt, altitude, lowRel, lastTofWeightPct, altHoldLiftoffCount, thr);
+#endif
+                    }
                 } else {
                     thr = HOVER_THROTTLE;
                     channels[CH_THROTTLE] = thr;
                     sendRC();
+#if SERIAL_FLIGHT_DEBUG
                     Serial.printf("[ALT_HOLD] ground guard expired without ToF liftoff confirmation, landing rel=%.2f tofRel=%.2f tofW=%u\n",
                         altitude, lowRel, lastTofWeightPct);
+#endif
                     startLanding(controlAlt);
                     break;
                 }
@@ -436,7 +489,9 @@ void runMissionLoop() {
             float holdTarget  = constrain((float)ALT_HOLD_TARGET_M, ALT_HOLD_TARGET_MIN_M, ALT_HOLD_TARGET_MAX_M);
             float safeCeiling = holdTarget + 2.0f;
             if (controlAlt > safeCeiling) {
+#if SERIAL_FLIGHT_DEBUG
                 Serial.printf("[ALT_HOLD] safety ceiling %.1fm exceeded at %.2fm, landing\n", safeCeiling, controlAlt);
+#endif
                 startLanding(controlAlt);
             }
             break;
@@ -479,8 +534,10 @@ void runMissionLoop() {
             sendRC();
             logFlightSample(millis() - landingStartMs, "landing", landingAlt, lowRel, channels[CH_THROTTLE]);
 
+#if SERIAL_FLIGHT_DEBUG
             Serial.printf("[LANDING] alt=%.2fm  tofRel=%.2f  filtV=%.2f  thr=%d\n",
                 landingAlt, lowRel, filteredVario, channels[CH_THROTTLE]);
+#endif
             break;
         }
 

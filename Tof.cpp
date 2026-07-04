@@ -41,8 +41,14 @@ bool readTofAltitude(float& altitudeM) {
     if (tofSensor.timeoutOccurred()) return false;
 
     float measuredM = distanceMm / 1000.0f;
-    if (measuredM < TOF_VALID_MIN_M || measuredM > TOF_VALID_MAX_M) {
+    if (measuredM > TOF_VALID_MAX_M) {
         return false;
+    }
+    if (measuredM < TOF_VALID_MIN_M) {
+        // Mounted close to the ground, the VL53L1X can report below its useful
+        // range while the aircraft is still sitting on the floor. Treat that
+        // as a valid ground reference instead of blocking ToF baseline setup.
+        measuredM = 0.0f;
     }
 
     uint32_t nowMs = millis();

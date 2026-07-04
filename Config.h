@@ -32,8 +32,13 @@
 #define MOTOR_DUTY      255
 
 // ── MSP Commands ─────────────────────────────────────────────
-#define MSP_SET_RAW_RC  200
+#define MSP_STATUS      101
+#define MSP_RAW_IMU     102
+#define MSP_RC          105
+#define MSP_ATTITUDE    108
 #define MSP_ALTITUDE    109
+#define MSP_ANALOG      110
+#define MSP_SET_RAW_RC  200
 
 // ── RC Channel Indices ────────────────────────────────────────
 #define CH_THROTTLE  2
@@ -65,6 +70,10 @@
 #define FLIGHT_LOG_BYTES       32768
 #define FLIGHT_LOG_CHUNK_BYTES 220
 
+// Serial output is not useful during flight and can add timing jitter. Keep
+// flight data in the BLE telemetry packet and downloadable in-memory CSV.
+#define SERIAL_FLIGHT_DEBUG    0
+
 // ── BLE Command IDs ──────────────────────────────────────────
 #define CMD_HOVER_TEST      1
 #define CMD_START_MISSION   2
@@ -79,7 +88,7 @@
 #define CAL_STEP_US         5
 #define CAL_STEP_MS         250
 #define CAL_LIFTOFF_M       0.15f
-#define CAL_GE_OFFSET_US    50   // ground effect: free-air hover needs more throttle than near-ground liftoff
+#define CAL_GE_OFFSET_US    0    // no automatic hover bump; tune free-air offset explicitly from logs
 #define CAL_TIMEOUT_MS      30000
 
 // ── Landing Constants ────────────────────────────────────────
@@ -119,9 +128,10 @@
 #define NEAR_TARGET_FACTOR      0.35f   // minimum speed factor within near-target zone
 
 // Inner loop: vario filtering
-#define VARIO_TAU_S             0.30f   // seconds, time-based low-pass constant for vario
+#define VARIO_TAU_S             0.20f   // seconds, light low-pass; BF vario is already filtered
 #define VARIO_STALE_MS          500     // ms before vario reading is considered stale
 #define VARIO_MAX_PLAUSIBLE_CMS 800     // cm/s — implausible above this (~8 m/s)
+#define USE_BF_VARIO_PRIMARY    1       // prefer Betaflight MSP_ALTITUDE vario; derived stays fallback
 #define VSPEED_I_MAX_US         150.0f  // max integral throttle contribution in us
 
 // Throttle authority around hover
@@ -136,10 +146,10 @@
 
 // Takeoff ground guard — avoids integrator windup and baro-spike at liftoff
 #define TAKEOFF_ALT_M            0.12f  // ToF-confirmed liftoff threshold before closed-loop engages
-#define TAKEOFF_NUDGE_US         80     // µs above HOVER_THROTTLE for ground-phase thrust
-#define TAKEOFF_RAMP_US_PER_S    80     // additional takeoff throttle ramp while waiting for liftoff
-#define TAKEOFF_MAX_OFFSET_US    300    // max takeoff throttle above HOVER_THROTTLE
-#define TAKEOFF_INVALID_TOF_MAX_OFFSET_US 170  // cap takeoff thrust until ToF confirms altitude
+#define TAKEOFF_NUDGE_US         40     // us above HOVER_THROTTLE for ground-phase thrust
+#define TAKEOFF_RAMP_US_PER_S    40     // additional takeoff throttle ramp while waiting for liftoff
+#define TAKEOFF_MAX_OFFSET_US    200    // max takeoff throttle above HOVER_THROTTLE
+#define TAKEOFF_INVALID_TOF_MAX_OFFSET_US 100  // cap takeoff thrust until ToF confirms altitude
 #define TAKEOFF_CONFIRM_SAMPLES  3      // consecutive ToF-valid samples before cascade latch
 #define BARO_SETTLE_MS           500    // ms after throttle step for baro to settle at hover pressure
 #define GROUND_GUARD_TIMEOUT_MS  8000   // ms before aborting if ToF/fused altitude hasn't confirmed liftoff

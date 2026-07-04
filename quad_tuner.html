@@ -130,12 +130,16 @@
         </div>
         <div class="dash-grid2">
           <div class="dash-cell">
-            <div class="dash-lbl">FC RAW</div>
+            <div class="dash-lbl">BF VARIO</div>
             <div class="dash-val" id="d-vfc">—</div>
           </div>
           <div class="dash-cell">
             <div class="dash-lbl">DERIVED</div>
             <div class="dash-val" id="d-vd">—</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">VARIO SRC</div>
+            <div class="dash-val" id="d-vsrc">---</div>
           </div>
         </div>
         <div class="dash-grid3">
@@ -152,7 +156,7 @@
             <div class="dash-val" id="d-baro">---</div>
           </div>
         </div>
-        <div class="dash-grid2">
+        <div class="dash-grid3">
           <div class="dash-cell">
             <div class="dash-lbl">ALT SOURCE</div>
             <div class="dash-val" id="d-src">---</div>
@@ -195,6 +199,35 @@
         </div>
 
         <!-- Guard phase pills — visible in ALT_HOLD only -->
+        <div class="dash-grid3">
+          <div class="dash-cell">
+            <div class="dash-lbl">FC MSP</div>
+            <div class="dash-val" id="d-fc-msp">---</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">FC ATT</div>
+            <div class="dash-val" id="d-fc-att">---</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">FC ACC</div>
+            <div class="dash-val" id="d-fc-acc">---</div>
+          </div>
+        </div>
+        <div class="dash-grid3">
+          <div class="dash-cell">
+            <div class="dash-lbl">FC GYRO</div>
+            <div class="dash-val" id="d-fc-gyro">---</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">FC RC</div>
+            <div class="dash-val" id="d-fc-rc">---</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">FC STATUS</div>
+            <div class="dash-val" id="d-fc-status">---</div>
+          </div>
+        </div>
+
         <div class="dash-phases" id="d-phases" style="display:none">
           <span class="dash-ph ph-guard" id="d-ph0">SETTLING</span>
           <span class="dash-ph-sep">›</span>

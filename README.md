@@ -257,7 +257,7 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 | Button | Behavior |
 |---|---|
 | Hover Test | Arms → fixed `HOVER_THROTTLE`. Adjust slider live to find neutral buoyancy. |
-| Auto Hover Cal | Arms → ramps throttle until 5 consecutive readings above 15cm → writes `HOVER_THROTTLE` (with +50µs ground-effect offset) → stays in Hover Test. |
+| Auto Hover Cal | Arms → ramps throttle until 5 consecutive readings above 15cm → writes `HOVER_THROTTLE` with no automatic offset → stays in Hover Test. |
 | Alt Hold | Arms → PID holds `ALT_HOLD_TARGET_M`. BLE disconnect triggers auto-land. |
 | Start Mission | Arms → full sprint/hold/punch/cut sequence. BLE disconnect ignored during mission. |
 | Land | In test modes: smooth velocity-based landing. In mission/idle states: immediate disarm. |
@@ -266,7 +266,7 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 | Bench Mode | Simulates altitude for desk testing. Never fly with this on. |
 | Angle Mode | Drives AUX2 high/low for Betaflight Angle mode. Can be changed only while idle or done. |
 
-**Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, throttle, selected vario, filtered vario, FC raw vario, derived vario, ToF altitude, ToF blend weight, altitude source, raw baro, and corrected baro at ~10Hz via BLE notify.
+**Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, throttle, selected vario, filtered vario, Betaflight vario, derived fallback vario, active vario source, ToF altitude, ToF blend weight, altitude source, raw baro, and corrected baro at ~10Hz via BLE notify.
 
 **Active state strip** appears whenever not idle — shows state name, altitude, throttle, and a KILL button. During Auto Hover Cal an inline progress panel shows altitude bar (0–50cm with 15cm threshold marker) and throttle bar. On cal completion a notification shows the detected hover throttle and auto-syncs the slider.
 
@@ -278,13 +278,13 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 
 | Parameter | Default | Encoding | Description |
 |---|---|---|---|
-| `HOVER_THROTTLE` | 1255 µs | uint16 | Neutral hover throttle. Use Auto Hover Cal for first-pass, then fine-tune in Hover Test. |
+| `HOVER_THROTTLE` | 1430 µs | uint16 | Current measured break-ground/hover baseline. Fine-tune in Hover Test before altitude hold. |
 | `SPRINT_THROTTLE` | 1850 µs | uint16 | Full climb throttle during sprint. Higher = faster to 60ft = more punch time. |
 | `SPRINT_CUTOFF_M` | 17.0 m | float×100 | Altitude to stop sprinting. Keep below 18.3m to absorb baro lag. |
 | `TARGET_ALT_M` | 18.3 m | float×10 | Mission hold target. 60ft = 18.3m. Used by `HOLDING` after sprint cutoff. |
 | `ALT_HOLD_TARGET_M` | 1.5 m | float×10 | Test target used only by the BLE `ALT_HOLD` command; firmware clamps active command to 0.5–5.0m. |
-| `HOLD_KP` | 1.2 | float×10 | Outer altitude P: altitude error (m) to desired vertical speed (m/s). |
-| `HOLD_KI` | 3.0 | float×10 | Inner speed I: integrated vertical-speed error to throttle offset (µs). Keep low to avoid windup. |
+| `HOLD_KP` | 1.1 | float×10 | Outer altitude P: altitude error (m) to desired vertical speed (m/s). |
+| `HOLD_KI` | 0.0 | float×10 | Inner speed I: integrated vertical-speed error to throttle offset (µs). Start disabled; add only after logs show steady bias. |
 | `HOLD_KD` | 120.0 | float×10 | Inner speed P: vertical-speed error (m/s) to throttle offset (µs). Tune before adding integral. |
 | `PUNCH_START_MS` | 7500 ms | uint32 | Mission clock time to begin final burst. Later = more exit velocity. |
 | `PUNCH_THROTTLE` | 2000 µs | uint16 | Max throttle for punch phase. |
@@ -299,8 +299,10 @@ The hold controller runs in both `HOLDING` (mission) and `ALT_HOLD` (test) state
 fused_altitude  = ToF/baro blend at low altitude, corrected baro above ToF range
 alt_error       = internal_setpoint - fused_altitude
 desired_vspeed  = clamp(HOLD_KP * alt_error, -max_descent, max_climb)
-derived_vario   = smoothed derivative of fused_altitude
-filtered_vario  = time-based low-pass of derived_vario
+bf_vario        = Betaflight MSP_ALTITUDE vertical-speed estimate, when available
+derived_vario   = smoothed derivative of fused_altitude, used as fallback
+used_vario      = bf_vario when plausible, otherwise derived_vario
+filtered_vario  = time-based low-pass of used_vario
 vspeed_error    = desired_vspeed - filtered_vario
 candidate_i     = output-limited(vspeed_integral + vspeed_error * dt)
 
@@ -309,11 +311,11 @@ throttle = HOVER_THROTTLE
          + HOLD_KI * vspeed_integral
 ```
 
-The VL53L1X ToF sensor is the primary low-altitude source. It is trusted fully below `TOF_BLEND_FULL_M = 3.6m`, blended out to baro by `TOF_BLEND_ZERO_M = 3.8m`, and ignored when invalid/out of range above `TOF_VALID_MAX_M = 3.8m`. Out-of-range readings are never treated as "4m"; the controller falls back to corrected baro with a learned baro-to-ToF offset. Brief low-altitude ToF dropouts are bridged for `TOF_HOLDOVER_MS = 300ms` so the controller does not bounce between ToF and baro on single missed reads. Altitude fusion and the ToF jump filter are reset at each mission/cal/Alt Hold start so a previous run cannot leave a stale baro-to-ToF offset. Single-sample ToF jumps are rejected above `max(TOF_MAX_STEP_MIN_M, TOF_MAX_STEP_MPS * dt)`.
+The VL53L1X ToF sensor is the primary low-altitude source. It is trusted fully below `TOF_BLEND_FULL_M = 3.6m`, blended out to baro by `TOF_BLEND_ZERO_M = 3.8m`, and ignored when invalid/out of range above `TOF_VALID_MAX_M = 3.8m`. Readings below `TOF_VALID_MIN_M` are treated as valid ground contact at `0.0m`, because the sensor is mounted close enough to the ground that it can start below its useful range. Out-of-range high readings are never treated as "4m"; the controller falls back to corrected baro with a learned baro-to-ToF offset. Brief low-altitude ToF dropouts are bridged for `TOF_HOLDOVER_MS = 300ms` so the controller does not bounce between ToF and baro on single missed reads. Altitude fusion and the ToF jump filter are reset at each mission/cal/Alt Hold start so a previous run cannot leave a stale baro-to-ToF offset. Single-sample ToF jumps are rejected above `max(TOF_MAX_STEP_MIN_M, TOF_MAX_STEP_MPS * dt)`.
 
-Betaflight 4.4.x on this FC reports `MSP_ALTITUDE` altitude correctly but has been observed to send `0` in the MSP vario field. The firmware therefore keeps FC raw vario as a diagnostic only and uses a smoothed fused-altitude-derived vario for control.
+Betaflight 4.4.3 with `VARIO` enabled exposes a filtered vertical-speed estimate in the `MSP_ALTITUDE` vario field. With `USE_BF_VARIO_PRIMARY = 1`, the firmware uses that Betaflight vario as primary whenever it is within the plausible range, including true zero as a valid hover reading. The ESP32 fused-altitude derivative remains as a fallback if the FC vario is implausible or if this flag is disabled for a build without BF vario support.
 
-The vario filter is time-based (`VARIO_TAU_S = 0.30s`) so smoothing remains stable with loop-rate jitter. If vario becomes stale or implausible while altitude hold is active, the controller clears the integrator and transitions to `LANDING` instead of holding the last velocity estimate.
+The vario filter is time-based (`VARIO_TAU_S = 0.20s`) so smoothing remains stable with loop-rate jitter without adding much lag on top of Betaflight's filtered vario. If vario becomes stale or implausible while altitude hold is active, the controller clears the integrator and transitions to `LANDING` instead of holding the last velocity estimate.
 
 Current speed limits:
 
@@ -324,18 +326,31 @@ Current speed limits:
 
 The internal setpoint ramps at `ALT_RAMP_RATE_MPS = 1.0 m/s`. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 150us`). Low-altitude `ALT_HOLD` can brake down to `MIN_ALT_HOLD_THROTTLE_US = 1000us`; mission `HOLDING` keeps `MIN_MISSION_THROTTLE_US = 1050us` to preserve attitude authority.
 
-**Landing** uses a velocity controller targeting `DESCENT_RATE_MPS = 0.4 m/s` downward, driven by the same filtered derived vario. Motors cut when altitude drops below 15cm after actual descent is detected, or after a 30s timeout.
+**Landing** uses a velocity controller targeting `DESCENT_RATE_MPS = 0.4 m/s` downward, driven by the same filtered selected vario. Motors cut when altitude drops below 15cm after actual descent is detected, or after a 30s timeout.
 
 During `ALT_HOLD`, the serial monitor prints a per-run CSV-style log:
 
 ```
 [RUN] ALT_HOLD hover=...
-[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,rawV,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat
+[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,usedV,bfV,derV,vsrc,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat
 ```
 
-Use `rawThr` versus `thr` plus `sat` to see throttle limiting. `sat=-1` means the controller wanted less throttle than the configured lower clamp; `sat=1` means it wanted more than the upper clamp. `tofW` confirms whether the controller was using ToF (`100`) or falling back toward baro. `src` is `0=baro`, `1=ToF`, `2=blend`, `3=ToF holdover`; `cbaro` is the learned-offset corrected baro altitude.
+Use `rawThr` versus `thr` plus `sat` to see throttle limiting. `sat=-1` means the controller wanted less throttle than the configured lower clamp; `sat=1` means it wanted more than the upper clamp. `tofW` confirms whether the controller was using ToF (`100`) or falling back toward baro. `src` is `0=baro`, `1=ToF`, `2=blend`, `3=ToF holdover`; `cbaro` is the learned-offset corrected baro altitude. `vsrc` is `0=derived fallback`, `1=Betaflight vario`.
+
+The log also includes FC-side diagnostics when MSP replies are available:
+
+| Field | Source |
+|---|---|
+| `accX/Y/Z`, `gyroX/Y/Z` | `MSP_RAW_IMU` |
+| `roll`, `pitch`, `yaw` | `MSP_ATTITUDE` |
+| `cycle`, `sensors` | `MSP_STATUS` |
+| `rcThr`, `rcArm`, `rcAngle` | `MSP_RC`, the FC's view of MSP RC input |
+| `vbat`, `amps` | `MSP_ANALOG` |
+| `diag` | bitmask of received diagnostic groups: bit0 raw IMU, bit1 attitude, bit2 status, bit3 analog, bit4 RC |
 
 The same log is also stored in ESP32 RAM during the run. After landing, reconnect the web UI and click **Download Last Log** in the Params tab to save the latest run as a CSV. The buffer is `FLIGHT_LOG_BYTES = 32768`, enough for roughly one short Alt Hold test at the current 50ms sample interval; if it fills, the log ends with `[LOG] truncated`.
+
+Normal flight builds keep `SERIAL_FLIGHT_DEBUG = 0`, so high-rate flight diagnostics are not printed over USB serial. Use the BLE telemetry panel and **Download Last Log** for flight analysis. Set `SERIAL_FLIGHT_DEBUG = 1` only for tethered bench testing.
 
 For desktop analysis, run:
 
@@ -351,13 +366,27 @@ python tools\parse_flight_log.py flight_logs\quad-flight-log-2026-07-03T19-33-51
 
 The preview is separate from the BLE web app. It writes `*.preview.html` beside the CSV and plots altitude sources, setpoint, throttle, vario, source selection, and parsed jump markers.
 
+### Betaflight MSP Setup
+
+No extra Betaflight feature is required to read `MSP_RAW_IMU`, `MSP_ATTITUDE`, `MSP_STATUS`, `MSP_ANALOG`, or `MSP_RC`; they are normal MSP telemetry replies. The UART between the ESP32 and FC must have MSP enabled, and `RX_MSP` must remain enabled if the ESP32 is also sending RC commands.
+
+For the BetaFPV F4 on physical `T1/R1`, the expected CLI shape is:
+
+```text
+feature RX_MSP
+serial 0 1 115200 57600 0 115200
+save
+```
+
+`serial 0` is UART1 on this target. USB VCP usually appears as `serial 20`. In the Ports tab, this corresponds to enabling **MSP** on UART1 at 115200. Keep the receiver configured for MSP if this ESP32 is the RC source.
+
 ---
 
 ## Tuning Sequence
 
 1. **Accelerometer calibration** — drone flat and still, Betaflight Setup → Calibrate Accelerometer
 2. **Auto Hover Cal** — gets a first-pass `HOVER_THROTTLE` automatically
-3. **Hover Test** — fine-tune `HOVER_THROTTLE` until neutrally buoyant. Note: cal detects near-ground liftoff (+50µs ground-effect offset applied automatically)
+3. **Hover Test** — fine-tune `HOVER_THROTTLE` until neutrally buoyant. Auto Hover Cal only provides a first-pass liftoff value.
 4. **Alt Hold test** — command a low target (e.g. 1.5m), verify PID holds it. Tune `HOLD_KP/KI/KD`:
    - Oscillating → raise `HOLD_KD`, lower `HOLD_KP`
    - Steady sag/climb → raise `HOLD_KI`
@@ -372,11 +401,11 @@ The preview is separate from the BLE web app. It writes `*.preview.html` beside 
 
 - Starts at `CAL_START_THROTTLE = 1150 µs`, steps up 5µs every 250ms
 - Liftoff confirmed after **5 consecutive readings** above 15cm (debounce against baro noise)
-- Final `HOVER_THROTTLE = calThrottle + 50 µs` (ground-effect offset — free-air hover needs more throttle than near-ground liftoff)
+- Final `HOVER_THROTTLE = calThrottle`; any free-air offset should be tuned explicitly in Hover Test.
 - `launchAlt` is set at the ARMING→CAL transition (after 1500ms motor settle), not before, to avoid baro drift pre-triggering the threshold
 - Cal times out after 30s or at `CAL_MAX_THROTTLE = 1650 µs`
 
-`ALT_HOLD` test mode also has a takeoff ground guard. For the first 500ms after entering `ALT_HOLD`, `launchAlt` and the ToF baseline are refreshed while sensors settle. Until ToF is valid, takeoff thrust is capped at `HOVER_THROTTLE + 170us`; once ToF is valid, it can ramp from `HOVER_THROTTLE + 80us` by `80us/s` up to `HOVER_THROTTLE + 300us`. Cascade only starts after 3 consecutive ToF-valid samples above 12cm, then latches and does not fall back to guard. While waiting, the cascade setpoint tracks current altitude so the controller does not command downward thrust immediately after liftoff. If liftoff is still not confirmed after 8s, it aborts to `LANDING`.
+`ALT_HOLD` test mode also has a takeoff ground guard. For the first 500ms after entering `ALT_HOLD`, `launchAlt` and the ToF baseline are refreshed while sensors settle. If ToF is too close or initially invalid, the baseline is acquired from the first valid low reading that appears. Until ToF is valid, takeoff thrust is capped at `HOVER_THROTTLE + 100us`; once ToF is valid, it can ramp from `HOVER_THROTTLE + 40us` by `40us/s` up to `HOVER_THROTTLE + 200us`. Cascade only starts after 3 consecutive ToF-valid samples above 12cm, then latches and does not fall back to guard. While waiting, the cascade setpoint tracks current altitude so the controller does not command downward thrust immediately after liftoff. If liftoff is still not confirmed after 8s, it aborts to `LANDING`.
 
 ---
 
@@ -397,7 +426,7 @@ flowchart LR
         W2["CBfloat\ncutoff / target alt / KP / KI / KD"]
         W3["CBu32\npunch start ms"]
         W4["CBcommand\nhover / cal / alt hold / mission / disarm"]
-        TEL["telemetryChar NOTIFY\n38-byte packet @10Hz\nalt, state, throttle, vario, angle, ToF diagnostics"]
+        TEL["telemetryChar NOTIFY\nlive packet @10Hz\nalt, state, throttle, vario, angle, ToF + FC diagnostics"]
     end
 
     subgraph PARAMS["VOLATILE PARAMS"]
@@ -414,17 +443,17 @@ flowchart LR
     end
 
     subgraph SENSOR["ALTITUDE SENSORS"]
-        MSPALT["MSP_ALTITUDE over UART1\nbaro alt_cm + FC raw vario"]
+        MSPALT["MSP_ALTITUDE over UART1\nbaro alt_cm + Betaflight vario"]
         TOFALT["VL53L1X over I2C\nlow-altitude AGL"]
-        ALT["getAltitude()\nfused altitude\n+ derived vario fallback"]
+        ALT["getAltitude()\nfused altitude\n+ BF vario / derived fallback"]
     end
 
     subgraph SM["STATE MACHINE ~50Hz"]
         SPR["SPRINTING\nchannels[2] = ST"]
-        HLD["HOLDING / ALT_HOLD\nPID(KP,KI,KD,derived vario)"]
+        HLD["HOLDING / ALT_HOLD\nPID(KP,KI,KD,selected vario)"]
         PUN["PUNCHING\nchannels[2] = PT"]
         HVT["HOVER_TEST\nchannels[2] = HT"]
-        AHC["AUTO_HOVER_CAL\nramp → liftoff → HT+50"]
+        AHC["AUTO_HOVER_CAL\nramp → liftoff → HT"]
         LND["LANDING\nvelocity ctrl 0.4 m/s"]
     end
 
@@ -441,7 +470,7 @@ flowchart LR
 
     MSPALT --> ALT
     TOFALT --> ALT
-    ALT -->|altitude m + derived vario cm/s| HLD & AHC & LND & SPR
+    ALT -->|altitude m + selected vario cm/s| HLD & AHC & LND & SPR
 
     HT --> HLD & HVT & AHC
     ST --> SPR

@@ -182,6 +182,7 @@ static void makeFloat(NimBLEService* svc, const char* uuid,
 
 void setupBLE() {
     NimBLEDevice::init("Quad-Tuner");
+    NimBLEDevice::setMTU(128);
     auto* server = NimBLEDevice::createServer();
     server->setCallbacks(new ServerCB());
     auto* svc    = server->createService(SERVICE_UUID);
