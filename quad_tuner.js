@@ -13,9 +13,12 @@ const COMMAND_UUID       = 'ab0828ba-198e-4351-b779-901fa0e0371e';
 const BENCH_MODE_UUID    = 'ab0828bb-198e-4351-b779-901fa0e0371e';
 const TELEMETRY_UUID     = 'ab0828bd-198e-4351-b779-901fa0e0371e';
 const ANGLE_MODE_UUID    = 'ab0828c1-198e-4351-b779-901fa0e0371e';
+const FLIGHT_LOG_OFFSET_UUID = 'ab0828c2-198e-4351-b779-901fa0e0371e';
+const FLIGHT_LOG_CHUNK_UUID  = 'ab0828c3-198e-4351-b779-901fa0e0371e';
 
 const STATE_NAMES  = ['IDLE','ARMING','SPRINTING','HOLDING','PUNCHING','CUT','HOVER TEST','AUTO HOVER CAL','LANDING','DONE','ALT HOLD'];
 const STATE_COLORS = ['','var(--amber)','var(--amber)','var(--green)','var(--red)','var(--red)','var(--cyan)','var(--cyan)','var(--amber)','var(--text-mid)','var(--green)'];
+const ALT_SOURCE_NAMES = ['BARO', 'TOF', 'BLEND', 'TOF HOLD'];
 
 const CMD_HOVER_TEST     = 1;
 const CMD_START_MISSION  = 2;
@@ -128,6 +131,8 @@ async function connect() {
     chars.benchMode  = await service.getCharacteristic(BENCH_MODE_UUID);
     chars.angleMode  = await service.getCharacteristic(ANGLE_MODE_UUID);
     chars.telemetry  = await service.getCharacteristic(TELEMETRY_UUID);
+    chars.logOffset  = await service.getCharacteristic(FLIGHT_LOG_OFFSET_UUID);
+    chars.logChunk   = await service.getCharacteristic(FLIGHT_LOG_CHUNK_UUID);
 
     await chars.telemetry.startNotifications();
     chars.telemetry.addEventListener('characteristicvaluechanged', onTelemetry);
@@ -266,6 +271,43 @@ document.getElementById('btn-sync').addEventListener('click', async () => {
   await readAll();
 });
 
+document.getElementById('btn-download-log').addEventListener('click', async () => {
+  if (!connected || !chars.logOffset || !chars.logChunk) return;
+  try {
+    log('Downloading last flight log...');
+    const decoder = new TextDecoder();
+    let offset = 0;
+    let text = '';
+    for (let i = 0; i < 200; i++) {
+      await chars.logOffset.writeValue(u16buf(offset));
+      const value = await chars.logChunk.readValue();
+      if (!value.byteLength) break;
+      const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+      text += decoder.decode(bytes, { stream: true });
+      offset += value.byteLength;
+      if (value.byteLength < 220) break;
+    }
+    text += decoder.decode();
+    if (!text.length) {
+      log('No flight log stored yet', 'err');
+      return;
+    }
+    const blob = new Blob([text], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    a.href = url;
+    a.download = 'quad-flight-log-' + stamp + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    log('Downloaded ' + offset + ' bytes of flight log', 'ok');
+  } catch(e) {
+    log('Flight log download failed: ' + e.message, 'err');
+  }
+});
+
 benchBtn.addEventListener('click', () => {
   if (!connected) return;
   const next = benchMode ? 0 : 1;
@@ -387,6 +429,8 @@ function onTelemetry(e) {
   const tofWeight  = dv.byteLength >= 33 ? dv.getUint8(32) : 0;
   const tofValid   = dv.byteLength >= 34 ? !!dv.getUint8(33) : false;
   const baroCm     = dv.byteLength >= 38 ? dv.getInt32(34, true) : altCm;
+  const altSource  = dv.byteLength >= 39 ? dv.getUint8(38) : (tofWeight > 70 ? 1 : (tofWeight > 0 ? 2 : 0));
+  const cbaroCm    = dv.byteLength >= 43 ? dv.getInt32(39, true) : baroCm;
 
   const altM     = (altCm / 100).toFixed(2);
   const relValid = Math.abs(relCm) <= 10000000;
@@ -452,10 +496,15 @@ function onTelemetry(e) {
   el('d-tof').textContent = tofValid && tofCm >= 0 ? (tofCm / 100).toFixed(2) + 'm' : 'INVALID';
   el('d-tw').textContent = tofWeight + '%';
   el('d-baro').textContent = (baroCm / 100).toFixed(2) + 'm';
+  el('d-src').textContent = ALT_SOURCE_NAMES[altSource] || String(altSource);
+  el('d-cbaro').textContent = (cbaroCm / 100).toFixed(2) + 'm';
   el('d-tof').style.color = tofValid ? 'var(--cyan)' : 'var(--text-dim)';
   el('d-tw').style.color = tofWeight > 70 ? 'var(--cyan)'
                          : tofWeight > 0  ? 'var(--amber)' : 'var(--text-dim)';
   el('d-baro').style.color = tofWeight === 0 ? 'var(--green)' : 'var(--text-mid)';
+  el('d-src').style.color = altSource === 1 || altSource === 3 ? 'var(--cyan)'
+                          : altSource === 2 ? 'var(--amber)' : 'var(--green)';
+  el('d-cbaro').style.color = altSource === 0 ? 'var(--green)' : 'var(--text-mid)';
 
   // Alt error — shown in ALT_HOLD; "—" otherwise
   if (isAltHold) {

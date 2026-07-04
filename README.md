@@ -266,7 +266,7 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 | Bench Mode | Simulates altitude for desk testing. Never fly with this on. |
 | Angle Mode | Drives AUX2 high/low for Betaflight Angle mode. Can be changed only while idle or done. |
 
-**Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, throttle, selected vario, filtered vario, FC raw vario, derived vario, ToF altitude, ToF blend weight, and baro altitude at ~10Hz via BLE notify.
+**Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, throttle, selected vario, filtered vario, FC raw vario, derived vario, ToF altitude, ToF blend weight, altitude source, raw baro, and corrected baro at ~10Hz via BLE notify.
 
 **Active state strip** appears whenever not idle — shows state name, altitude, throttle, and a KILL button. During Auto Hover Cal an inline progress panel shows altitude bar (0–50cm with 15cm threshold marker) and throttle bar. On cal completion a notification shows the detected hover throttle and auto-syncs the slider.
 
@@ -285,7 +285,7 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 | `ALT_HOLD_TARGET_M` | 1.5 m | float×10 | Test target used only by the BLE `ALT_HOLD` command; firmware clamps active command to 0.5–5.0m. |
 | `HOLD_KP` | 1.2 | float×10 | Outer altitude P: altitude error (m) to desired vertical speed (m/s). |
 | `HOLD_KI` | 3.0 | float×10 | Inner speed I: integrated vertical-speed error to throttle offset (µs). Keep low to avoid windup. |
-| `HOLD_KD` | 25.0 | float×10 | Inner speed P: vertical-speed error (m/s) to throttle offset (µs). Tune before adding integral. |
+| `HOLD_KD` | 120.0 | float×10 | Inner speed P: vertical-speed error (m/s) to throttle offset (µs). Tune before adding integral. |
 | `PUNCH_START_MS` | 7500 ms | uint32 | Mission clock time to begin final burst. Later = more exit velocity. |
 | `PUNCH_THROTTLE` | 2000 µs | uint16 | Max throttle for punch phase. |
 
@@ -309,7 +309,7 @@ throttle = HOVER_THROTTLE
          + HOLD_KI * vspeed_integral
 ```
 
-The VL53L1X ToF sensor is the primary low-altitude source. It is trusted fully below `TOF_BLEND_FULL_M = 2.5m`, blended out to baro by `TOF_BLEND_ZERO_M = 3.5m`, and ignored when invalid/out of range above `TOF_VALID_MAX_M = 3.8m`. Out-of-range readings are never treated as "4m"; the controller falls back to baro with a learned baro-to-ToF offset.
+The VL53L1X ToF sensor is the primary low-altitude source. It is trusted fully below `TOF_BLEND_FULL_M = 3.6m`, blended out to baro by `TOF_BLEND_ZERO_M = 3.8m`, and ignored when invalid/out of range above `TOF_VALID_MAX_M = 3.8m`. Out-of-range readings are never treated as "4m"; the controller falls back to corrected baro with a learned baro-to-ToF offset. Brief low-altitude ToF dropouts are bridged for `TOF_HOLDOVER_MS = 300ms` so the controller does not bounce between ToF and baro on single missed reads. Altitude fusion and the ToF jump filter are reset at each mission/cal/Alt Hold start so a previous run cannot leave a stale baro-to-ToF offset. Single-sample ToF jumps are rejected above `max(TOF_MAX_STEP_MIN_M, TOF_MAX_STEP_MPS * dt)`.
 
 Betaflight 4.4.x on this FC reports `MSP_ALTITUDE` altitude correctly but has been observed to send `0` in the MSP vario field. The firmware therefore keeps FC raw vario as a diagnostic only and uses a smoothed fused-altitude-derived vario for control.
 
@@ -322,9 +322,34 @@ Current speed limits:
 | `ALT_HOLD` test | 0.60 m/s | 0.45 m/s |
 | Mission `HOLDING` | 1.20 m/s | 0.80 m/s |
 
-The internal setpoint ramps at `ALT_RAMP_RATE_MPS = 1.0 m/s`. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 50us`) and throttle is not allowed below `MIN_CONTROL_THROTTLE_US = 1050us` while closed-loop altitude hold is active.
+The internal setpoint ramps at `ALT_RAMP_RATE_MPS = 1.0 m/s`. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 150us`). Low-altitude `ALT_HOLD` can brake down to `MIN_ALT_HOLD_THROTTLE_US = 1000us`; mission `HOLDING` keeps `MIN_MISSION_THROTTLE_US = 1050us` to preserve attitude authority.
 
 **Landing** uses a velocity controller targeting `DESCENT_RATE_MPS = 0.4 m/s` downward, driven by the same filtered derived vario. Motors cut when altitude drops below 15cm after actual descent is detected, or after a 30s timeout.
+
+During `ALT_HOLD`, the serial monitor prints a per-run CSV-style log:
+
+```
+[RUN] ALT_HOLD hover=...
+[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,rawV,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat
+```
+
+Use `rawThr` versus `thr` plus `sat` to see throttle limiting. `sat=-1` means the controller wanted less throttle than the configured lower clamp; `sat=1` means it wanted more than the upper clamp. `tofW` confirms whether the controller was using ToF (`100`) or falling back toward baro. `src` is `0=baro`, `1=ToF`, `2=blend`, `3=ToF holdover`; `cbaro` is the learned-offset corrected baro altitude.
+
+The same log is also stored in ESP32 RAM during the run. After landing, reconnect the web UI and click **Download Last Log** in the Params tab to save the latest run as a CSV. The buffer is `FLIGHT_LOG_BYTES = 32768`, enough for roughly one short Alt Hold test at the current 50ms sample interval; if it fills, the log ends with `[LOG] truncated`.
+
+For desktop analysis, run:
+
+```powershell
+python tools\parse_flight_log.py flight_logs\quad-flight-log-*.csv
+```
+
+To generate a standalone visual preview for a downloaded log:
+
+```powershell
+python tools\parse_flight_log.py flight_logs\quad-flight-log-2026-07-03T19-33-51-271Z.csv --preview --open
+```
+
+The preview is separate from the BLE web app. It writes `*.preview.html` beside the CSV and plots altitude sources, setpoint, throttle, vario, source selection, and parsed jump markers.
 
 ---
 
@@ -351,7 +376,7 @@ The internal setpoint ramps at `ALT_RAMP_RATE_MPS = 1.0 m/s`. The vertical-speed
 - `launchAlt` is set at the ARMING→CAL transition (after 1500ms motor settle), not before, to avoid baro drift pre-triggering the threshold
 - Cal times out after 30s or at `CAL_MAX_THROTTLE = 1650 µs`
 
-`ALT_HOLD` test mode also has a takeoff ground guard. For the first 500ms after entering `ALT_HOLD`, `launchAlt` is refreshed while the barometer settles. If relative altitude remains below 30cm, the firmware commands `HOVER_THROTTLE + 50us` for up to 2s. If liftoff is still not confirmed after that window, it aborts to `LANDING` instead of forcing closed-loop control on an untrusted altitude signal.
+`ALT_HOLD` test mode also has a takeoff ground guard. For the first 500ms after entering `ALT_HOLD`, `launchAlt` and the ToF baseline are refreshed while sensors settle. Until ToF is valid, takeoff thrust is capped at `HOVER_THROTTLE + 170us`; once ToF is valid, it can ramp from `HOVER_THROTTLE + 80us` by `80us/s` up to `HOVER_THROTTLE + 300us`. Cascade only starts after 3 consecutive ToF-valid samples above 12cm, then latches and does not fall back to guard. While waiting, the cascade setpoint tracks current altitude so the controller does not command downward thrust immediately after liftoff. If liftoff is still not confirmed after 8s, it aborts to `LANDING`.
 
 ---
 

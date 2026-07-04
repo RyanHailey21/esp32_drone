@@ -152,6 +152,16 @@
             <div class="dash-val" id="d-baro">---</div>
           </div>
         </div>
+        <div class="dash-grid2">
+          <div class="dash-cell">
+            <div class="dash-lbl">ALT SOURCE</div>
+            <div class="dash-val" id="d-src">---</div>
+          </div>
+          <div class="dash-cell">
+            <div class="dash-lbl">CORR BARO</div>
+            <div class="dash-val" id="d-cbaro">---</div>
+          </div>
+        </div>
       </div><!-- /altitude -->
 
       <!-- ── CONTROL ────────────────────────────── -->
@@ -250,6 +260,7 @@
     <div class="param-utils" id="params-controls">
       <button class="cmd-btn" id="btn-bench-mode">Bench Mode: Off</button>
       <button class="cmd-btn" id="btn-sync">Sync from ESP32</button>
+      <button class="cmd-btn" id="btn-download-log">Download Last Log</button>
     </div>
 
     <!-- ── SPRINT PHASE ──────────────────────────────── -->
@@ -342,10 +353,10 @@
       <div class="param-head">
         <span class="param-label">Speed Loop Kp</span>
         <div class="param-readout">
-          <span class="param-value" id="val-kd">25.0</span>
+          <span class="param-value" id="val-kd">120.0</span>
         </div>
       </div>
-      <input type="range" class="hold" id="slider-kd" min="0" max="1500" value="250" step="25">
+      <input type="range" class="hold" id="slider-kd" min="0" max="1500" value="1200" step="25">
       <div class="param-bounds"><span>0</span><span>150.0</span></div>
       <div class="param-desc">Inner loop P: speed error (m/s) → throttle offset (µs). Tune this first with Ki=0.</div>
     </div>

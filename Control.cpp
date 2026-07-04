@@ -36,6 +36,16 @@ uint16_t holdCascaded(float altitude, bool isMission) {
                       && fabsf(filteredVario) <= (VARIO_MAX_PLAUSIBLE_CMS / 100.0f);
     if (!varioValid || !isfinite(altitude)) {
         vspeedIntegral = 0.0f;
+        lastAltError = 0.0f;
+        lastDesiredVspeed = 0.0f;
+        lastVspeedError = 0.0f;
+        lastControlPUs = 0.0f;
+        lastControlIUs = 0.0f;
+        lastRawThrottle = HOVER_THROTTLE;
+        lastThrMin = HOVER_THROTTLE;
+        lastThrMax = HOVER_THROTTLE;
+        lastClampedThrottle = HOVER_THROTTLE;
+        lastThrottleSat = 0;
         Serial.printf("[CASCADE] invalid sensor data: alt=%.2f filtV=%.2f age=%ums -> LANDING\n",
             altitude, filteredVario, now - lastVarioMs);
         startLanding(altitude);
@@ -71,7 +81,8 @@ uint16_t holdCascaded(float altitude, bool isMission) {
 
     // Inner PI loop with conditional anti-windup
     float vspeedError  = desiredVspeed - filteredVario;
-    float thrMin = max((float)MIN_CONTROL_THROTTLE_US,
+    float minControlThrottle = isMission ? (float)MIN_MISSION_THROTTLE_US : (float)MIN_ALT_HOLD_THROTTLE_US;
+    float thrMin = max(minControlThrottle,
                        (float)HOVER_THROTTLE - THR_DOWN_OFFSET_US);
     float thrMax = (float)HOVER_THROTTLE + THR_UP_OFFSET_US;
 
@@ -87,18 +98,31 @@ uint16_t holdCascaded(float altitude, bool isMission) {
     }
 
     float finalThrottle = (float)HOVER_THROTTLE + HOLD_KD * vspeedError + HOLD_KI * vspeedIntegral;
+    float clampedThrottle = constrain(finalThrottle, thrMin, thrMax);
+    int8_t sat = finalThrottle > thrMax ? 1 : (finalThrottle < thrMin ? -1 : 0);
+
+    lastAltError = altError;
+    lastDesiredVspeed = desiredVspeed;
+    lastVspeedError = vspeedError;
+    lastControlPUs = HOLD_KD * vspeedError;
+    lastControlIUs = HOLD_KI * vspeedIntegral;
+    lastRawThrottle = finalThrottle;
+    lastThrMin = thrMin;
+    lastThrMax = thrMax;
+    lastClampedThrottle = (uint16_t)clampedThrottle;
+    lastThrottleSat = sat;
 
     static uint32_t lastLogMs = 0;
     if (now - lastLogMs >= 100) {
         lastLogMs = now;
         Serial.printf("[CASCADE] setpt=%.2f aErr=%.2f desV=%.2f fV=%.2f vErr=%.2f "
-                      "P=%.0f I=%.0f raw=%.0f sat=%s\n",
+                      "P=%.0f I=%.0f raw=%.0f out=%.0f min=%.0f max=%.0f sat=%s\n",
             internalSetpoint, altError, desiredVspeed, filteredVario, vspeedError,
-            HOLD_KD * vspeedError, HOLD_KI * vspeedIntegral, finalThrottle,
-            satHigh ? "HI" : (satLow ? "LO" : "ok"));
+            lastControlPUs, lastControlIUs, finalThrottle, clampedThrottle, thrMin, thrMax,
+            sat > 0 ? "HI" : (sat < 0 ? "LO" : "ok"));
     }
 
-    return (uint16_t)constrain(finalThrottle, thrMin, thrMax);
+    return (uint16_t)clampedThrottle;
 }
 
 void startHoverTest() {

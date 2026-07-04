@@ -5,3 +5,4 @@
 void setupTof();
 bool readTofAltitude(float& altitudeM);
 float tofBlendWeight(float altitudeM, bool valid);
+void resetTofFilter();

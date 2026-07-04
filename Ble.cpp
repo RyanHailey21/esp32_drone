@@ -2,6 +2,7 @@
 #include <NimBLEDevice.h>
 #include "State.h"
 #include "Control.h"
+#include "FlightLog.h"
 
 // ============================================================
 //  BLE CALLBACKS
@@ -145,6 +146,24 @@ public:
     }
 };
 
+class CBflightLogOffset : public NimBLECharacteristicCallbacks {
+public:
+    void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
+        if (c->getValue().length() < 2) return;
+        uint16_t offset = *(uint16_t*)c->getValue().data();
+        flightLogSetReadOffset(offset);
+    }
+};
+
+class CBflightLogChunk : public NimBLECharacteristicCallbacks {
+public:
+    void onRead(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
+        uint8_t chunk[FLIGHT_LOG_CHUNK_BYTES];
+        uint16_t n = flightLogReadChunk(chunk, sizeof(chunk));
+        c->setValue(chunk, n);
+    }
+};
+
 static NimBLECharacteristic* makeChar(NimBLEService* svc, const char* uuid,
                                        NimBLECharacteristicCallbacks* cb,
                                        uint8_t* initData, size_t initLen) {
@@ -202,6 +221,17 @@ void setupBLE() {
     makeChar(svc, ANGLE_MODE_UUID,
         new CBangleMode(),
         (uint8_t*)&ANGLE_MODE_ENABLED, 1);
+
+    uint16_t logOffsetInit = 0;
+    makeChar(svc, FLIGHT_LOG_OFFSET_UUID,
+        new CBflightLogOffset(),
+        (uint8_t*)&logOffsetInit, 2);
+
+    auto* flightLogChunkChar = svc->createCharacteristic(FLIGHT_LOG_CHUNK_UUID,
+        NIMBLE_PROPERTY::READ);
+    flightLogChunkChar->setCallbacks(new CBflightLogChunk());
+    uint8_t emptyLogInit = 0;
+    flightLogChunkChar->setValue(&emptyLogInit, 0);
 
     // Telemetry: read + notify, pushed from ESP32 side (no write callback)
     telemetryChar = svc->createCharacteristic(TELEMETRY_UUID,

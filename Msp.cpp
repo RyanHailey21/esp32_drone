@@ -1,6 +1,23 @@
 #include "Msp.h"
 #include "Tof.h"
 
+static bool baroOffsetInitialized = false;
+static float baroToTofOffsetM = 0.0f;
+static float trustedTofAltM = 0.0f;
+static uint32_t trustedTofMs = 0;
+static bool fusedOutputOffsetInitialized = false;
+static float fusedOutputOffsetM = 0.0f;
+
+void resetAltitudeFusion() {
+    baroOffsetInitialized = false;
+    baroToTofOffsetM = 0.0f;
+    trustedTofAltM = 0.0f;
+    trustedTofMs = 0;
+    fusedOutputOffsetInitialized = false;
+    fusedOutputOffsetM = 0.0f;
+    resetTofFilter();
+}
+
 static void sendMSP(uint8_t cmd, const uint8_t* data, uint8_t len) {
     uint8_t cs = 0;
     fcSerial.write('$');
@@ -24,14 +41,24 @@ static int16_t constrainVario(float cms) {
 }
 
 static float fuseAltitude(float baroAltM) {
-    static bool baroOffsetInitialized = false;
-    static float baroToTofOffsetM = 0.0f;
-
     float tofAltM = 0.0f;
-    bool tofValid = readTofAltitude(tofAltM);
+    bool rawTofValid = readTofAltitude(tofAltM);
+    uint32_t nowMs = millis();
+
+    bool tofHoldoverValid = false;
+    if (rawTofValid) {
+        trustedTofAltM = tofAltM;
+        trustedTofMs = nowMs;
+    } else if (trustedTofMs != 0 && nowMs - trustedTofMs <= TOF_HOLDOVER_MS
+               && trustedTofAltM <= TOF_BLEND_FULL_M) {
+        tofAltM = trustedTofAltM;
+        tofHoldoverValid = true;
+    }
+
+    bool tofValid = rawTofValid || tofHoldoverValid;
     float tofWeight = tofBlendWeight(tofAltM, tofValid);
 
-    if (tofValid && tofWeight >= 0.25f) {
+    if (rawTofValid && tofWeight >= 0.25f) {
         float measuredOffset = tofAltM - baroAltM;
         if (!baroOffsetInitialized) {
             baroToTofOffsetM = measuredOffset;
@@ -45,12 +72,20 @@ static float fuseAltitude(float baroAltM) {
     float fusedAltM = tofValid
         ? correctedBaroM + tofWeight * (tofAltM - correctedBaroM)
         : correctedBaroM;
+    if (!fusedOutputOffsetInitialized) {
+        fusedOutputOffsetM = fusedAltM - baroAltM;
+        fusedOutputOffsetInitialized = true;
+    }
+    fusedAltM -= fusedOutputOffsetM;
+    correctedBaroM -= fusedOutputOffsetM;
 
     lastTofValid = tofValid;
     lastTofAltM = tofValid ? tofAltM : 0.0f;
     lastTofWeightPct = (uint8_t)constrain(tofWeight * 100.0f + 0.5f, 0.0f, 100.0f);
     lastBaroAltM = baroAltM;
+    lastCorrectedBaroAltM = correctedBaroM;
     lastFusedAltM = fusedAltM;
+    lastAltitudeSource = tofHoldoverValid ? 3 : (tofWeight >= 0.95f ? 1 : (tofWeight > 0.0f ? 2 : 0));
 
     return fusedAltM;
 }
@@ -134,24 +169,43 @@ float getAltitude() {
             float baroAltM = alt_cm / 100.0f;
             float fusedAltM = fuseAltitude(baroAltM);
 
-            // If Betaflight sends 0 vario, derive speed from a longer fused-altitude
-            // window and smooth it. MSP altitude is quantized, so short-window
-            // derivatives flicker between 0 and large pulses.
+            // If Betaflight sends 0 vario, derive speed from altitude. Use a
+            // shorter ToF window when valid; fall back to a slower fused/baro
+            // derivative to avoid baro quantization pulses.
             static float derivBaseAltM = 0.0f;
             static uint32_t derivBaseMs = 0;
+            static float tofDerivBaseAltM = 0.0f;
+            static uint32_t tofDerivBaseMs = 0;
             static int16_t heldDerivedVario = 0;
             static float filteredDerivedCms = 0.0f;
-            if (derivBaseMs == 0) {
-                derivBaseAltM = fusedAltM;
-                derivBaseMs = nowMs;
-            } else if (nowMs - derivBaseMs >= 400) {
-                float dtSec = (nowMs - derivBaseMs) / 1000.0f;
-                float rawDerivedCms = (fusedAltM - derivBaseAltM) * 100.0f / dtSec;
-                constexpr float DERIVED_ALPHA = 0.25f;
-                filteredDerivedCms += DERIVED_ALPHA * (rawDerivedCms - filteredDerivedCms);
-                heldDerivedVario = constrainVario(filteredDerivedCms);
-                derivBaseAltM = fusedAltM;
-                derivBaseMs = nowMs;
+            static float filteredTofDerivedCms = 0.0f;
+            if (lastTofValid && lastTofWeightPct >= 80) {
+                if (tofDerivBaseMs == 0) {
+                    tofDerivBaseAltM = lastTofAltM;
+                    tofDerivBaseMs = nowMs;
+                } else if (nowMs - tofDerivBaseMs >= 100) {
+                    float dtSec = (nowMs - tofDerivBaseMs) / 1000.0f;
+                    float rawTofCms = (lastTofAltM - tofDerivBaseAltM) * 100.0f / dtSec;
+                    constexpr float TOF_DERIVED_ALPHA = 0.55f;
+                    filteredTofDerivedCms += TOF_DERIVED_ALPHA * (rawTofCms - filteredTofDerivedCms);
+                    heldDerivedVario = constrainVario(filteredTofDerivedCms);
+                    tofDerivBaseAltM = lastTofAltM;
+                    tofDerivBaseMs = nowMs;
+                }
+            } else {
+                tofDerivBaseMs = 0;
+                if (derivBaseMs == 0) {
+                    derivBaseAltM = fusedAltM;
+                    derivBaseMs = nowMs;
+                } else if (nowMs - derivBaseMs >= 400) {
+                    float dtSec = (nowMs - derivBaseMs) / 1000.0f;
+                    float rawDerivedCms = (fusedAltM - derivBaseAltM) * 100.0f / dtSec;
+                    constexpr float DERIVED_ALPHA = 0.25f;
+                    filteredDerivedCms += DERIVED_ALPHA * (rawDerivedCms - filteredDerivedCms);
+                    heldDerivedVario = constrainVario(filteredDerivedCms);
+                    derivBaseAltM = fusedAltM;
+                    derivBaseMs = nowMs;
+                }
             }
 
             // Betaflight 4.4.x MSP_ALTITUDE often reports a zero vario field
@@ -167,8 +221,9 @@ float getAltitude() {
             static uint32_t varioLogMs = 0;
             if (nowMs - varioLogMs >= 500) {
                 varioLogMs = nowMs;
-                Serial.printf("[ALT] fused=%.2f baro=%.2f tof=%s%.2f w=%u%% fc_vario=%d derived=%d used=%d cm/s\n",
-                    lastAlt, baroAltM, lastTofValid ? "" : "invalid:",
+                Serial.printf("[ALT] fused=%.2f baro=%.2f cbaro=%.2f src=%u tof=%s%.2f w=%u%% fc_vario=%d derived=%d used=%d cm/s\n",
+                    lastAlt, baroAltM, lastCorrectedBaroAltM, lastAltitudeSource,
+                    lastTofValid ? "" : "invalid:",
                     lastTofAltM, lastTofWeightPct, vario, heldDerivedVario, usedVario);
             }
             return lastAlt;
@@ -230,10 +285,12 @@ float getAltitude() {
     }
 
     lastBaroAltM = benchAlt;
+    lastCorrectedBaroAltM = benchAlt;
     lastFusedAltM = benchAlt;
     lastTofValid = false;
     lastTofAltM = 0.0f;
     lastTofWeightPct = 0;
+    lastAltitudeSource = 0;
 
     return benchAlt;
 }

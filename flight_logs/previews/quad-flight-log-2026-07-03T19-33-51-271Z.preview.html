@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>quad-flight-log-2026-07-03T19-33-51-271Z.csv preview</title>
+<style>
+body { margin: 0; font-family: system-ui, Segoe UI, Arial, sans-serif; background: #101316; color: #e8eef2; }
+main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+h1 { margin: 0 0 6px; font-size: 22px; }
+.run { color: #9fb0bd; margin-bottom: 18px; font-family: Consolas, monospace; font-size: 13px; }
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.card { background: #171c20; border: 1px solid #2a343c; border-radius: 8px; padding: 10px 12px; }
+.label { color: #91a1ad; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.value { font-size: 18px; margin-top: 3px; }
+.plot { background: #151a1f; border: 1px solid #2a343c; border-radius: 8px; margin: 14px 0; padding: 12px; }
+.plot-title { display: flex; justify-content: space-between; color: #cbd5dc; font-size: 13px; margin-bottom: 8px; }
+svg { display: block; width: 100%; height: 320px; background: #0d1115; border-radius: 4px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: #9fb0bd; font-size: 12px; margin-top: 8px; }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 18px; height: 3px; border-radius: 2px; }
+.hint { color: #91a1ad; font-size: 12px; margin-top: 10px; }
+@media (max-width: 760px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } main { padding: 14px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>quad-flight-log-2026-07-03T19-33-51-271Z.csv</h1>
+  <div class="run">[RUN] ALT_HOLD hover=1205 target=5.00 kp=1.10 ki=3.00 kd=120.00 tofFull=3.60 tofZero=3.80</div>
+  <div class="grid" id="stats"></div>
+  <section class="plot">
+    <div class="plot-title"><span>Altitude Sources</span><span>meters vs time</span></div>
+    <svg id="altPlot" viewBox="0 0 1100 320" role="img" aria-label="Altitude plot"></svg>
+    <div class="legend">
+      <span class="key"><span class="sw" style="background:#39d98a"></span>alt</span>
+      <span class="key"><span class="sw" style="background:#61dafb"></span>tof</span>
+      <span class="key"><span class="sw" style="background:#f7b955"></span>baro</span>
+      <span class="key"><span class="sw" style="background:#b084f5"></span>corrected baro</span>
+      <span class="key"><span class="sw" style="background:#ffffff"></span>setpoint</span>
+    </div>
+  </section>
+  <section class="plot">
+    <div class="plot-title"><span>Control</span><span>throttle us, vertical speed m/s</span></div>
+    <svg id="ctrlPlot" viewBox="0 0 1100 320" role="img" aria-label="Control plot"></svg>
+    <div class="legend">
+      <span class="key"><span class="sw" style="background:#ff6b6b"></span>throttle</span>
+      <span class="key"><span class="sw" style="background:#61dafb"></span>filtered vario</span>
+      <span class="key"><span class="sw" style="background:#f7b955"></span>desired speed</span>
+    </div>
+  </section>
+  <section class="plot">
+    <div class="plot-title"><span>Altitude Source</span><span>0 baro, 1 tof, 2 blend, 3 tof hold</span></div>
+    <svg id="srcPlot" viewBox="0 0 1100 180" role="img" aria-label="Source plot"></svg>
+    <div class="hint">Red vertical markers indicate parsed altitude jumps above the configured threshold.</div>
+  </section>
+</main>
+<script>
+const DATA = {"title":"quad-flight-log-2026-07-03T19-33-51-271Z.csv","run":"[RUN] ALT_HOLD hover=1205 target=5.00 kp=1.10 ki=3.00 kd=120.00 tofFull=3.60 tofZero=3.80","points":[{"ms":48.0,"phase":"settle","alt":-0.02,"lowRel":-0.02,"tof":-1.0,"tofW":0.0,"baro":-0.01,"cbaro":1.514,"setpt":0.0,"fV":0.0,"desV":0.0,"thr":1285.0,"sat":0.0,"src":0.0},{"ms":109.0,"phase":"settle","alt":0.01,"lowRel":0.01,"tof":-1.0,"tofW":0.0,"baro":0.0,"cbaro":1.524,"setpt":0.0,"fV":0.0,"desV":0.0,"thr":1285.0,"sat":0.0,"src":0.0},{"ms":169.0,"phase":"settle","alt":0.02,"lowRel":0.02,"tof":-1.0,"tofW":0.0,"baro":0.03,"cbaro":1.554,"setpt":0.0,"fV":0.0,"desV":0.0,"thr":1285.0,"sat":0.0,"src":0.0},{"ms":230.0,"phase":"settle","alt":0.04,"lowRel":0.04,"tof":-1.0,"tofW":0.0,"baro":0.09,"cbaro":1.614,"setpt":0.0,"fV":0.0,"desV":0.0,"thr":1285.0,"sat":0.0,"src":0.0},{"ms":290.0,"phase":"settle","alt":-0.02,"lowRel":-0.02,"tof":-1.0,"tofW":0.0,"baro":0.1,"cbaro":1.624,"setpt":0.0,"fV":0.0,"desV":0.0,"thr":1285.0,"sat":0.0,"src":0.0},{"ms":351.0,"phase":"settle","alt":-0.02,"lowRel":-0.02,"tof":-1.0,"tofW":0.0,"baro":0.06,"cbaro":1.584,"setpt":0.0,"fV":0.0,"desV":0.0,"thr":1285.0,"sat":0.0,"src":0.0},{"ms":412.0,"phase":"settle","alt":0.0,"lowRel":0.0,"tof":-1.0,"tofW":0.0,"baro":0.06,"cbaro":1.584,"setpt":0.0,"fV":0.0,"desV":0.0,"thr":1285.0,"sat":0.0,"src":0.0},{"ms":473.0,"phase":"settle","alt":0.01,"lowRel":0.01,"tof":-1.0,"tofW":0.0,"baro":0.06,"cbaro":1.584,"setpt":0.0,"fV":0.0,"desV":0.0,"thr":1285.0,"sat":0.0,"src":0.0},{"ms":533.0,"phase":"guard","alt":0.0,"lowRel":0.0,"tof":-1.0,"tofW":0.0,"baro":0.06,"cbaro":1.584,"setpt":0.0,"fV":0.0,"desV":0.0,"thr":1287.0,"sat":0.0,"src":0.0},{"ms":595.0,"phase":"guard","alt":-0.02,"lowRel":-0.02,"tof":-1.0,"tofW":0.0,"baro":0.04,"cbaro":1.564,"setpt":-0.02,"fV":0.0,"desV":0.0,"thr":1292.0,"sat":0.0,"src":0.0},{"ms":655.0,"phase":"guard","alt":-0.03,"lowRel":-0.03,"tof":-1.0,"tofW":0.0,"baro":0.03,"cbaro":1.554,"setpt":-0.03,"fV":0.0,"desV":0.0,"thr":1297.0,"sat":0.0,"src":0.0},{"ms":715.0,"phase":"guard","alt":-0.04,"lowRel":-0.04,"tof":-1.0,"tofW":0.0,"baro":0.02,"cbaro":1.544,"setpt":-0.04,"fV":0.0,"desV":0.0,"thr":1302.0,"sat":0.0,"src":0.0},{"ms":776.0,"phase":"guard","alt":-0.04,"lowRel":-0.04,"tof":-1.0,"tofW":0.0,"baro":0.02,"cbaro":1.544,"setpt":-0.04,"fV":0.0,"desV":0.0,"thr":1307.0,"sat":0.0,"src":0.0},{"ms":837.0,"phase":"guard","alt":-0.04,"lowRel":-0.04,"tof":-1.0,"tofW":0.0,"baro":0.02,"cbaro":1.544,"setpt":-0.04,"fV":0.0,"desV":0.0,"thr":1311.0,"sat":0.0,"src":0.0},{"ms":897.0,"phase":"guard","alt":-0.04,"lowRel":-0.04,"tof":-1.0,"tofW":0.0,"baro":0.02,"cbaro":1.544,"setpt":-0.04,"fV":0.0,"desV":0.0,"thr":1316.0,"sat":0.0,"src":0.0},{"ms":958.0,"phase":"guard","alt":-0.04,"lowRel":-0.04,"tof":-1.0,"tofW":0.0,"baro":0.02,"cbaro":1.544,"setpt":-0.04,"fV":0.0,"desV":0.0,"thr":1321.0,"sat":0.0,"src":0.0},{"ms":1018.0,"phase":"guard","alt":-0.03,"lowRel":-0.03,"tof":-1.0,"tofW":0.0,"baro":0.03,"cbaro":1.554,"setpt":-0.03,"fV":0.0,"desV":0.0,"thr":1326.0,"sat":0.0,"src":0.0},{"ms":1079.0,"phase":"guard","alt":0.02,"lowRel":0.02,"tof":-1.0,"tofW":0.0,"baro":0.08,"cbaro":1.604,"setpt":0.02,"fV":0.0,"desV":0.0,"thr":1331.0,"sat":0.0,"src":0.0},{"ms":1140.0,"phase":"guard","alt":0.04,"lowRel":0.04,"tof":-1.0,"tofW":0.0,"baro":0.1,"cbaro":1.624,"setpt":0.04,"fV":0.0,"desV":0.0,"thr":1336.0,"sat":0.0,"src":0.0},{"ms":1200.0,"phase":"guard","alt":0.05,"lowRel":0.05,"tof":-1.0,"tofW":0.0,"baro":0.11,"cbaro":1.634,"setpt":0.05,"fV":0.0,"desV":0.0,"thr":1341.0,"sat":0.0,"src":0.0},{"ms":1261.0,"phase":"guard","alt":0.04,"lowRel":0.04,"tof":-1.0,"tofW":0.0,"baro":0.1,"cbaro":1.624,"setpt":0.04,"fV":0.0,"desV":0.0,"thr":1345.0,"sat":0.0,"src":0.0},{"ms":1321.0,"phase":"guard","alt":0.01,"lowRel":0.01,"tof":-1.0,"tofW":0.0,"baro":0.07,"cbaro":1.594,"setpt":0.01,"fV":0.0,"desV":0.0,"thr":1350.0,"sat":0.0,"src":0.0},{"ms":1382.0,"phase":"guard","alt":0.03,"lowRel":0.03,"tof":-1.0,"tofW":0.0,"baro":0.09,"cbaro":1.614,"setpt":0.03,"fV":0.0,"desV":0.0,"thr":1355.0,"sat":0.0,"src":0.0},{"ms":1443.0,"phase":"guard","alt":0.04,"lowRel":0.04,"tof":-1.0,"tofW":0.0,"baro":0.1,"cbaro":1.624,"setpt":0.04,"fV":0.0,"desV":0.0,"thr":1360.0,"sat":0.0,"src":0.0},{"ms":1503.0,"phase":"guard","alt":0.05,"lowRel":0.05,"tof":-1.0,"tofW":0.0,"baro":0.11,"cbaro":1.634,"setpt":0.05,"fV":0.0,"desV":0.0,"thr":1365.0,"sat":0.0,"src":0.0},{"ms":1564.0,"phase":"guard","alt":0.05,"lowRel":0.05,"tof":-1.0,"tofW":0.0,"baro":0.11,"cbaro":1.634,"setpt":0.05,"fV":0.0,"desV":0.0,"thr":1370.0,"sat":0.0,"src":0.0},{"ms":1625.0,"phase":"guard","alt":0.05,"lowRel":0.05,"tof":-1.0,"tofW":0.0,"baro":0.11,"cbaro":1.634,"setpt":0.05,"fV":0.0,"desV":0.0,"thr":1375.0,"sat":0.0,"src":0.0},{"ms":1685.0,"phase":"guard","alt":0.05,"lowRel":0.05,"tof":-1.0,"tofW":0.0,"baro":0.11,"cbaro":1.634,"setpt":0.05,"fV":0.0,"desV":0.0,"thr":1375.0,"sat":0.0,"src":0.0},{"ms":1746.0,"phase":"guard","alt":0.05,"lowRel":0.05,"tof":-1.0,"tofW":0.0,"baro":0.11,"cbaro":1.634,"setpt":0.05,"fV":0.0,"desV":0.0,"thr":1375.0,"sat":0.0,"src":0.0},{"ms":1806.0,"phase":"guard","alt":0.05,"lowRel":0.05,"tof":-1.0,"tofW":0.0,"baro":0.11,"cbaro":1.634,"setpt":0.05,"fV":0.0,"desV":0.0,"thr":1375.0,"sat":0.0,"src":0.0},{"ms":1867.0,"phase":"guard","alt":0.05,"lowRel":0.05,"tof":-1.0,"tofW":0.0,"baro":0.11,"cbaro":1.634,"setpt":0.05,"fV":0.0,"desV":0.0,"thr":1375.0,"sat":0.0,"src":0.0},{"ms":1928.0,"phase":"guard","alt":0.05,"lowRel":0.05,"tof":-1.0,"tofW":0.0,"baro":0.11,"cbaro":1.634,"setpt":0.05,"fV":0.0,"desV":0.0,"thr":1375.0,"sat":0.0,"src":0.0},{"ms":1989.0,"phase":"guard","alt":0.05,"lowRel":0.05,"tof":-1.0,"tofW":0.0,"baro":0.11,"cbaro":1.634,"setpt":0.05,"fV":0.0,"desV":0.0,"thr":1375.0,"sat":0.0,"src":0.0},{"ms":2049.0,"phase":"guard","alt":0.05,"lowRel":0.05,"tof":-1.0,"tofW":0.0,"baro":0.11,"cbaro":1.634,"setpt":0.05,"fV":0.0,"desV":0.0,"thr":1375.0,"sat":0.0,"src":0.0},{"ms":2110.0,"phase":"guard","alt":-1.509,"lowRel":-1.509,"tof":0.075,"tofW":100.0,"baro":0.15,"cbaro":1.482,"setpt":-1.509,"fV":0.0,"desV":0.0,"thr":1413.0,"sat":0.0,"src":1.0},{"ms":2171.0,"phase":"guard","alt":-1.509,"lowRel":-1.509,"tof":0.075,"tofW":100.0,"baro":0.17,"cbaro":1.18,"setpt":-1.509,"fV":0.0,"desV":0.0,"thr":1418.0,"sat":0.0,"src":1.0},{"ms":2231.0,"phase":"guard","alt":-1.392,"lowRel":-1.392,"tof":0.192,"tofW":100.0,"baro":0.15,"cbaro":0.942,"setpt":-1.392,"fV":0.0,"desV":0.0,"thr":1423.0,"sat":0.0,"src":1.0},{"ms":2292.0,"phase":"guard","alt":-1.252,"lowRel":-1.252,"tof":0.332,"tofW":100.0,"baro":0.18,"cbaro":0.896,"setpt":-1.252,"fV":0.0,"desV":0.0,"thr":1428.0,"sat":0.0,"src":3.0},{"ms":2353.0,"phase":"guard","alt":-1.252,"lowRel":-1.252,"tof":0.332,"tofW":100.0,"baro":0.19,"cbaro":0.906,"setpt":-1.252,"fV":0.0,"desV":0.0,"thr":1433.0,"sat":0.0,"src":3.0},{"ms":2414.0,"phase":"guard","alt":-1.252,"lowRel":-1.252,"tof":0.332,"tofW":100.0,"baro":0.24,"cbaro":0.956,"setpt":-1.252,"fV":0.0,"desV":0.0,"thr":1438.0,"sat":0.0,"src":3.0},{"ms":2474.0,"phase":"guard","alt":-0.389,"lowRel":-0.389,"tof":1.195,"tofW":100.0,"baro":0.31,"cbaro":1.046,"setpt":-0.389,"fV":0.0,"desV":0.0,"thr":1442.0,"sat":0.0,"src":1.0},{"ms":2535.0,"phase":"guard","alt":-0.389,"lowRel":-0.389,"tof":1.195,"tofW":100.0,"baro":0.35,"cbaro":1.102,"setpt":-0.389,"fV":0.0,"desV":0.0,"thr":1447.0,"sat":0.0,"src":3.0},{"ms":2596.0,"phase":"guard","alt":0.033,"lowRel":0.033,"tof":1.617,"tofW":100.0,"baro":0.41,"cbaro":1.216,"setpt":0.033,"fV":0.0,"desV":0.0,"thr":1452.0,"sat":0.0,"src":1.0},{"ms":2657.0,"phase":"guard","alt":-0.275,"lowRel":-0.275,"tof":1.309,"tofW":100.0,"baro":0.54,"cbaro":1.342,"setpt":-0.275,"fV":0.0,"desV":0.0,"thr":1457.0,"sat":0.0,"src":1.0},{"ms":2717.0,"phase":"guard","alt":-0.275,"lowRel":-0.275,"tof":1.309,"tofW":100.0,"baro":0.73,"cbaro":1.532,"setpt":-0.275,"fV":0.0,"desV":0.0,"thr":1462.0,"sat":0.0,"src":3.0},{"ms":2778.0,"phase":"guard","alt":-0.783,"lowRel":-0.783,"tof":0.801,"tofW":100.0,"baro":0.84,"cbaro":1.541,"setpt":-0.783,"fV":0.0,"desV":0.0,"thr":1467.0,"sat":0.0,"src":1.0},{"ms":2839.0,"phase":"guard","alt":-0.783,"lowRel":-0.783,"tof":0.801,"tofW":100.0,"baro":0.97,"cbaro":1.671,"setpt":-0.783,"fV":0.0,"desV":0.0,"thr":1472.0,"sat":0.0,"src":3.0},{"ms":2899.0,"phase":"guard","alt":-0.783,"lowRel":-0.783,"tof":0.801,"tofW":100.0,"baro":1.24,"cbaro":1.941,"setpt":-0.783,"fV":0.0,"desV":0.0,"thr":1476.0,"sat":0.0,"src":3.0},{"ms":2960.0,"phase":"guard","alt":-0.783,"lowRel":-0.783,"tof":0.801,"tofW":100.0,"baro":1.5,"cbaro":2.201,"setpt":-0.783,"fV":0.0,"desV":0.0,"thr":1481.0,"sat":0.0,"src":3.0},{"ms":3021.0,"phase":"guard","alt":-0.783,"lowRel":-0.783,"tof":0.801,"tofW":100.0,"baro":1.77,"cbaro":2.471,"setpt":-0.783,"fV":0.0,"desV":0.0,"thr":1486.0,"sat":0.0,"src":3.0},{"ms":3081.0,"phase":"guard","alt":1.047,"lowRel":1.047,"tof":-1.0,"tofW":0.0,"baro":1.93,"cbaro":2.631,"setpt":1.047,"fV":0.0,"desV":0.0,"thr":1375.0,"sat":0.0,"src":0.0},{"ms":3142.0,"phase":"guard","alt":0.475,"lowRel":0.475,"tof":2.059,"tofW":100.0,"baro":2.17,"cbaro":2.774,"setpt":0.475,"fV":0.0,"desV":0.0,"thr":1496.0,"sat":0.0,"src":1.0},{"ms":3202.0,"phase":"cascade","alt":0.475,"lowRel":0.475,"tof":2.059,"tofW":100.0,"baro":2.38,"cbaro":2.984,"setpt":0.495,"fV":0.0,"desV":0.022,"thr":1207.0,"sat":0.0,"src":3.0},{"ms":3263.0,"phase":"cascade","alt":0.073,"lowRel":0.073,"tof":1.657,"tofW":100.0,"baro":2.6,"cbaro":3.018,"setpt":0.555,"fV":-0.185,"desV":0.53,"thr":1290.0,"sat":0.0,"src":1.0},{"ms":3324.0,"phase":"cascade","alt":0.073,"lowRel":0.073,"tof":1.657,"tofW":100.0,"baro":2.85,"cbaro":3.089,"setpt":0.616,"fV":-0.55,"desV":0.597,"thr":1342.0,"sat":0.0,"src":3.0},{"ms":3384.0,"phase":"cascade","alt":0.073,"lowRel":0.073,"tof":1.657,"tofW":100.0,"baro":3.1,"cbaro":3.339,"setpt":0.676,"fV":-0.733,"desV":0.6,"thr":1365.0,"sat":0.0,"src":3.0},{"ms":3445.0,"phase":"cascade","alt":0.073,"lowRel":0.073,"tof":1.657,"tofW":100.0,"baro":3.35,"cbaro":3.589,"setpt":0.737,"fV":-0.782,"desV":0.6,"thr":1371.0,"sat":0.0,"src":3.0},{"ms":3505.0,"phase":"cascade","alt":0.073,"lowRel":0.073,"tof":1.657,"tofW":100.0,"baro":3.57,"cbaro":3.809,"setpt":0.797,"fV":-0.771,"desV":0.6,"thr":1370.0,"sat":0.0,"src":3.0},{"ms":3566.0,"phase":"cascade","alt":-0.172,"lowRel":-0.172,"tof":1.412,"tofW":100.0,"baro":3.82,"cbaro":3.475,"setpt":0.858,"fV":-0.714,"desV":0.6,"thr":1363.0,"sat":0.0,"src":1.0},{"ms":3626.0,"phase":"cascade","alt":-0.232,"lowRel":-0.232,"tof":1.352,"tofW":100.0,"baro":4.07,"cbaro":3.44,"setpt":0.918,"fV":-0.772,"desV":0.6,"thr":1371.0,"sat":0.0,"src":1.0},{"ms":3688.0,"phase":"cascade","alt":-0.232,"lowRel":-0.232,"tof":1.352,"tofW":100.0,"baro":4.33,"cbaro":3.434,"setpt":0.98,"fV":-0.918,"desV":0.6,"thr":1388.0,"sat":0.0,"src":3.0},{"ms":3748.0,"phase":"cascade","alt":-0.232,"lowRel":-0.232,"tof":1.352,"tofW":100.0,"baro":4.55,"cbaro":3.654,"setpt":1.04,"fV":-0.955,"desV":0.6,"thr":1393.0,"sat":0.0,"src":3.0},{"ms":3809.0,"phase":"cascade","alt":0.104,"lowRel":0.104,"tof":1.688,"tofW":100.0,"baro":4.78,"cbaro":3.635,"setpt":1.101,"fV":-0.912,"desV":0.6,"thr":1388.0,"sat":0.0,"src":3.0},{"ms":3869.0,"phase":"cascade","alt":0.104,"lowRel":0.104,"tof":1.688,"tofW":100.0,"baro":5.07,"cbaro":3.925,"setpt":1.161,"fV":-0.703,"desV":0.6,"thr":1363.0,"sat":0.0,"src":3.0},{"ms":3930.0,"phase":"cascade","alt":0.104,"lowRel":0.104,"tof":1.688,"tofW":100.0,"baro":5.26,"cbaro":4.115,"setpt":1.222,"fV":-0.368,"desV":0.6,"thr":1323.0,"sat":0.0,"src":3.0},{"ms":3991.0,"phase":"cascade","alt":0.58,"lowRel":0.58,"tof":2.164,"tofW":100.0,"baro":5.48,"cbaro":4.074,"setpt":1.283,"fV":0.043,"desV":0.6,"thr":1274.0,"sat":0.0,"src":1.0},{"ms":4051.0,"phase":"cascade","alt":0.454,"lowRel":0.454,"tof":2.038,"tofW":100.0,"baro":5.76,"cbaro":3.861,"setpt":1.343,"fV":0.5,"desV":0.6,"thr":1219.0,"sat":0.0,"src":1.0},{"ms":4112.0,"phase":"cascade","alt":0.776,"lowRel":0.776,"tof":2.36,"tofW":100.0,"baro":6.12,"cbaro":3.82,"setpt":1.404,"fV":0.831,"desV":0.6,"thr":1180.0,"sat":0.0,"src":1.0},{"ms":4172.0,"phase":"cascade","alt":1.053,"lowRel":1.053,"tof":2.637,"tofW":100.0,"baro":6.43,"cbaro":3.966,"setpt":1.464,"fV":1.052,"desV":0.452,"thr":1135.0,"sat":0.0,"src":3.0},{"ms":4233.0,"phase":"cascade","alt":1.053,"lowRel":1.053,"tof":2.637,"tofW":100.0,"baro":6.64,"cbaro":4.176,"setpt":1.525,"fV":1.245,"desV":0.519,"thr":1120.0,"sat":0.0,"src":3.0},{"ms":4294.0,"phase":"cascade","alt":0.82,"lowRel":0.82,"tof":2.404,"tofW":100.0,"baro":6.92,"cbaro":4.009,"setpt":1.586,"fV":1.413,"desV":0.6,"thr":1109.0,"sat":0.0,"src":1.0},{"ms":4355.0,"phase":"cascade","alt":0.82,"lowRel":0.82,"tof":2.404,"tofW":100.0,"baro":7.11,"cbaro":4.199,"setpt":1.647,"fV":1.341,"desV":0.6,"thr":1118.0,"sat":0.0,"src":3.0},{"ms":4415.0,"phase":"cascade","alt":0.82,"lowRel":0.82,"tof":2.404,"tofW":100.0,"baro":7.27,"cbaro":4.359,"setpt":1.707,"fV":1.1,"desV":0.6,"thr":1147.0,"sat":0.0,"src":3.0},{"ms":4476.0,"phase":"cascade","alt":0.82,"lowRel":0.82,"tof":2.404,"tofW":100.0,"baro":7.4,"cbaro":4.489,"setpt":1.768,"fV":0.9,"desV":0.6,"thr":1171.0,"sat":0.0,"src":3.0},{"ms":4536.0,"phase":"cascade","alt":1.459,"lowRel":1.459,"tof":3.043,"tofW":100.0,"baro":7.5,"cbaro":4.245,"setpt":1.828,"fV":0.74,"desV":0.406,"thr":1167.0,"sat":0.0,"src":1.0},{"ms":4597.0,"phase":"cascade","alt":1.3,"lowRel":1.3,"tof":2.884,"tofW":100.0,"baro":7.56,"cbaro":4.134,"setpt":1.889,"fV":0.805,"desV":0.6,"thr":1182.0,"sat":0.0,"src":1.0},{"ms":4657.0,"phase":"cascade","alt":1.3,"lowRel":1.3,"tof":2.884,"tofW":100.0,"baro":7.58,"cbaro":4.002,"setpt":1.949,"fV":1.04,"desV":0.6,"thr":1154.0,"sat":0.0,"src":3.0},{"ms":4719.0,"phase":"cascade","alt":1.3,"lowRel":1.3,"tof":2.884,"tofW":100.0,"baro":7.57,"cbaro":3.992,"setpt":2.011,"fV":1.128,"desV":0.6,"thr":1143.0,"sat":0.0,"src":3.0},{"ms":4779.0,"phase":"cascade","alt":1.783,"lowRel":1.783,"tof":3.367,"tofW":100.0,"baro":7.6,"cbaro":3.943,"setpt":2.071,"fV":1.101,"desV":0.317,"thr":1112.0,"sat":0.0,"src":1.0},{"ms":4839.0,"phase":"cascade","alt":1.783,"lowRel":1.783,"tof":3.367,"tofW":100.0,"baro":7.63,"cbaro":3.902,"setpt":2.131,"fV":1.229,"desV":0.383,"thr":1105.0,"sat":0.0,"src":3.0},{"ms":4900.0,"phase":"cascade","alt":1.783,"lowRel":1.783,"tof":3.367,"tofW":100.0,"baro":7.61,"cbaro":3.882,"setpt":2.192,"fV":1.476,"desV":0.45,"thr":1083.0,"sat":0.0,"src":3.0},{"ms":4961.0,"phase":"cascade","alt":1.783,"lowRel":1.783,"tof":3.367,"tofW":100.0,"baro":7.54,"cbaro":3.812,"setpt":2.253,"fV":1.543,"desV":0.517,"thr":1083.0,"sat":0.0,"src":3.0},{"ms":5021.0,"phase":"cascade","alt":2.034,"lowRel":2.034,"tof":3.608,"tofW":96.0,"baro":7.62,"cbaro":3.858,"setpt":2.313,"fV":1.48,"desV":0.307,"thr":1065.0,"sat":0.0,"src":1.0},{"ms":5082.0,"phase":"cascade","alt":2.324,"lowRel":2.324,"tof":-1.0,"tofW":0.0,"baro":7.67,"cbaro":3.908,"setpt":2.374,"fV":1.279,"desV":0.055,"thr":1058.0,"sat":0.0,"src":0.0},{"ms":5143.0,"phase":"cascade","alt":2.224,"lowRel":2.224,"tof":-1.0,"tofW":0.0,"baro":7.57,"cbaro":3.808,"setpt":2.435,"fV":1.114,"desV":0.233,"thr":1099.0,"sat":0.0,"src":0.0},{"ms":5203.0,"phase":"cascade","alt":2.004,"lowRel":2.004,"tof":-1.0,"tofW":0.0,"baro":7.35,"cbaro":3.588,"setpt":2.495,"fV":0.98,"desV":0.541,"thr":1152.0,"sat":0.0,"src":0.0},{"ms":5264.0,"phase":"cascade","alt":1.824,"lowRel":1.824,"tof":-1.0,"tofW":0.0,"baro":7.17,"cbaro":3.408,"setpt":2.556,"fV":0.867,"desV":0.6,"thr":1173.0,"sat":0.0,"src":0.0},{"ms":5325.0,"phase":"cascade","alt":0.805,"lowRel":0.805,"tof":2.389,"tofW":100.0,"baro":7.18,"cbaro":3.297,"setpt":2.617,"fV":0.774,"desV":0.6,"thr":1184.0,"sat":0.0,"src":3.0},{"ms":5385.0,"phase":"cascade","alt":0.805,"lowRel":0.805,"tof":2.389,"tofW":100.0,"baro":7.14,"cbaro":3.257,"setpt":2.677,"fV":0.699,"desV":0.6,"thr":1193.0,"sat":0.0,"src":3.0},{"ms":5446.0,"phase":"cascade","alt":0.805,"lowRel":0.805,"tof":2.389,"tofW":100.0,"baro":7.03,"cbaro":3.147,"setpt":2.738,"fV":0.669,"desV":0.6,"thr":1197.0,"sat":0.0,"src":3.0},{"ms":5507.0,"phase":"cascade","alt":0.012,"lowRel":0.012,"tof":1.596,"tofW":100.0,"baro":6.67,"cbaro":2.515,"setpt":2.799,"fV":0.645,"desV":0.6,"thr":1200.0,"sat":0.0,"src":1.0}],"jumps":[{"from":2049,"to":2110,"delta":-1.559},{"from":2414,"to":2474,"delta":0.863},{"from":2535,"to":2596,"delta":0.42200000000000004},{"from":2717,"to":2778,"delta":-0.508},{"from":3021,"to":3081,"delta":1.83},{"from":3081,"to":3142,"delta":-0.572},{"from":3202,"to":3263,"delta":-0.40199999999999997},{"from":3930,"to":3991,"delta":0.476},{"from":4476,"to":4536,"delta":0.6390000000000001},{"from":4719,"to":4779,"delta":0.4829999999999999},{"from":5264,"to":5325,"delta":-1.0190000000000001},{"from":5446,"to":5507,"delta":-0.793}],"jumpThreshold":0.35,"sourceSummary":"BARO=39, TOF=20, TOF HOLD=32"};
+const W = 1100, H = 320, M = {l:54, r:16, t:16, b:30};
+const COLORS = { alt:'#39d98a', tof:'#61dafb', baro:'#f7b955', cbaro:'#b084f5', setpt:'#fff', thr:'#ff6b6b', fV:'#61dafb', desV:'#f7b955', src:'#39d98a', jump:'#ff4d4d' };
+const pts = DATA.points;
+function finite(v) { return typeof v === 'number' && Number.isFinite(v); }
+function extent(keys) {
+  let vals = [];
+  for (const p of pts) for (const k of keys) if (finite(p[k]) && !(k === 'tof' && p[k] < 0)) vals.push(p[k]);
+  if (!vals.length) return [0, 1];
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.08;
+  return [lo - pad, hi + pad];
+}
+function xScale(ms) {
+  const first = pts[0]?.ms ?? 0, last = pts[pts.length - 1]?.ms ?? 1;
+  return M.l + (ms - first) / Math.max(1, last - first) * (W - M.l - M.r);
+}
+function yScale(v, lo, hi, height=H) { return M.t + (hi - v) / (hi - lo) * (height - M.t - M.b); }
+function linePath(key, lo, hi, height=H) {
+  let d = '', open = false;
+  for (const p of pts) {
+    let v = p[key];
+    if (!finite(v) || (key === 'tof' && v < 0)) { open = false; continue; }
+    const cmd = open ? 'L' : 'M';
+    d += `${cmd}${xScale(p.ms).toFixed(1)},${yScale(v, lo, hi, height).toFixed(1)}`;
+    open = true;
+  }
+  return d;
+}
+function drawAxes(svg, lo, hi, height=H) {
+  const plotW = W - M.l - M.r, plotH = height - M.t - M.b;
+  svg.innerHTML = `<line x1="${M.l}" y1="${M.t}" x2="${M.l}" y2="${M.t+plotH}" stroke="#33414a"/>
+    <line x1="${M.l}" y1="${M.t+plotH}" x2="${M.l+plotW}" y2="${M.t+plotH}" stroke="#33414a"/>`;
+  for (let i=0; i<=4; i++) {
+    const y = M.t + plotH * i / 4;
+    const v = hi - (hi - lo) * i / 4;
+    svg.innerHTML += `<line x1="${M.l}" y1="${y}" x2="${M.l+plotW}" y2="${y}" stroke="#1f2930"/>
+      <text x="8" y="${y+4}" fill="#91a1ad" font-size="11">${v.toFixed(2)}</text>`;
+  }
+}
+function drawLines(id, keys) {
+  const svg = document.getElementById(id);
+  const [lo, hi] = extent(keys);
+  drawAxes(svg, lo, hi);
+  for (const j of DATA.jumps) {
+    const x = xScale(j.to);
+    svg.innerHTML += `<line x1="${x}" y1="${M.t}" x2="${x}" y2="${H-M.b}" stroke="${COLORS.jump}" stroke-opacity=".45"/>`;
+  }
+  for (const key of keys) {
+    svg.innerHTML += `<path d="${linePath(key, lo, hi)}" fill="none" stroke="${COLORS[key]}" stroke-width="2"/>`;
+  }
+}
+function drawSource() {
+  const svg = document.getElementById('srcPlot');
+  const height = 180, lo = -0.2, hi = 3.2;
+  drawAxes(svg, lo, hi, height);
+  for (const p of pts) {
+    if (!finite(p.src)) continue;
+    const x = xScale(p.ms), y = yScale(p.src, lo, hi, height);
+    const color = ['#f7b955','#61dafb','#b084f5','#39d98a'][p.src] || '#999';
+    svg.innerHTML += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}"/>`;
+  }
+}
+function stat(label, value) {
+  return `<div class="card"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+document.getElementById('stats').innerHTML = [
+  stat('Rows', pts.length),
+  stat('Duration', pts.length ? ((pts[pts.length-1].ms - pts[0].ms)/1000).toFixed(2) + 's' : 'n/a'),
+  stat('Source counts', DATA.sourceSummary),
+  stat('Altitude jumps', DATA.jumps.length + ' >= ' + DATA.jumpThreshold.toFixed(2) + 'm')
+].join('');
+drawLines('altPlot', ['alt','tof','baro','cbaro','setpt']);
+drawLines('ctrlPlot', ['thr','fV','desV']);
+drawSource();
+</script>
+</body>
+</html>

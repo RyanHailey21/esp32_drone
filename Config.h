@@ -18,10 +18,13 @@
 #define TOF_TIMING_BUDGET_US 50000
 #define TOF_VALID_MIN_M   0.04f
 #define TOF_VALID_MAX_M   3.80f
-#define TOF_BLEND_FULL_M  2.50f
-#define TOF_BLEND_ZERO_M  3.50f
+#define TOF_BLEND_FULL_M  3.60f
+#define TOF_BLEND_ZERO_M  3.80f
 #define TOF_STALE_MS      150
-#define TOF_OFFSET_ALPHA  0.02f
+#define TOF_HOLDOVER_MS   300    // bridge brief low-altitude ToF dropouts instead of swapping to baro
+#define TOF_MAX_STEP_MIN_M 0.18f // reject sudden single-sample range jumps near the ground
+#define TOF_MAX_STEP_MPS   3.0f
+#define TOF_OFFSET_ALPHA  0.12f  // align corrected baro quickly while full-weight ToF is available
 
 // ── Brushed Motor PWM ────────────────────────────────────────
 #define PWM_FREQ        25000
@@ -55,6 +58,12 @@
 #define TARGET_ALT_UUID     "ab0828bf-198e-4351-b779-901fa0e0371e"
 #define ALT_HOLD_TARGET_UUID "ab0828c0-198e-4351-b779-901fa0e0371e"
 #define ANGLE_MODE_UUID     "ab0828c1-198e-4351-b779-901fa0e0371e"
+#define FLIGHT_LOG_OFFSET_UUID "ab0828c2-198e-4351-b779-901fa0e0371e"
+#define FLIGHT_LOG_CHUNK_UUID  "ab0828c3-198e-4351-b779-901fa0e0371e"
+
+// BLE flight-log dump
+#define FLIGHT_LOG_BYTES       32768
+#define FLIGHT_LOG_CHUNK_BYTES 220
 
 // ── BLE Command IDs ──────────────────────────────────────────
 #define CMD_HOVER_TEST      1
@@ -113,19 +122,24 @@
 #define VARIO_TAU_S             0.30f   // seconds, time-based low-pass constant for vario
 #define VARIO_STALE_MS          500     // ms before vario reading is considered stale
 #define VARIO_MAX_PLAUSIBLE_CMS 800     // cm/s — implausible above this (~8 m/s)
-#define VSPEED_I_MAX_US         50.0f   // max integral throttle contribution in us
+#define VSPEED_I_MAX_US         150.0f  // max integral throttle contribution in us
 
 // Throttle authority around hover
 #define THR_UP_OFFSET_US        300     // max µs above HOVER_THROTTLE
 #define THR_DOWN_OFFSET_US      300     // max µs below HOVER_THROTTLE (more for braking)
-#define MIN_CONTROL_THROTTLE_US 1050    // lower bound to preserve attitude-control authority
+#define MIN_ALT_HOLD_THROTTLE_US 1000   // low-altitude test mode can fully unload for braking
+#define MIN_MISSION_THROTTLE_US  1050   // mission hold preserves attitude-control authority
 
 // Safety
 #define ALT_MAX_M               22.0f   // absolute ceiling — triggers landing above this
 #define LANDING_KP_VSPEED       30.0f   // fixed P gain for landing velocity controller
 
 // Takeoff ground guard — avoids integrator windup and baro-spike at liftoff
-#define TAKEOFF_ALT_M            0.3f   // altitude below which closed-loop is suppressed
-#define TAKEOFF_NUDGE_US         50     // µs above HOVER_THROTTLE for ground-phase thrust
+#define TAKEOFF_ALT_M            0.12f  // ToF-confirmed liftoff threshold before closed-loop engages
+#define TAKEOFF_NUDGE_US         80     // µs above HOVER_THROTTLE for ground-phase thrust
+#define TAKEOFF_RAMP_US_PER_S    80     // additional takeoff throttle ramp while waiting for liftoff
+#define TAKEOFF_MAX_OFFSET_US    300    // max takeoff throttle above HOVER_THROTTLE
+#define TAKEOFF_INVALID_TOF_MAX_OFFSET_US 170  // cap takeoff thrust until ToF confirms altitude
+#define TAKEOFF_CONFIRM_SAMPLES  3      // consecutive ToF-valid samples before cascade latch
 #define BARO_SETTLE_MS           500    // ms after throttle step for baro to settle at hover pressure
-#define GROUND_GUARD_TIMEOUT_MS  2000   // ms before aborting if baro hasn't confirmed liftoff
+#define GROUND_GUARD_TIMEOUT_MS  8000   // ms before aborting if ToF/fused altitude hasn't confirmed liftoff

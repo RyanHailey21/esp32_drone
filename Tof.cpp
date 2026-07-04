@@ -48,7 +48,7 @@ bool readTofAltitude(float& altitudeM) {
     uint32_t nowMs = millis();
     if (lastGoodTofMs != 0) {
         float dt = max((nowMs - lastGoodTofMs) / 1000.0f, 0.02f);
-        float maxStepM = max(0.35f, 5.0f * dt);
+        float maxStepM = max((float)TOF_MAX_STEP_MIN_M, (float)TOF_MAX_STEP_MPS * dt);
         if (fabsf(measuredM - lastGoodTofM) > maxStepM) {
             return false;
         }
@@ -70,6 +70,13 @@ bool readTofAltitude(float& altitudeM) {
 }
 
 #endif
+
+void resetTofFilter() {
+#if TOF_ENABLED
+    lastGoodTofM = 0.0f;
+    lastGoodTofMs = 0;
+#endif
+}
 
 float tofBlendWeight(float altitudeM, bool valid) {
     if (!valid) return 0.0f;

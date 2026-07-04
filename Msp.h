@@ -5,3 +5,4 @@
 
 void sendRC();
 float getAltitude();
+void resetAltitudeFusion();
