@@ -95,6 +95,7 @@
 #define LANDING_GROUND_M    0.15f  // altitude threshold → cut motors
 #define LANDING_TIMEOUT_MS  30000  // safety: force disarm if landing takes too long
 #define DESCENT_RATE_MPS    0.4f   // target descent speed m/s
+#define LANDING_THROTTLE_OFFSET_US 180  // nominal throttle below hover while landing
 
 // ── Bench-Mode Simulation Constants ──────────────────────────
 #define BENCH_SPRINT_RATE_MPS     9.0f
@@ -128,10 +129,10 @@
 #define NEAR_TARGET_FACTOR      0.35f   // minimum speed factor within near-target zone
 
 // Inner loop: vario filtering
-#define VARIO_TAU_S             0.20f   // seconds, light low-pass; BF vario is already filtered
+#define VARIO_TAU_S             0.05f   // seconds, light low-pass; avoid lag on low-alt ToF vario
 #define VARIO_STALE_MS          500     // ms before vario reading is considered stale
 #define VARIO_MAX_PLAUSIBLE_CMS 800     // cm/s — implausible above this (~8 m/s)
-#define USE_BF_VARIO_PRIMARY    1       // prefer Betaflight MSP_ALTITUDE vario; derived stays fallback
+#define USE_BF_VARIO_PRIMARY    1       // use BF vario above ToF range; ToF-derived vario wins near ground
 #define VSPEED_I_MAX_US         150.0f  // max integral throttle contribution in us
 
 // Throttle authority around hover
@@ -142,14 +143,14 @@
 
 // Safety
 #define ALT_MAX_M               22.0f   // absolute ceiling — triggers landing above this
-#define LANDING_KP_VSPEED       30.0f   // fixed P gain for landing velocity controller
+#define LANDING_KP_VSPEED       120.0f  // fixed P gain for landing velocity controller
 
 // Takeoff ground guard — avoids integrator windup and baro-spike at liftoff
 #define TAKEOFF_ALT_M            0.12f  // ToF-confirmed liftoff threshold before closed-loop engages
-#define TAKEOFF_NUDGE_US         40     // us above HOVER_THROTTLE for ground-phase thrust
-#define TAKEOFF_RAMP_US_PER_S    40     // additional takeoff throttle ramp while waiting for liftoff
-#define TAKEOFF_MAX_OFFSET_US    200    // max takeoff throttle above HOVER_THROTTLE
-#define TAKEOFF_INVALID_TOF_MAX_OFFSET_US 100  // cap takeoff thrust until ToF confirms altitude
+#define TAKEOFF_NUDGE_US         15     // us above HOVER_THROTTLE for ground-phase thrust
+#define TAKEOFF_RAMP_US_PER_S    30     // additional takeoff throttle ramp while waiting for liftoff
+#define TAKEOFF_MAX_OFFSET_US    140    // max takeoff throttle above HOVER_THROTTLE
+#define TAKEOFF_INVALID_TOF_MAX_OFFSET_US 60   // cap takeoff thrust until ToF confirms altitude
 #define TAKEOFF_CONFIRM_SAMPLES  3      // consecutive ToF-valid samples before cascade latch
 #define BARO_SETTLE_MS           500    // ms after throttle step for baro to settle at hover pressure
 #define GROUND_GUARD_TIMEOUT_MS  8000   // ms before aborting if ToF/fused altitude hasn't confirmed liftoff

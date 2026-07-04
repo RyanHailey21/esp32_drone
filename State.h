@@ -88,6 +88,7 @@ extern uint32_t     benchLastMs;
 extern uint32_t     landingStartMs;
 extern float        landingStartAlt;
 extern volatile bool bleSafetyLand;
+extern volatile bool bleRequestedLand;
 
 // ── Tunable Parameters (BLE-writable) ────────────────────────
 extern volatile uint16_t HOVER_THROTTLE;

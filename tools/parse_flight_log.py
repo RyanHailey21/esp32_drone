@@ -124,6 +124,23 @@ def preview_path_for(log_path: Path, output: Path | None, multiple: bool) -> Pat
     return output
 
 
+def discover_logs(log_dir: Path) -> list[Path]:
+    return sorted(
+        log_dir.glob("quad-flight-log-*.csv"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+
+
+def logs_needing_preview(log_dir: Path) -> list[Path]:
+    logs = []
+    for log in discover_logs(log_dir):
+        preview = log.with_suffix(".preview.html")
+        if not preview.exists() or preview.stat().st_mtime < log.stat().st_mtime:
+            logs.append(log)
+    return logs
+
+
 def write_preview(path: Path, run: str, rows, output: Path, jump_threshold_m: float):
     points = []
     for row in rows:
@@ -395,14 +412,32 @@ def summarize(path: Path, jump_threshold_m: float):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("logs", nargs="+", type=Path, help="CSV log file(s) to summarize")
+    parser.add_argument("logs", nargs="*", type=Path, help="CSV log file(s) to summarize; defaults to newest flight_logs CSV")
+    parser.add_argument("--log-dir", type=Path, default=Path("flight_logs"), help="directory to scan for default/latest/new logs")
+    parser.add_argument("--latest", action="store_true", help="summarize only the newest CSV in --log-dir")
+    parser.add_argument("--new", action="store_true", help="summarize CSVs whose preview is missing or older than the CSV")
     parser.add_argument("--jump-threshold-m", type=float, default=0.35)
     parser.add_argument("--preview", action="store_true", help="write standalone HTML plot preview(s)")
     parser.add_argument("--open", action="store_true", help="open generated preview(s) in the default browser")
     parser.add_argument("--preview-output", type=Path, help="preview file path, or directory when parsing multiple logs")
     args = parser.parse_args()
 
-    for index, path in enumerate(args.logs):
+    logs = args.logs
+    if args.new:
+        logs = logs_needing_preview(args.log_dir)
+        if logs:
+            args.preview = True
+    elif args.latest or not logs:
+        discovered = discover_logs(args.log_dir)
+        if not discovered:
+            raise SystemExit(f"No quad-flight-log-*.csv files found in {args.log_dir}")
+        logs = [discovered[0]]
+
+    if not logs:
+        print(f"No new logs need previews in {args.log_dir}")
+        return
+
+    for index, path in enumerate(logs):
         if index:
             print()
         run, rows = summarize(path, args.jump_threshold_m)

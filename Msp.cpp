@@ -90,10 +90,14 @@ static int16_t constrainVario(float cms) {
 }
 
 static int16_t selectVarioForControl(int16_t fcVario, int16_t derivedVario) {
-    // Betaflight 4.4.3 with VARIO enabled exposes a filtered FC-side vertical
-    // speed estimate through MSP_ALTITUDE. Prefer it directly; true zero is a
-    // valid hover reading. Keep the ESP32-derived estimate only as a sanity
-    // fallback for impossible values or for builds without BF vario support.
+    // Near the ground, the ToF derivative leads the FC/baro vario by enough to
+    // matter. Use it while ToF has high confidence; use Betaflight vario above
+    // ToF range where the derived estimate falls back to baro.
+    if (lastTofValid && lastTofWeightPct >= 80 && abs(derivedVario) <= VARIO_MAX_PLAUSIBLE_CMS) {
+        lastVarioSource = 0;
+        return derivedVario;
+    }
+
 #if USE_BF_VARIO_PRIMARY
     if (abs(fcVario) <= VARIO_MAX_PLAUSIBLE_CMS) {
         lastVarioSource = 1;

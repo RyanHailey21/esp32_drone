@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>quad-flight-log-2026-07-03T17-45-50-964Z.csv preview</title>
+<style>
+body { margin: 0; font-family: system-ui, Segoe UI, Arial, sans-serif; background: #101316; color: #e8eef2; }
+main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+h1 { margin: 0 0 6px; font-size: 22px; }
+.run { color: #9fb0bd; margin-bottom: 18px; font-family: Consolas, monospace; font-size: 13px; }
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.card { background: #171c20; border: 1px solid #2a343c; border-radius: 8px; padding: 10px 12px; }
+.label { color: #91a1ad; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.value { font-size: 18px; margin-top: 3px; }
+.plot { background: #151a1f; border: 1px solid #2a343c; border-radius: 8px; margin: 14px 0; padding: 12px; }
+.plot-title { display: flex; justify-content: space-between; color: #cbd5dc; font-size: 13px; margin-bottom: 8px; }
+svg { display: block; width: 100%; height: 320px; background: #0d1115; border-radius: 4px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: #9fb0bd; font-size: 12px; margin-top: 8px; }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 18px; height: 3px; border-radius: 2px; }
+.hint { color: #91a1ad; font-size: 12px; margin-top: 10px; }
+@media (max-width: 760px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } main { padding: 14px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>quad-flight-log-2026-07-03T17-45-50-964Z.csv</h1>
+  <div class="run">[RUN] ALT_HOLD hover=1120 target=1.50 kp=1.10 ki=3.00 kd=120.00 tofFull=3.60 tofZero=3.80</div>
+  <div class="grid" id="stats"></div>
+  <section class="plot">
+    <div class="plot-title"><span>Altitude Sources</span><span>meters vs time</span></div>
+    <svg id="altPlot" viewBox="0 0 1100 320" role="img" aria-label="Altitude plot"></svg>
+    <div class="legend">
+      <span class="key"><span class="sw" style="background:#39d98a"></span>alt</span>
+      <span class="key"><span class="sw" style="background:#61dafb"></span>tof</span>
+      <span class="key"><span class="sw" style="background:#f7b955"></span>baro</span>
+      <span class="key"><span class="sw" style="background:#b084f5"></span>corrected baro</span>
+      <span class="key"><span class="sw" style="background:#ffffff"></span>setpoint</span>
+    </div>
+  </section>
+  <section class="plot">
+    <div class="plot-title"><span>Control</span><span>throttle us, vertical speed m/s</span></div>
+    <svg id="ctrlPlot" viewBox="0 0 1100 320" role="img" aria-label="Control plot"></svg>
+    <div class="legend">
+      <span class="key"><span class="sw" style="background:#ff6b6b"></span>throttle</span>
+      <span class="key"><span class="sw" style="background:#61dafb"></span>filtered vario</span>
+      <span class="key"><span class="sw" style="background:#f7b955"></span>desired speed</span>
+      <span class="key"><span class="sw" style="background:#39d98a"></span>used vario</span>
+    </div>
+  </section>
+  <section class="plot">
+    <div class="plot-title"><span>Altitude Source</span><span>0 baro, 1 tof, 2 blend, 3 tof hold</span></div>
+    <svg id="srcPlot" viewBox="0 0 1100 180" role="img" aria-label="Source plot"></svg>
+    <div class="hint">Red vertical markers indicate parsed altitude jumps above the configured threshold.</div>
+  </section>
+  <section class="plot">
+    <div class="plot-title"><span>FC IMU / Attitude</span><span>raw accel, roll/pitch degrees</span></div>
+    <svg id="imuPlot" viewBox="0 0 1100 320" role="img" aria-label="IMU plot"></svg>
+    <div class="legend">
+      <span class="key"><span class="sw" style="background:#39d98a"></span>accZ</span>
+      <span class="key"><span class="sw" style="background:#61dafb"></span>accX</span>
+      <span class="key"><span class="sw" style="background:#f7b955"></span>accY</span>
+      <span class="key"><span class="sw" style="background:#ffffff"></span>roll</span>
+      <span class="key"><span class="sw" style="background:#b084f5"></span>pitch</span>
+    </div>
+  </section>
+</main>
+<script>
+const DATA = {"title":"quad-flight-log-2026-07-03T17-45-50-964Z.csv","run":"[RUN] ALT_HOLD hover=1120 target=1.50 kp=1.10 ki=3.00 kd=120.00 tofFull=3.60 tofZero=3.80","points":[{"ms":67.0,"phase":"settle","alt":0.02,"lowRel":0.02,"tof":-1.0,"tofW":0.0,"baro":0.21,"cbaro":null,"setpt":0.0,"fV":0.0,"usedV":-3.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1200.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":128.0,"phase":"settle","alt":-0.02,"lowRel":-0.02,"tof":-1.0,"tofW":0.0,"baro":0.21,"cbaro":null,"setpt":0.0,"fV":0.0,"usedV":6.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1200.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":189.0,"phase":"settle","alt":-0.04,"lowRel":-0.04,"tof":-1.0,"tofW":0.0,"baro":0.15,"cbaro":null,"setpt":0.0,"fV":0.0,"usedV":6.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1200.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":250.0,"phase":"settle","alt":0.11,"lowRel":0.11,"tof":-1.0,"tofW":0.0,"baro":0.33,"cbaro":null,"setpt":0.0,"fV":0.0,"usedV":6.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1200.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":310.0,"phase":"settle","alt":0.07,"lowRel":0.07,"tof":-1.0,"tofW":0.0,"baro":0.52,"cbaro":null,"setpt":0.0,"fV":0.0,"usedV":6.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1200.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":371.0,"phase":"settle","alt":-0.02,"lowRel":-0.02,"tof":-1.0,"tofW":0.0,"baro":0.51,"cbaro":null,"setpt":0.0,"fV":0.0,"usedV":6.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1200.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":432.0,"phase":"settle","alt":0.0,"lowRel":0.0,"tof":-1.0,"tofW":0.0,"baro":0.49,"cbaro":null,"setpt":0.0,"fV":0.0,"usedV":6.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1200.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":492.0,"phase":"settle","alt":0.06,"lowRel":0.06,"tof":-1.0,"tofW":0.0,"baro":0.57,"cbaro":null,"setpt":0.0,"fV":0.0,"usedV":6.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1200.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":554.0,"phase":"guard","alt":0.33,"lowRel":0.33,"tof":-1.0,"tofW":0.0,"baro":0.9,"cbaro":null,"setpt":0.33,"fV":0.0,"usedV":45.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1204.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":614.0,"phase":"guard","alt":-0.288,"lowRel":-0.288,"tof":0.064,"tofW":100.0,"baro":1.02,"cbaro":null,"setpt":-0.288,"fV":0.0,"usedV":45.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1209.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":674.0,"phase":"guard","alt":-0.233,"lowRel":-0.233,"tof":0.119,"tofW":100.0,"baro":0.69,"cbaro":null,"setpt":-0.233,"fV":0.0,"usedV":45.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1213.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":735.0,"phase":"guard","alt":-0.233,"lowRel":-0.233,"tof":0.119,"tofW":100.0,"baro":0.49,"cbaro":null,"setpt":-0.233,"fV":0.0,"usedV":6.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1218.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":796.0,"phase":"guard","alt":-0.195,"lowRel":-0.195,"tof":0.157,"tofW":100.0,"baro":0.27,"cbaro":null,"setpt":-0.195,"fV":0.0,"usedV":6.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1223.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":856.0,"phase":"guard","alt":-0.12,"lowRel":-0.12,"tof":0.232,"tofW":100.0,"baro":0.15,"cbaro":null,"setpt":-0.12,"fV":0.0,"usedV":20.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1228.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":917.0,"phase":"guard","alt":-0.12,"lowRel":-0.12,"tof":0.232,"tofW":100.0,"baro":0.12,"cbaro":null,"setpt":-0.12,"fV":0.0,"usedV":20.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1233.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":977.0,"phase":"guard","alt":-0.029,"lowRel":-0.029,"tof":0.323,"tofW":100.0,"baro":0.15,"cbaro":null,"setpt":-0.029,"fV":0.0,"usedV":84.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1238.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1038.0,"phase":"guard","alt":0.076,"lowRel":0.076,"tof":0.428,"tofW":100.0,"baro":0.2,"cbaro":null,"setpt":0.076,"fV":0.0,"usedV":84.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1243.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1099.0,"phase":"guard","alt":0.076,"lowRel":0.076,"tof":0.428,"tofW":100.0,"baro":0.24,"cbaro":null,"setpt":0.076,"fV":0.0,"usedV":85.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1247.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1159.0,"phase":"guard","alt":0.203,"lowRel":0.203,"tof":0.555,"tofW":100.0,"baro":0.3,"cbaro":null,"setpt":0.203,"fV":0.0,"usedV":85.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.0,"thr":1252.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1220.0,"phase":"cascade","alt":0.327,"lowRel":0.327,"tof":0.679,"tofW":100.0,"baro":0.32,"cbaro":null,"setpt":0.253,"fV":0.086,"usedV":95.0,"bfV":null,"derV":null,"vsrc":null,"desV":-0.081,"thr":1099.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1281.0,"phase":"cascade","alt":0.327,"lowRel":0.327,"tof":0.679,"tofW":100.0,"baro":0.39,"cbaro":null,"setpt":0.314,"fV":0.238,"usedV":95.0,"bfV":null,"derV":null,"vsrc":null,"desV":-0.014,"thr":1089.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1341.0,"phase":"cascade","alt":0.438,"lowRel":0.438,"tof":0.79,"tofW":100.0,"baro":0.5,"cbaro":null,"setpt":0.374,"fV":0.456,"usedV":149.0,"bfV":null,"derV":null,"vsrc":null,"desV":-0.07,"thr":1056.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1402.0,"phase":"cascade","alt":0.52,"lowRel":0.52,"tof":0.872,"tofW":100.0,"baro":0.6,"cbaro":null,"setpt":0.435,"fV":0.638,"usedV":149.0,"bfV":null,"derV":null,"vsrc":null,"desV":-0.094,"thr":1050.0,"sat":-1.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1463.0,"phase":"cascade","alt":0.52,"lowRel":0.52,"tof":0.872,"tofW":100.0,"baro":0.67,"cbaro":null,"setpt":0.496,"fV":0.709,"usedV":104.0,"bfV":null,"derV":null,"vsrc":null,"desV":-0.026,"thr":1050.0,"sat":-1.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1524.0,"phase":"cascade","alt":0.584,"lowRel":0.584,"tof":0.936,"tofW":100.0,"baro":0.73,"cbaro":null,"setpt":0.557,"fV":0.767,"usedV":104.0,"bfV":null,"derV":null,"vsrc":null,"desV":-0.03,"thr":1050.0,"sat":-1.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1585.0,"phase":"cascade","alt":0.625,"lowRel":0.625,"tof":0.977,"tofW":100.0,"baro":0.79,"cbaro":null,"setpt":0.618,"fV":0.764,"usedV":75.0,"bfV":null,"derV":null,"vsrc":null,"desV":-0.008,"thr":1050.0,"sat":-1.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1645.0,"phase":"cascade","alt":0.625,"lowRel":0.625,"tof":0.977,"tofW":100.0,"baro":0.83,"cbaro":null,"setpt":0.678,"fV":0.762,"usedV":75.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.058,"thr":1050.0,"sat":-1.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1706.0,"phase":"cascade","alt":0.652,"lowRel":0.652,"tof":1.004,"tofW":100.0,"baro":0.91,"cbaro":null,"setpt":0.739,"fV":0.742,"usedV":65.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.096,"thr":1050.0,"sat":-1.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1766.0,"phase":"cascade","alt":0.681,"lowRel":0.681,"tof":1.033,"tofW":100.0,"baro":1.04,"cbaro":null,"setpt":0.799,"fV":0.726,"usedV":65.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.13,"thr":1050.0,"sat":-1.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1827.0,"phase":"cascade","alt":0.681,"lowRel":0.681,"tof":1.033,"tofW":100.0,"baro":1.11,"cbaro":null,"setpt":0.86,"fV":0.672,"usedV":42.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.197,"thr":1062.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1888.0,"phase":"cascade","alt":0.729,"lowRel":0.729,"tof":1.081,"tofW":100.0,"baro":1.11,"cbaro":null,"setpt":0.921,"fV":0.628,"usedV":42.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.211,"thr":1069.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":1949.0,"phase":"cascade","alt":0.726,"lowRel":0.726,"tof":1.078,"tofW":100.0,"baro":1.1,"cbaro":null,"setpt":0.982,"fV":0.588,"usedV":40.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.282,"thr":1082.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":2009.0,"phase":"cascade","alt":0.724,"lowRel":0.724,"tof":1.076,"tofW":100.0,"baro":1.11,"cbaro":null,"setpt":1.042,"fV":0.555,"usedV":40.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.35,"thr":1094.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":2070.0,"phase":"cascade","alt":0.704,"lowRel":0.704,"tof":1.056,"tofW":100.0,"baro":1.15,"cbaro":null,"setpt":1.103,"fV":0.48,"usedV":13.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.439,"thr":1114.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":2131.0,"phase":"cascade","alt":0.66,"lowRel":0.66,"tof":1.012,"tofW":100.0,"baro":1.15,"cbaro":null,"setpt":1.164,"fV":0.419,"usedV":13.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.554,"thr":1135.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":2191.0,"phase":"cascade","alt":0.66,"lowRel":0.66,"tof":1.012,"tofW":100.0,"baro":1.12,"cbaro":null,"setpt":1.224,"fV":0.311,"usedV":-20.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.6,"thr":1154.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":2252.0,"phase":"cascade","alt":0.666,"lowRel":0.666,"tof":1.018,"tofW":100.0,"baro":1.1,"cbaro":null,"setpt":1.285,"fV":0.221,"usedV":-20.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.6,"thr":1165.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":2313.0,"phase":"cascade","alt":0.626,"lowRel":0.626,"tof":0.978,"tofW":100.0,"baro":1.09,"cbaro":null,"setpt":1.346,"fV":0.14,"usedV":-24.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.6,"thr":1174.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null},{"ms":2373.0,"phase":"cascade","alt":0.586,"lowRel":0.586,"tof":0.938,"tofW":100.0,"baro":1.03,"cbaro":null,"setpt":1.406,"fV":0.074,"usedV":-24.0,"bfV":null,"derV":null,"vsrc":null,"desV":0.6,"thr":1182.0,"sat":0.0,"src":null,"accX":null,"accY":null,"accZ":null,"gyroX":null,"gyroY":null,"gyroZ":null,"roll":null,"pitch":null,"yaw":null,"cycle":null,"rcThr":null,"rcArm":null,"rcAngle":null,"vbat":null,"amps":null,"diag":null}],"jumps":[{"from":554,"to":614,"delta":-0.618}],"jumpThreshold":0.35,"sourceSummary":"not present"};
+const W = 1100, H = 320, M = {l:54, r:16, t:16, b:30};
+const COLORS = { alt:'#39d98a', tof:'#61dafb', baro:'#f7b955', cbaro:'#b084f5', setpt:'#fff', thr:'#ff6b6b', fV:'#61dafb', usedV:'#39d98a', desV:'#f7b955', src:'#39d98a', accX:'#61dafb', accY:'#f7b955', accZ:'#39d98a', roll:'#ffffff', pitch:'#b084f5', jump:'#ff4d4d' };
+const pts = DATA.points;
+function finite(v) { return typeof v === 'number' && Number.isFinite(v); }
+function extent(keys) {
+  let vals = [];
+  for (const p of pts) for (const k of keys) if (finite(p[k]) && !(k === 'tof' && p[k] < 0)) vals.push(p[k]);
+  if (!vals.length) return [0, 1];
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.08;
+  return [lo - pad, hi + pad];
+}
+function xScale(ms) {
+  const first = pts[0]?.ms ?? 0, last = pts[pts.length - 1]?.ms ?? 1;
+  return M.l + (ms - first) / Math.max(1, last - first) * (W - M.l - M.r);
+}
+function yScale(v, lo, hi, height=H) { return M.t + (hi - v) / (hi - lo) * (height - M.t - M.b); }
+function linePath(key, lo, hi, height=H) {
+  let d = '', open = false;
+  for (const p of pts) {
+    let v = p[key];
+    if (!finite(v) || (key === 'tof' && v < 0)) { open = false; continue; }
+    const cmd = open ? 'L' : 'M';
+    d += `${cmd}${xScale(p.ms).toFixed(1)},${yScale(v, lo, hi, height).toFixed(1)}`;
+    open = true;
+  }
+  return d;
+}
+function drawAxes(svg, lo, hi, height=H) {
+  const plotW = W - M.l - M.r, plotH = height - M.t - M.b;
+  svg.innerHTML = `<line x1="${M.l}" y1="${M.t}" x2="${M.l}" y2="${M.t+plotH}" stroke="#33414a"/>
+    <line x1="${M.l}" y1="${M.t+plotH}" x2="${M.l+plotW}" y2="${M.t+plotH}" stroke="#33414a"/>`;
+  for (let i=0; i<=4; i++) {
+    const y = M.t + plotH * i / 4;
+    const v = hi - (hi - lo) * i / 4;
+    svg.innerHTML += `<line x1="${M.l}" y1="${y}" x2="${M.l+plotW}" y2="${y}" stroke="#1f2930"/>
+      <text x="8" y="${y+4}" fill="#91a1ad" font-size="11">${v.toFixed(2)}</text>`;
+  }
+}
+function drawLines(id, keys) {
+  const svg = document.getElementById(id);
+  const [lo, hi] = extent(keys);
+  drawAxes(svg, lo, hi);
+  for (const j of DATA.jumps) {
+    const x = xScale(j.to);
+    svg.innerHTML += `<line x1="${x}" y1="${M.t}" x2="${x}" y2="${H-M.b}" stroke="${COLORS.jump}" stroke-opacity=".45"/>`;
+  }
+  for (const key of keys) {
+    svg.innerHTML += `<path d="${linePath(key, lo, hi)}" fill="none" stroke="${COLORS[key]}" stroke-width="2"/>`;
+  }
+}
+function drawSource() {
+  const svg = document.getElementById('srcPlot');
+  const height = 180, lo = -0.2, hi = 3.2;
+  drawAxes(svg, lo, hi, height);
+  for (const p of pts) {
+    if (!finite(p.src)) continue;
+    const x = xScale(p.ms), y = yScale(p.src, lo, hi, height);
+    const color = ['#f7b955','#61dafb','#b084f5','#39d98a'][p.src] || '#999';
+    svg.innerHTML += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}"/>`;
+  }
+}
+function stat(label, value) {
+  return `<div class="card"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+document.getElementById('stats').innerHTML = [
+  stat('Rows', pts.length),
+  stat('Duration', pts.length ? ((pts[pts.length-1].ms - pts[0].ms)/1000).toFixed(2) + 's' : 'n/a'),
+  stat('Source counts', DATA.sourceSummary),
+  stat('Altitude jumps', DATA.jumps.length + ' >= ' + DATA.jumpThreshold.toFixed(2) + 'm'),
+  stat('Diag mask', pts.length ? '0x' + (pts[pts.length-1].diag ?? 0).toString(16) : 'n/a')
+].join('');
+drawLines('altPlot', ['alt','tof','baro','cbaro','setpt']);
+drawLines('ctrlPlot', ['thr','fV','usedV','desV']);
+drawSource();
+drawLines('imuPlot', ['accZ','accX','accY','roll','pitch']);
+</script>
+</body>
+</html>

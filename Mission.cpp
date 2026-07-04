@@ -198,6 +198,14 @@ void runMissionLoop() {
         }
     }
 
+    // BLE callback requests are consumed in the main loop to avoid racing MSP/RC writes.
+    if (bleRequestedLand) {
+        bleRequestedLand = false;
+        bleSafetyLand = false;
+        Serial.println("[BLE] Land request -> LANDING");
+        startLanding(altitude);
+    }
+
     // BLE disconnect safety: land if triggered while in a test state
     if (bleSafetyLand) {
         bleSafetyLand = false;
@@ -503,12 +511,15 @@ void runMissionLoop() {
             channels[CH_ANGLE] = angleModeChannelValue();
             digitalWrite(STATUS_LED, millis() % 200 < 30);
 
-            // Only trust baro ground detection after we've actually descended from start altitude.
-            // Guards against a stuck/zero baro reading killing motors mid-air.
+            // ToF can detect ground immediately. Baro/fused fallback must first
+            // show real descent so a stale zero cannot kill motors mid-air.
             float lowRel = lowAltitudeRelM(altitude);
             float landingAlt = lastTofValid && lastTofWeightPct >= 80 ? lowRel : altitude;
             bool hasDescended = (landingStartAlt - landingAlt) > 0.3f;
-            if (hasDescended && lowRel <= LANDING_GROUND_M) {
+            bool tofGround = lastTofValid && lastTofWeightPct >= 80 && lowRel <= LANDING_GROUND_M;
+            bool fallbackGround = !tofGround && hasDescended && landingAlt <= LANDING_GROUND_M;
+            bool startedOnGround = landingStartAlt <= LANDING_GROUND_M && landingAlt <= LANDING_GROUND_M;
+            if (tofGround || fallbackGround || startedOnGround) {
                 disarmToIdle("[LANDING] ground detected");
                 break;
             }
@@ -519,18 +530,22 @@ void runMissionLoop() {
 
             float rateError           = (-DESCENT_RATE_MPS) - filteredVario;
             int16_t correction        = (int16_t)(LANDING_KP_VSPEED * rateError);
-            float landingRawThrottle  = HOVER_THROTTLE + correction;
-            channels[CH_THROTTLE]     = (uint16_t)constrain(landingRawThrottle, 1000.0f, 1600.0f);
+            float landingBaseThrottle = max((float)MIN_ALT_HOLD_THROTTLE_US,
+                                            (float)HOVER_THROTTLE - LANDING_THROTTLE_OFFSET_US);
+            float landingRawThrottle  = landingBaseThrottle + correction;
+            float landingMinThrottle  = max(1000.0f, (float)HOVER_THROTTLE - THR_DOWN_OFFSET_US);
+            float landingMaxThrottle  = (float)HOVER_THROTTLE + 50.0f;
+            channels[CH_THROTTLE]     = (uint16_t)constrain(landingRawThrottle, landingMinThrottle, landingMaxThrottle);
             lastAltError = 0.0f;
             lastDesiredVspeed = -DESCENT_RATE_MPS;
             lastVspeedError = rateError;
             lastControlPUs = correction;
             lastControlIUs = 0.0f;
             lastRawThrottle = landingRawThrottle;
-            lastThrMin = 1000.0f;
-            lastThrMax = 1600.0f;
+            lastThrMin = landingMinThrottle;
+            lastThrMax = landingMaxThrottle;
             lastClampedThrottle = channels[CH_THROTTLE];
-            lastThrottleSat = landingRawThrottle > 1600.0f ? 1 : (landingRawThrottle < 1000.0f ? -1 : 0);
+            lastThrottleSat = landingRawThrottle > landingMaxThrottle ? 1 : (landingRawThrottle < landingMinThrottle ? -1 : 0);
             sendRC();
             logFlightSample(millis() - landingStartMs, "landing", landingAlt, lowRel, channels[CH_THROTTLE]);
 

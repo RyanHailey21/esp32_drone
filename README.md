@@ -285,7 +285,7 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 | `ALT_HOLD_TARGET_M` | 1.5 m | float×10 | Test target used only by the BLE `ALT_HOLD` command; firmware clamps active command to 0.5–5.0m. |
 | `HOLD_KP` | 1.1 | float×10 | Outer altitude P: altitude error (m) to desired vertical speed (m/s). |
 | `HOLD_KI` | 0.0 | float×10 | Inner speed I: integrated vertical-speed error to throttle offset (µs). Start disabled; add only after logs show steady bias. |
-| `HOLD_KD` | 120.0 | float×10 | Inner speed P: vertical-speed error (m/s) to throttle offset (µs). Tune before adding integral. |
+| `HOLD_KD` | 140.0 | float×10 | Inner speed P: vertical-speed error (m/s) to throttle offset (µs). Tune before adding integral. |
 | `PUNCH_START_MS` | 7500 ms | uint32 | Mission clock time to begin final burst. Later = more exit velocity. |
 | `PUNCH_THROTTLE` | 2000 µs | uint16 | Max throttle for punch phase. |
 
@@ -299,9 +299,9 @@ The hold controller runs in both `HOLDING` (mission) and `ALT_HOLD` (test) state
 fused_altitude  = ToF/baro blend at low altitude, corrected baro above ToF range
 alt_error       = internal_setpoint - fused_altitude
 desired_vspeed  = clamp(HOLD_KP * alt_error, -max_descent, max_climb)
-bf_vario        = Betaflight MSP_ALTITUDE vertical-speed estimate, when available
-derived_vario   = smoothed derivative of fused_altitude, used as fallback
-used_vario      = bf_vario when plausible, otherwise derived_vario
+bf_vario        = Betaflight MSP_ALTITUDE vertical-speed estimate, used above ToF range
+derived_vario   = smoothed ToF/fused-altitude derivative
+used_vario      = derived_vario while ToF is high-confidence, otherwise plausible bf_vario
 filtered_vario  = time-based low-pass of used_vario
 vspeed_error    = desired_vspeed - filtered_vario
 candidate_i     = output-limited(vspeed_integral + vspeed_error * dt)
@@ -313,9 +313,9 @@ throttle = HOVER_THROTTLE
 
 The VL53L1X ToF sensor is the primary low-altitude source. It is trusted fully below `TOF_BLEND_FULL_M = 3.6m`, blended out to baro by `TOF_BLEND_ZERO_M = 3.8m`, and ignored when invalid/out of range above `TOF_VALID_MAX_M = 3.8m`. Readings below `TOF_VALID_MIN_M` are treated as valid ground contact at `0.0m`, because the sensor is mounted close enough to the ground that it can start below its useful range. Out-of-range high readings are never treated as "4m"; the controller falls back to corrected baro with a learned baro-to-ToF offset. Brief low-altitude ToF dropouts are bridged for `TOF_HOLDOVER_MS = 300ms` so the controller does not bounce between ToF and baro on single missed reads. Altitude fusion and the ToF jump filter are reset at each mission/cal/Alt Hold start so a previous run cannot leave a stale baro-to-ToF offset. Single-sample ToF jumps are rejected above `max(TOF_MAX_STEP_MIN_M, TOF_MAX_STEP_MPS * dt)`.
 
-Betaflight 4.4.3 with `VARIO` enabled exposes a filtered vertical-speed estimate in the `MSP_ALTITUDE` vario field. With `USE_BF_VARIO_PRIMARY = 1`, the firmware uses that Betaflight vario as primary whenever it is within the plausible range, including true zero as a valid hover reading. The ESP32 fused-altitude derivative remains as a fallback if the FC vario is implausible or if this flag is disabled for a build without BF vario support.
+Betaflight 4.4.3 with `VARIO` enabled exposes a filtered vertical-speed estimate in the `MSP_ALTITUDE` vario field. In logs, BF vario is clean but lags low-altitude ToF motion during takeoff. The firmware therefore uses ToF-derived vario while ToF has high confidence, then uses plausible Betaflight vario above ToF range or when the derived estimate is unavailable.
 
-The vario filter is time-based (`VARIO_TAU_S = 0.20s`) so smoothing remains stable with loop-rate jitter without adding much lag on top of Betaflight's filtered vario. If vario becomes stale or implausible while altitude hold is active, the controller clears the integrator and transitions to `LANDING` instead of holding the last velocity estimate.
+The vario filter is time-based (`VARIO_TAU_S = 0.05s`) so smoothing remains stable with loop-rate jitter without adding much lag. If vario becomes stale or implausible while altitude hold is active, the controller clears the integrator and transitions to `LANDING` instead of holding the last velocity estimate.
 
 Current speed limits:
 
@@ -326,7 +326,7 @@ Current speed limits:
 
 The internal setpoint ramps at `ALT_RAMP_RATE_MPS = 1.0 m/s`. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 150us`). Low-altitude `ALT_HOLD` can brake down to `MIN_ALT_HOLD_THROTTLE_US = 1000us`; mission `HOLDING` keeps `MIN_MISSION_THROTTLE_US = 1050us` to preserve attitude authority.
 
-**Landing** uses a velocity controller targeting `DESCENT_RATE_MPS = 0.4 m/s` downward, driven by the same filtered selected vario. Motors cut when altitude drops below 15cm after actual descent is detected, or after a 30s timeout.
+**Landing** uses a velocity controller targeting `DESCENT_RATE_MPS = 0.4 m/s` downward, driven by the same filtered selected vario. It starts from `HOVER_THROTTLE - LANDING_THROTTLE_OFFSET_US` and adds vario feedback, so it commands a real descent while still slowing an excessive sink rate. Motors cut when valid ToF sees ground, when baro/fused altitude reaches ground after real descent, when landing starts already at ground height, or after a 30s timeout.
 
 During `ALT_HOLD`, the serial monitor prints a per-run CSV-style log:
 
@@ -355,13 +355,15 @@ Normal flight builds keep `SERIAL_FLIGHT_DEBUG = 0`, so high-rate flight diagnos
 For desktop analysis, run:
 
 ```powershell
-python tools\parse_flight_log.py flight_logs\quad-flight-log-*.csv
+.\tools\latest-log.ps1
 ```
 
-To generate a standalone visual preview for a downloaded log:
+Useful variants:
 
 ```powershell
-python tools\parse_flight_log.py flight_logs\quad-flight-log-2026-07-03T19-33-51-271Z.csv --preview --open
+.\tools\latest-log.ps1 -Open       # generate and open preview for newest log
+.\tools\latest-log.ps1 -New        # process CSVs with missing/stale previews
+python tools\parse_flight_log.py   # summarize newest log directly
 ```
 
 The preview is separate from the BLE web app. It writes `*.preview.html` beside the CSV and plots altitude sources, setpoint, throttle, vario, source selection, and parsed jump markers.
@@ -405,7 +407,7 @@ save
 - `launchAlt` is set at the ARMING→CAL transition (after 1500ms motor settle), not before, to avoid baro drift pre-triggering the threshold
 - Cal times out after 30s or at `CAL_MAX_THROTTLE = 1650 µs`
 
-`ALT_HOLD` test mode also has a takeoff ground guard. For the first 500ms after entering `ALT_HOLD`, `launchAlt` and the ToF baseline are refreshed while sensors settle. If ToF is too close or initially invalid, the baseline is acquired from the first valid low reading that appears. Until ToF is valid, takeoff thrust is capped at `HOVER_THROTTLE + 100us`; once ToF is valid, it can ramp from `HOVER_THROTTLE + 40us` by `40us/s` up to `HOVER_THROTTLE + 200us`. Cascade only starts after 3 consecutive ToF-valid samples above 12cm, then latches and does not fall back to guard. While waiting, the cascade setpoint tracks current altitude so the controller does not command downward thrust immediately after liftoff. If liftoff is still not confirmed after 8s, it aborts to `LANDING`.
+`ALT_HOLD` test mode also has a takeoff ground guard. For the first 500ms after entering `ALT_HOLD`, `launchAlt` and the ToF baseline are refreshed while sensors settle. If ToF is too close or initially invalid, the baseline is acquired from the first valid low reading that appears. Until ToF is valid, takeoff thrust is capped at `HOVER_THROTTLE + 60us`; once ToF is valid, it can ramp from `HOVER_THROTTLE + 15us` by `30us/s` up to `HOVER_THROTTLE + 140us`. Cascade only starts after 3 consecutive ToF-valid samples above 12cm, then latches and does not fall back to guard. While waiting, the cascade setpoint tracks current altitude so the controller does not command downward thrust immediately after liftoff. If liftoff is still not confirmed after 8s, it aborts to `LANDING`.
 
 ---
 

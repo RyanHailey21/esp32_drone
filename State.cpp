@@ -68,6 +68,7 @@ uint32_t benchLastMs     = 0;
 uint32_t landingStartMs  = 0;
 float    landingStartAlt = 0;
 volatile bool bleSafetyLand = false;
+volatile bool bleRequestedLand = false;
 
 // ── Tunable Parameters (BLE-writable) ────────────────────────
 volatile uint16_t HOVER_THROTTLE  = (uint16_t)(AltitudeParameters::HOVER_THROTTLE + 0.5f);

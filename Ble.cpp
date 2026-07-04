@@ -67,7 +67,7 @@ public:
 
             case CMD_DISARM:
                 if (state == HOVER_TEST || state == ALT_HOLD || state == AUTO_HOVER_CAL)
-                    startLanding(currentRelAlt);
+                    bleRequestedLand = true;
                 else
                     disarmToIdle("[BLE] Disarm command");
                 break;
