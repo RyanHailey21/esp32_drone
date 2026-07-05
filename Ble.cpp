@@ -98,7 +98,9 @@ class ServerCB : public NimBLEServerCallbacks {
         Serial.println("[BLE] Client disconnected, restarting advertising");
         NimBLEDevice::startAdvertising();
         // Test states land on BLE loss. Mission states continue autonomously.
-        if (state == HOVER_TEST || state == ALT_HOLD || state == AUTO_HOVER_CAL) {
+        bool armingTestMode = state == ARMING
+            && (armTarget == ARM_HOVER_TEST || armTarget == ARM_AUTO_HOVER_CAL || armTarget == ARM_ALT_HOLD);
+        if (state == HOVER_TEST || state == ALT_HOLD || state == AUTO_HOVER_CAL || armingTestMode) {
             bleSafetyLand = true;
         }
     }
@@ -201,6 +203,10 @@ void setupBLE() {
     makeFloat(svc, HOLD_KP_UUID,       &HOLD_KP,         "HOLD_KP",         10.0f);
     makeFloat(svc, HOLD_KI_UUID,       &HOLD_KI,         "HOLD_KI",         10.0f);
     makeFloat(svc, HOLD_KD_UUID,       &HOLD_KD,         "HOLD_KD",         10.0f);
+    makeFloat(svc, ALT_RAMP_RATE_UUID, &ALT_RAMP_RATE_MPS, "ALT_RAMP_RATE_MPS", 100.0f);
+    makeFloat(svc, MAX_CLIMB_TEST_UUID, &MAX_CLIMB_MPS_TEST, "MAX_CLIMB_MPS_TEST", 100.0f);
+    makeFloat(svc, MAX_DESCENT_TEST_UUID, &MAX_DESCENT_MPS_TEST, "MAX_DESCENT_MPS_TEST", 100.0f);
+    makeFloat(svc, BF_GROUND_EFFECT_UUID, &BF_VARIO_GROUND_EFFECT_M, "BF_VARIO_GROUND_EFFECT_M", 100.0f);
 
     makeChar(svc, PUNCH_START_UUID,
         new CBu32(&PUNCH_START_MS, "PUNCH_START_MS"),

@@ -15,6 +15,10 @@ const TELEMETRY_UUID     = 'ab0828bd-198e-4351-b779-901fa0e0371e';
 const ANGLE_MODE_UUID    = 'ab0828c1-198e-4351-b779-901fa0e0371e';
 const FLIGHT_LOG_OFFSET_UUID = 'ab0828c2-198e-4351-b779-901fa0e0371e';
 const FLIGHT_LOG_CHUNK_UUID  = 'ab0828c3-198e-4351-b779-901fa0e0371e';
+const ALT_RAMP_RATE_UUID     = 'ab0828c4-198e-4351-b779-901fa0e0371e';
+const MAX_CLIMB_TEST_UUID    = 'ab0828c5-198e-4351-b779-901fa0e0371e';
+const MAX_DESCENT_TEST_UUID  = 'ab0828c6-198e-4351-b779-901fa0e0371e';
+const BF_GROUND_EFFECT_UUID  = 'ab0828c7-198e-4351-b779-901fa0e0371e';
 
 const STATE_NAMES  = ['IDLE','ARMING','SPRINTING','HOLDING','PUNCHING','CUT','HOVER TEST','AUTO HOVER CAL','LANDING','DONE','ALT HOLD'];
 const STATE_COLORS = ['','var(--amber)','var(--amber)','var(--green)','var(--red)','var(--red)','var(--cyan)','var(--cyan)','var(--amber)','var(--text-mid)','var(--green)'];
@@ -87,7 +91,7 @@ function setStatus(s, t) {
 }
 
 function enableAll(on) {
-  ['sprint','cutoff','target-alt','alt-hold-target','kp','ki','kd','punch-start','punch-throt'].forEach(id => {
+  ['sprint','cutoff','target-alt','alt-hold-target','kp','ki','kd','alt-ramp','max-climb','max-descent','bf-ground-effect','punch-start','punch-throt'].forEach(id => {
     const el = document.getElementById('param-' + id);
     if (el) el.classList.toggle('enabled', on);
   });
@@ -136,6 +140,10 @@ async function connect() {
     chars.telemetry  = await service.getCharacteristic(TELEMETRY_UUID);
     chars.logOffset  = await service.getCharacteristic(FLIGHT_LOG_OFFSET_UUID);
     chars.logChunk   = await service.getCharacteristic(FLIGHT_LOG_CHUNK_UUID);
+    chars.altRamp    = await service.getCharacteristic(ALT_RAMP_RATE_UUID);
+    chars.maxClimb   = await service.getCharacteristic(MAX_CLIMB_TEST_UUID);
+    chars.maxDescent = await service.getCharacteristic(MAX_DESCENT_TEST_UUID);
+    chars.bfGroundEffect = await service.getCharacteristic(BF_GROUND_EFFECT_UUID);
 
     await chars.telemetry.startNotifications();
     chars.telemetry.addEventListener('characteristicvaluechanged', onTelemetry);
@@ -187,6 +195,10 @@ async function readAll() {
     const kdRaw      = new DataView((await chars.kd.readValue()).buffer).getUint16(0, true);
     const targetAlt  = new DataView((await chars.targetAlt.readValue()).buffer).getUint16(0, true);
     const altHoldTarget = new DataView((await chars.altHoldTarget.readValue()).buffer).getUint16(0, true);
+    const altRamp    = new DataView((await chars.altRamp.readValue()).buffer).getUint16(0, true);
+    const maxClimb   = new DataView((await chars.maxClimb.readValue()).buffer).getUint16(0, true);
+    const maxDescent = new DataView((await chars.maxDescent.readValue()).buffer).getUint16(0, true);
+    const bfGroundEffect = new DataView((await chars.bfGroundEffect.readValue()).buffer).getUint16(0, true);
     const punchStart = new DataView((await chars.punchStart.readValue()).buffer).getUint32(0, true);
     const punchThrot = new DataView((await chars.punchThrot.readValue()).buffer).getUint16(0, true);
     benchMode        = new DataView((await chars.benchMode.readValue()).buffer).getUint8(0);
@@ -200,6 +212,10 @@ async function readAll() {
     setParam('kd',          kdRaw,      v => (v/10).toFixed(1),   v => v);
     setParam('target-alt',  targetAlt,  v => (v/10).toFixed(1),   v => v);
     setParam('alt-hold-target', altHoldTarget, v => (v/10).toFixed(1), v => v);
+    setParam('alt-ramp',    altRamp,    v => (v/100).toFixed(2),  v => v);
+    setParam('max-climb',   maxClimb,   v => (v/100).toFixed(2),  v => v);
+    setParam('max-descent', maxDescent, v => (v/100).toFixed(2),  v => v);
+    setParam('bf-ground-effect', bfGroundEffect, v => (v/100).toFixed(2), v => v);
     setParam('punch-start', punchStart, v => (v/1000).toFixed(1), v => v);
     setParam('punch-throt', punchThrot, v => v,                   v => v);
 
@@ -455,6 +471,10 @@ function debounce(key, fn, delay = 150) {
 
 const SLIDERS = [
   { id: 'alt-hold-target', char: 'altHoldTarget', enc: v => u16buf(v), fmt: v => (v/10).toFixed(1), label: v => 'ALT_HOLD_TARGET -> ' + (v/10).toFixed(1) + 'm', ms: 150 },
+  { id: 'alt-ramp',    char: 'altRamp',    enc: v => u16buf(v),  fmt: v => (v/100).toFixed(2),  label: v => 'ALT_RAMP_RATE -> ' + (v/100).toFixed(2) + 'm/s', ms: 150 },
+  { id: 'max-climb',   char: 'maxClimb',   enc: v => u16buf(v),  fmt: v => (v/100).toFixed(2),  label: v => 'MAX_CLIMB_TEST -> ' + (v/100).toFixed(2) + 'm/s', ms: 150 },
+  { id: 'max-descent', char: 'maxDescent', enc: v => u16buf(v),  fmt: v => (v/100).toFixed(2),  label: v => 'MAX_DESCENT_TEST -> ' + (v/100).toFixed(2) + 'm/s', ms: 150 },
+  { id: 'bf-ground-effect', char: 'bfGroundEffect', enc: v => u16buf(v), fmt: v => (v/100).toFixed(2), label: v => 'BF_GROUND_EFFECT -> ' + (v/100).toFixed(2) + 'm', ms: 150 },
   { id: 'hover',       char: 'hover',      enc: v => u16buf(v),  fmt: v => String(v),           label: v => 'HOVER_THROTTLE → ' + v,                        ms: 30  },
   { id: 'sprint',      char: 'sprint',     enc: v => u16buf(v),  fmt: v => String(v),           label: v => 'SPRINT_THROTTLE → ' + v,                       ms: 150 },
   { id: 'cutoff',      char: 'cutoff',     enc: v => u16buf(v),  fmt: v => (v/100).toFixed(1),  label: v => 'SPRINT_CUTOFF → ' + (v/100).toFixed(1) + 'm', ms: 150 },

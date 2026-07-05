@@ -100,6 +100,10 @@ extern volatile float    ALT_HOLD_TARGET_M;
 extern volatile float    HOLD_KP;
 extern volatile float    HOLD_KI;
 extern volatile float    HOLD_KD;
+extern volatile float    ALT_RAMP_RATE_MPS;
+extern volatile float    MAX_CLIMB_MPS_TEST;
+extern volatile float    MAX_DESCENT_MPS_TEST;
+extern volatile float    BF_VARIO_GROUND_EFFECT_M;
 extern volatile uint32_t PUNCH_START_MS;
 extern volatile uint16_t PUNCH_THROTTLE;
 

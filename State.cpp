@@ -80,6 +80,10 @@ volatile float    ALT_HOLD_TARGET_M = 1.5f;
 volatile float    HOLD_KP         = AltitudeParameters::HOLD_KP;
 volatile float    HOLD_KI         = AltitudeParameters::HOLD_KI;
 volatile float    HOLD_KD         = AltitudeParameters::HOLD_KD;
+volatile float    ALT_RAMP_RATE_MPS = DEFAULT_ALT_RAMP_RATE_MPS;
+volatile float    MAX_CLIMB_MPS_TEST = DEFAULT_MAX_CLIMB_MPS_TEST;
+volatile float    MAX_DESCENT_MPS_TEST = DEFAULT_MAX_DESCENT_MPS_TEST;
+volatile float    BF_VARIO_GROUND_EFFECT_M = DEFAULT_BF_VARIO_GROUND_EFFECT_M;
 volatile uint32_t PUNCH_START_MS  = 7500;
 volatile uint16_t PUNCH_THROTTLE  = 2000;
 

@@ -17,11 +17,23 @@ static uint16_t angleModeChannelValue() {
     return ANGLE_MODE_ENABLED ? 1800 : 1000;
 }
 
+static uint16_t hoverTestAngleModeChannelValue() {
+    return HOVER_TEST_ANGLE_MODE ? 1800 : 1000;
+}
+
 static bool attitudeAbortActive() {
     if ((lastFcDiagMask & (1 << 1)) == 0) return false;
     if (millis() - lastFcAttitudeMs > ATTITUDE_ABORT_MAX_AGE_MS) return false;
     return fabsf(lastFcRollDeciDeg / 10.0f) >= ATTITUDE_ABORT_DEG
         || fabsf(lastFcPitchDeciDeg / 10.0f) >= ATTITUDE_ABORT_DEG;
+}
+
+static bool testModeOrTestArming() {
+    if (state == HOVER_TEST || state == ALT_HOLD || state == AUTO_HOVER_CAL || state == LANDING) {
+        return true;
+    }
+    return state == ARMING
+        && (armTarget == ARM_HOVER_TEST || armTarget == ARM_AUTO_HOVER_CAL || armTarget == ARM_ALT_HOLD);
 }
 
 static void updateAltHoldTofBaseline() {
@@ -39,6 +51,10 @@ static float lowAltitudeRelM(float fusedRelM) {
         return max(0.0f, lastTofAltM - altHoldTofBaselineM);
     }
     return fusedRelM;
+}
+
+static bool lowAltitudeTofUsable() {
+    return lastTofValid && (lastTofWeightPct >= 80 || lastAltitudeSource == 3);
 }
 
 static uint16_t takeoffGuardThrottle(uint32_t timeInAltHoldMs, bool tofReady) {
@@ -209,15 +225,23 @@ void runMissionLoop() {
     if (bleRequestedLand) {
         bleRequestedLand = false;
         bleSafetyLand = false;
-        Serial.println("[BLE] Land request -> LANDING");
-        startLanding(altitude);
+        if (testModeOrTestArming()) {
+            Serial.println("[BLE] Land request -> LANDING");
+            startLanding(altitude);
+        } else {
+            Serial.println("[BLE] Land request ignored outside test mode");
+        }
     }
 
     // BLE disconnect safety: land if triggered while in a test state
     if (bleSafetyLand) {
         bleSafetyLand = false;
-        Serial.println("[BLE] Disconnect safety → LANDING");
-        startLanding(altitude);
+        if (testModeOrTestArming()) {
+            Serial.println("[BLE] Disconnect safety -> LANDING");
+            startLanding(altitude);
+        } else {
+            Serial.println("[BLE] Disconnect ignored outside test mode");
+        }
     }
 
     switch (state) {
@@ -357,7 +381,7 @@ void runMissionLoop() {
         // ── HOVER TEST ───────────────────────────────────────
         case HOVER_TEST:
             channels[CH_ARM]   = 1800;
-            channels[CH_ANGLE] = angleModeChannelValue();
+            channels[CH_ANGLE] = hoverTestAngleModeChannelValue();
             // Ramp toward HOVER_THROTTLE at ~200 µs/s so a rapid step from the
             // ARMING low-throttle doesn't trigger Betaflight's ANTI_GRAVITY I-term boost.
             if (channels[CH_THROTTLE] < (uint16_t)HOVER_THROTTLE) {
@@ -378,7 +402,7 @@ void runMissionLoop() {
         // ── AUTO HOVER CAL ───────────────────────────────────
         case AUTO_HOVER_CAL:
             channels[CH_ARM]      = 1800;
-            channels[CH_ANGLE]    = angleModeChannelValue();
+            channels[CH_ANGLE]    = hoverTestAngleModeChannelValue();
             channels[CH_THROTTLE] = calThrottle;
             sendRC();
             digitalWrite(STATUS_LED, millis() % 300 < 150);
@@ -422,7 +446,7 @@ void runMissionLoop() {
             uint32_t timeInAltHold = millis() - (armTime + ARMING_MS);
             updateAltHoldTofBaseline();
             float lowRel = lowAltitudeRelM(altitude);
-            float controlAlt = lastTofValid && lastTofWeightPct >= 80 ? lowRel : altitude;
+            float controlAlt = lowAltitudeTofUsable() ? lowRel : altitude;
             if (timeInAltHold < BARO_SETTLE_MS) {
                 altHoldGuardPhase = 0;
                 launchAlt = rawAlt;
@@ -528,7 +552,7 @@ void runMissionLoop() {
             // ToF can detect ground immediately. Baro/fused fallback must first
             // show real descent so a stale zero cannot kill motors mid-air.
             float lowRel = lowAltitudeRelM(altitude);
-            float landingAlt = lastTofValid && lastTofWeightPct >= 80 ? lowRel : altitude;
+            float landingAlt = lowAltitudeTofUsable() ? lowRel : altitude;
             bool hasDescended = (landingStartAlt - landingAlt) > 0.3f;
             bool tofGround = lastTofValid && lastTofWeightPct >= 80 && lowRel <= LANDING_GROUND_M;
             bool fallbackGround = !tofGround && hasDescended && landingAlt <= LANDING_GROUND_M;

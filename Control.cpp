@@ -71,7 +71,12 @@ uint16_t holdCascaded(float altitude, bool isMission) {
     }
 
     // 2. Outer loop: altitude error → desired vertical speed
-    float altError = internalSetpoint - altitude;
+    // Predict altitude slightly ahead to compensate the observed control lag.
+    float predictionVario = constrain(filteredVario,
+                                      -ALT_HOLD_LOOKAHEAD_MAX_V_MPS,
+                                      ALT_HOLD_LOOKAHEAD_MAX_V_MPS);
+    float predictedAlt = altitude + predictionVario * ALT_HOLD_LOOKAHEAD_S;
+    float altError = internalSetpoint - predictedAlt;
     float maxClimb = isMission ? MAX_CLIMB_MPS_HOLD  : MAX_CLIMB_MPS_TEST;
     float maxDesc  = isMission ? MAX_DESCENT_MPS_HOLD : MAX_DESCENT_MPS_TEST;
 
@@ -83,7 +88,10 @@ uint16_t holdCascaded(float altitude, bool isMission) {
         maxDesc  *= factor;
     }
     float desiredVspeed = constrain(HOLD_KP * altError, -maxDesc, maxClimb);
-    if (!isMission && altitude < target - ALT_HOLD_CAPTURE_MARGIN_M) {
+    bool captureNeedsHelp = !isMission
+        && altitude < target - ALT_HOLD_CAPTURE_MARGIN_M
+        && filteredVario < ALT_HOLD_CAPTURE_MIN_CLIMB_MPS;
+    if (captureNeedsHelp) {
         desiredVspeed = max(desiredVspeed, min((float)ALT_HOLD_CAPTURE_MIN_CLIMB_MPS, maxClimb));
     }
 
@@ -111,8 +119,11 @@ uint16_t holdCascaded(float altitude, bool isMission) {
     float finalThrottle = (float)HOVER_THROTTLE + HOLD_KD * vspeedError + HOLD_KI * vspeedIntegral;
     float clampedThrottle = constrain(finalThrottle, thrMin, thrMax);
     int8_t sat = finalThrottle > thrMax ? 1 : (finalThrottle < thrMin ? -1 : 0);
-    if (!isMission && altitude < target - ALT_HOLD_CAPTURE_MARGIN_M) {
-        float captureMinThrottle = min(thrMax, (float)HOVER_THROTTLE + ALT_HOLD_CAPTURE_MIN_OFFSET_US);
+    if (captureNeedsHelp) {
+        float captureOffsetUs = filteredVario < ALT_HOLD_RECOVERY_DESCENT_MPS
+            ? (float)ALT_HOLD_RECOVERY_MIN_OFFSET_US
+            : (float)ALT_HOLD_CAPTURE_MIN_OFFSET_US;
+        float captureMinThrottle = min(thrMax, (float)HOVER_THROTTLE + captureOffsetUs);
         if (clampedThrottle < captureMinThrottle) {
             clampedThrottle = captureMinThrottle;
             sat = 1;

@@ -256,8 +256,8 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 
 | Button | Behavior |
 |---|---|
-| Hover Test | Arms → fixed `HOVER_THROTTLE`. Adjust slider live to find neutral buoyancy. |
-| Auto Hover Cal | Arms → ramps throttle until 5 consecutive readings above 15cm → writes `HOVER_THROTTLE` with no automatic offset → stays in Hover Test. |
+| Hover Test | Arms → fixed `HOVER_THROTTLE`. Adjust slider live to find neutral buoyancy. Uses `HOVER_TEST_ANGLE_MODE`, defaulting to Acro/rate mode. |
+| Auto Hover Cal | Arms → ramps throttle until 5 consecutive readings above 15cm → writes `HOVER_THROTTLE` with no automatic offset → stays in Hover Test. Uses `HOVER_TEST_ANGLE_MODE`. |
 | Alt Hold | Arms → PID holds `ALT_HOLD_TARGET_M`. BLE disconnect triggers auto-land. |
 | Start Mission | Arms → full sprint/hold/punch/cut sequence. BLE disconnect ignored during mission. |
 | Land | In test modes: smooth velocity-based landing. Hidden/disabled during mission because mission uses cut-only behavior. |
@@ -278,14 +278,18 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 
 | Parameter | Default | Encoding | Description |
 |---|---|---|---|
-| `HOVER_THROTTLE` | 1430 µs | uint16 | Current measured break-ground/hover baseline. Fine-tune in Hover Test before altitude hold. |
+| `HOVER_THROTTLE` | 1360 µs | uint16 | Current measured break-ground/hover baseline. Fine-tune in Hover Test before altitude hold. |
 | `SPRINT_THROTTLE` | 1850 µs | uint16 | Full climb throttle during sprint. Higher = faster to 60ft = more punch time. |
 | `SPRINT_CUTOFF_M` | 17.0 m | float×100 | Altitude to stop sprinting. Keep below 18.3m to absorb baro lag. |
 | `TARGET_ALT_M` | 18.3 m | float×10 | Mission hold target. 60ft = 18.3m. Used by `HOLDING` after sprint cutoff. |
-| `ALT_HOLD_TARGET_M` | 1.5 m | float×10 | Test target used only by the BLE `ALT_HOLD` command; firmware clamps active command to 0.5–5.0m. |
+| `ALT_HOLD_TARGET_M` | 1.5 m | float×10 | Test target used only by the BLE `ALT_HOLD` command; firmware clamps active command to 0.5–10.0m. |
 | `HOLD_KP` | 0.8 | float×10 | Outer altitude P: altitude error (m) to desired vertical speed (m/s). |
 | `HOLD_KI` | 0.0 | float×10 | Inner speed I: integrated vertical-speed error to throttle offset (µs). Start disabled; add only after logs show steady bias. |
 | `HOLD_KD` | 70.0 | float×10 | Inner speed P: vertical-speed error (m/s) to throttle offset (µs). Tune before adding integral. |
+| `ALT_RAMP_RATE_MPS` | 0.40 m/s | float×100 | Alt Hold internal setpoint ramp. Raise outdoors when the vehicle has enough altitude room. |
+| `MAX_CLIMB_MPS_TEST` | 0.25 m/s | float×100 | Alt Hold test-mode climb-speed cap. This was the main limit in the first 10m outdoor attempt. |
+| `MAX_DESCENT_MPS_TEST` | 0.20 m/s | float×100 | Alt Hold test-mode descent-speed cap. Keep conservative until landing and overshoot recovery are proven. |
+| `BF_VARIO_GROUND_EFFECT_M` | 1.20 m | float×100 | Height below which ToF-derived vertical speed remains primary. Lower outdoors to hand off to BF vario earlier. |
 | `PUNCH_START_MS` | 7500 ms | uint32 | Mission clock time to begin final burst. Later = more exit velocity. |
 | `PUNCH_THROTTLE` | 2000 µs | uint16 | Max throttle for punch phase. |
 
@@ -297,9 +301,10 @@ The hold controller runs in both `HOLDING` (mission) and `ALT_HOLD` (test) state
 
 ```
 fused_altitude  = ToF/baro blend at low altitude, corrected baro above ToF range
-alt_error       = internal_setpoint - fused_altitude
+predicted_alt   = fused_altitude + clamp(filtered_vario, -lookahead_max_v, +lookahead_max_v) * lookahead_s
+alt_error       = internal_setpoint - predicted_alt
 desired_vspeed  = clamp(HOLD_KP * alt_error, -max_descent, max_climb)
-if ALT_HOLD and altitude < target - capture_margin:
+if ALT_HOLD and fused_altitude < target - capture_margin and filtered_vario < capture_min_climb:
     desired_vspeed = max(desired_vspeed, capture_min_climb)
     throttle = max(throttle, hover_throttle + capture_min_offset)
 bf_vario        = Betaflight MSP_ALTITUDE vertical-speed estimate, used as assist outside ground-effect zone
@@ -314,20 +319,22 @@ throttle = HOVER_THROTTLE
          + HOLD_KI * vspeed_integral
 ```
 
-The VL53L1X ToF sensor is the primary low-altitude source. It is trusted fully below `TOF_BLEND_FULL_M = 3.6m`, blended out to baro by `TOF_BLEND_ZERO_M = 3.8m`, and ignored when invalid/out of range above `TOF_VALID_MAX_M = 3.8m`. Readings below `TOF_VALID_MIN_M` are treated as valid ground contact at `0.0m`, because the sensor is mounted close enough to the ground that it can start below its useful range. Out-of-range high readings are never treated as "4m"; the controller falls back to corrected baro with a learned baro-to-ToF offset. Brief low-altitude ToF dropouts are bridged for `TOF_HOLDOVER_MS = 300ms` so the controller does not bounce between ToF and baro on single missed reads, but holdover confidence is capped at `TOF_HOLDOVER_WEIGHT_PCT = 35` so stale held samples are visible in logs and are not treated as fresh high-confidence ToF. Altitude fusion and the ToF jump filter are reset at each mission/cal/Alt Hold start so a previous run cannot leave a stale baro-to-ToF offset. Single-sample ToF jumps are rejected above `max(TOF_MAX_STEP_MIN_M, TOF_MAX_STEP_MPS * dt)`.
+The VL53L1X ToF sensor is the primary low-altitude source. It is trusted fully below `TOF_BLEND_FULL_M = 3.6m`, blended out to baro by `TOF_BLEND_ZERO_M = 3.8m`, and ignored when invalid/out of range above `TOF_VALID_MAX_M = 3.8m`. Readings below `TOF_VALID_MIN_M` are treated as valid ground contact at `0.0m`, because the sensor is mounted close enough to the ground that it can start below its useful range. Out-of-range high readings are never treated as "4m"; the controller falls back to corrected baro with a learned baro-to-ToF offset. Brief low-altitude ToF dropouts are bridged for `TOF_HOLDOVER_MS = 300ms` so the controller does not bounce to prop-wash-corrupted baro/BF vario on single missed reads. Holdover confidence is capped at `TOF_HOLDOVER_WEIGHT_PCT = 35` so stale held samples are visible in logs, but low-altitude control still uses held ToF altitude/derived vario during holdover; motor-cut ground detection still requires fresh high-confidence ToF or fallback descent confirmation. Altitude fusion and the ToF jump filter are reset at each mission/cal/Alt Hold start so a previous run cannot leave a stale baro-to-ToF offset. Single-sample ToF jumps are rejected above `max(TOF_MAX_STEP_MIN_M, TOF_MAX_STEP_MPS * dt)`.
 
-Betaflight 4.4.3 with `VARIO` enabled exposes a filtered vertical-speed estimate in the `MSP_ALTITUDE` vario field. In the current logs, BF vario detects the descent earlier than the local ToF derivative after target overshoot, but it may also include barometer pressure effects near the ground. The firmware therefore keeps ToF-derived velocity authoritative below `BF_VARIO_GROUND_EFFECT_M = 0.45m`, allows BF vario to assist above that height when it agrees with ToF or ToF velocity is indecisive, and uses BF vario above ToF's useful range.
+Betaflight 4.4.3 with `VARIO` enabled exposes a filtered vertical-speed estimate in the `MSP_ALTITUDE` vario field. In the current logs, BF vario detects descent earlier after target overshoot, but it can also over-brake the low-altitude controller. The firmware therefore keeps ToF-derived velocity authoritative below runtime `BF_VARIO_GROUND_EFFECT_M`, allows BF vario to assist above that height when it agrees with ToF or ToF velocity is indecisive, and uses BF vario above ToF's useful range.
 
 The vario filter is time-based (`VARIO_TAU_S = 0.05s`) so smoothing remains stable with loop-rate jitter without adding much lag. If vario becomes stale or implausible while altitude hold is active, the controller clears the integrator and transitions to `LANDING` instead of holding the last velocity estimate.
 
-Current speed limits:
+Current default speed limits:
 
 | Mode | Max climb | Max descent |
 |---|---:|---:|
 | `ALT_HOLD` test | 0.25 m/s | 0.20 m/s |
 | Mission `HOLDING` | 1.20 m/s | 0.80 m/s |
 
-The internal setpoint ramps at `ALT_RAMP_RATE_MPS = 0.4 m/s`. In `ALT_HOLD` test mode, a capture floor keeps desired climb at least `ALT_HOLD_CAPTURE_MIN_CLIMB_MPS = 0.16 m/s` and throttle at least `ALT_HOLD_CAPTURE_MIN_OFFSET_US = 35us` above hover while altitude is more than `ALT_HOLD_CAPTURE_MARGIN_M = 0.25m` below target. That prevents delayed vario damping from holding the throttle below hover during target capture. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 150us`). Low-altitude `ALT_HOLD` can brake down to `MIN_ALT_HOLD_THROTTLE_US = 1000us`; mission `HOLDING` keeps `MIN_MISSION_THROTTLE_US = 1050us` to preserve attitude authority.
+The internal setpoint ramps at runtime `ALT_RAMP_RATE_MPS` and the Alt Hold test climb/descent caps are runtime `MAX_CLIMB_MPS_TEST` / `MAX_DESCENT_MPS_TEST`. The outer loop uses `ALT_HOLD_LOOKAHEAD_S = 0.30s` with velocity clamped to `ALT_HOLD_LOOKAHEAD_MAX_V_MPS = 1.0m/s`, so it controls against a short predicted altitude instead of waiting for the measured altitude to cross the target. In `ALT_HOLD` test mode, a capture assist keeps desired climb at least `ALT_HOLD_CAPTURE_MIN_CLIMB_MPS = 0.16 m/s` and throttle at least `ALT_HOLD_CAPTURE_MIN_OFFSET_US = 35us` above hover only while altitude is more than `ALT_HOLD_CAPTURE_MARGIN_M = 0.25m` below target and filtered vario is still below the minimum climb rate. If it is already descending faster than `ALT_HOLD_RECOVERY_DESCENT_MPS = -0.08 m/s`, the floor rises to `ALT_HOLD_RECOVERY_MIN_OFFSET_US = 70us` above hover so it can arrest a low-altitude drop before ground contact. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 150us`). Low-altitude `ALT_HOLD` can brake down to `MIN_ALT_HOLD_THROTTLE_US = 1000us`; mission `HOLDING` keeps `MIN_MISSION_THROTTLE_US = 1050us` to preserve attitude authority.
+
+For outdoor 10m tests with the autorotor installed, start from the proven defaults and change one layer at a time. A reasonable first field profile is `ALT_RAMP_RATE_MPS = 0.80`, `MAX_CLIMB_MPS_TEST = 0.60`, `MAX_DESCENT_MPS_TEST = 0.20`, and `BF_VARIO_GROUND_EFFECT_M = 0.80`. If the log still shows impossible ToF jumps above 1-2m, lower `BF_VARIO_GROUND_EFFECT_M` further or treat ToF holdover as diagnostic-only in the next firmware change.
 
 **Landing** uses a velocity controller with flare, driven by the same filtered selected vario. Above `LANDING_FLARE_ALT_M = 0.45m`, it targets `DESCENT_RATE_MPS = 0.35 m/s` downward. Below flare height it progressively slows, reaching `LANDING_FINAL_DESCENT_MPS = 0.07 m/s` below `LANDING_FINAL_ALT_M = 0.20m`, while also raising the base throttle closer to hover. Motors cut when valid ToF sees `LANDING_GROUND_M = 0.06m`, when baro/fused altitude reaches ground after real descent, when landing starts already at ground height, or after a 30s timeout. `ALT_HOLD` and `LANDING` also disarm if fresh FC attitude exceeds `ATTITUDE_ABORT_DEG = 45` degrees roll or pitch, which catches net/contact/tip-over failures instead of continuing to drive the motors.
 
@@ -410,13 +417,13 @@ save
 - `launchAlt` is set at the ARMING→CAL transition (after 1500ms motor settle), not before, to avoid baro drift pre-triggering the threshold
 - Cal times out after 30s or at `CAL_MAX_THROTTLE = 1650 µs`
 
-`ALT_HOLD` test mode also has a takeoff ground guard. For the first 500ms after entering `ALT_HOLD`, `launchAlt` and the ToF baseline are refreshed while sensors settle. If ToF is too close or initially invalid, the baseline is acquired from the first valid low reading that appears. Until ToF is valid, takeoff thrust is capped at `HOVER_THROTTLE + 60us`; once ToF is valid, it can ramp from `HOVER_THROTTLE + 10us` by `25us/s` up to `HOVER_THROTTLE + 65us`. Cascade starts after 3 consecutive ToF-valid samples above 25cm, then latches and does not fall back to guard. While waiting, the cascade setpoint tracks current altitude without clearing the live vario estimate, so the controller enters closed loop earlier and with awareness of launch velocity. If liftoff is still not confirmed after 8s, it aborts to `LANDING`.
+`ALT_HOLD` test mode also has a takeoff ground guard. For the first 500ms after entering `ALT_HOLD`, `launchAlt` and the ToF baseline are refreshed while sensors settle. If ToF is too close or initially invalid, the baseline is acquired from the first valid low reading that appears. Until ToF is valid, takeoff thrust is capped at `HOVER_THROTTLE + 60us`; once ToF is valid, it can ramp from `HOVER_THROTTLE` by `15us/s` up to `HOVER_THROTTLE + 45us`. Cascade starts after 3 consecutive ToF-valid samples above 12cm, then latches and does not fall back to guard. While waiting, the cascade setpoint tracks current altitude without clearing the live vario estimate, so the controller enters closed loop earlier and with awareness of launch velocity. If liftoff is still not confirmed after 8s, it aborts to `LANDING`.
 
 ---
 
 ## BLE Safety
 
-- **Test states** (`HOVER_TEST`, `ALT_HOLD`, `AUTO_HOVER_CAL`): BLE disconnect triggers velocity-based landing immediately
+- **Test states** (`HOVER_TEST`, `ALT_HOLD`, `AUTO_HOVER_CAL`) and their arming delay: BLE disconnect triggers velocity-based landing immediately
 - **Mission states** (`SPRINTING`, `HOLDING`, `PUNCHING`): BLE disconnect is ignored — the mission runs to completion autonomously
 - On reconnect, the ESP32 restarts advertising automatically; reconnect from the browser to resume monitoring
 
@@ -501,7 +508,7 @@ Toggle from `quad_tuner.html` while idle. Simulates altitude so mission flow and
 
 ## Angle Mode Toggle
 
-The tuner exposes a BLE `Angle Mode` button that controls AUX2 (`CH_ANGLE`) for all autonomous states. `Angle Mode: On` sends 1800us; `Angle Mode: Off` sends 1000us. The firmware rejects changes unless the state is `IDLE` or `DONE`, so pick the mode before starting Hover Test, Alt Hold, Auto Hover Cal, or the mission.
+The tuner exposes a BLE `Angle Mode` button that controls AUX2 (`CH_ANGLE`) for Alt Hold, Landing, and Mission states. `Angle Mode: On` sends 1800us; `Angle Mode: Off` sends 1000us. Hover Test and Auto Hover Cal use compile-time `HOVER_TEST_ANGLE_MODE`, defaulting to Acro/rate mode to avoid Angle-mode ground kick during fixed-throttle tests. The firmware rejects UI Angle changes unless the state is `IDLE` or `DONE`.
 
 The boot default is `DEFAULT_ANGLE_MODE = 1`, so autonomous test modes and the mission start with Betaflight Angle mode enabled unless the web UI toggle is changed while idle.
 

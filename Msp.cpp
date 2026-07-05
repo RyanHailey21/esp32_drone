@@ -94,7 +94,12 @@ static int16_t selectVarioForControl(int16_t fcVario, int16_t derivedVario) {
 #if USE_BF_VARIO_PRIMARY
     bool fcPlausible = abs(fcVario) >= BF_VARIO_MIN_VALID_CMS
         && abs(fcVario) <= VARIO_MAX_PLAUSIBLE_CMS;
-    bool tofPrimary = lastTofValid && lastTofWeightPct >= 80;
+    bool tofPrimary = lastTofValid && (lastTofWeightPct >= 80 || lastAltitudeSource == 3);
+
+    if (lastAltitudeSource == 3 && derivedPlausible) {
+        lastVarioSource = 0;
+        return derivedVario;
+    }
 
     // ToF remains authoritative for low-altitude AGL. BF vario is baro/FC
     // fused and can be polluted by prop wash or ground pressure near the floor,

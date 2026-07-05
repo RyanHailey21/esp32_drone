@@ -66,6 +66,10 @@
 #define ANGLE_MODE_UUID     "ab0828c1-198e-4351-b779-901fa0e0371e"
 #define FLIGHT_LOG_OFFSET_UUID "ab0828c2-198e-4351-b779-901fa0e0371e"
 #define FLIGHT_LOG_CHUNK_UUID  "ab0828c3-198e-4351-b779-901fa0e0371e"
+#define ALT_RAMP_RATE_UUID     "ab0828c4-198e-4351-b779-901fa0e0371e"
+#define MAX_CLIMB_TEST_UUID    "ab0828c5-198e-4351-b779-901fa0e0371e"
+#define MAX_DESCENT_TEST_UUID  "ab0828c6-198e-4351-b779-901fa0e0371e"
+#define BF_GROUND_EFFECT_UUID  "ab0828c7-198e-4351-b779-901fa0e0371e"
 
 // BLE flight-log dump
 #define FLIGHT_LOG_BYTES       32768
@@ -118,6 +122,7 @@
 // 4 µs/iter × 50 Hz ≈ 200 µs/s → 270 µs step takes ~1.3 s, too slow to trigger ANTI_GRAVITY.
 #define HOVER_RAMP_STEP_US  4
 #define DEFAULT_ANGLE_MODE  1  // 0=acro/rate mode, 1=Angle mode
+#define HOVER_TEST_ANGLE_MODE 0 // fixed-throttle hover tests avoid Angle-mode ground kick
 
 // ── Cascaded Altitude Hold ────────────────────────────────────
 // HOLD_KP = outer P gain: altitude error (m) → desired vertical speed (m/s)
@@ -125,18 +130,22 @@
 // HOLD_KI = inner I gain: speed integral    → throttle offset (µs)
 
 // Outer loop: setpoint ramp and speed limits
-#define ALT_RAMP_RATE_MPS       0.4f    // m/s internal setpoint ramp rate
-#define MAX_CLIMB_MPS_TEST      0.25f   // max commanded climb, test mode
-#define MAX_DESCENT_MPS_TEST    0.20f   // max commanded descent, test mode
+#define DEFAULT_ALT_RAMP_RATE_MPS       0.4f    // m/s internal setpoint ramp rate
+#define DEFAULT_MAX_CLIMB_MPS_TEST      0.25f   // max commanded climb, test mode
+#define DEFAULT_MAX_DESCENT_MPS_TEST    0.20f   // max commanded descent, test mode
 #define MAX_CLIMB_MPS_HOLD      1.20f   // max commanded climb, competition HOLDING
 #define MAX_DESCENT_MPS_HOLD    0.80f   // max commanded descent, competition HOLDING
 #define ALT_HOLD_TARGET_MIN_M   0.5f    // BLE Alt Hold test target lower bound
-#define ALT_HOLD_TARGET_MAX_M   5.0f    // BLE Alt Hold test target upper bound
+#define ALT_HOLD_TARGET_MAX_M   10.0f   // BLE Alt Hold test target upper bound
 #define NEAR_TARGET_M           0.5f    // within this radius, scale down max speed
 #define NEAR_TARGET_FACTOR      0.35f   // minimum speed factor within near-target zone
+#define ALT_HOLD_LOOKAHEAD_S    0.30f   // compensate sensor/control lag by aiming at predicted altitude
+#define ALT_HOLD_LOOKAHEAD_MAX_V_MPS 1.0f // clamp prediction velocity so spikes cannot dominate
 #define ALT_HOLD_CAPTURE_MARGIN_M 0.25f // below target by this much, keep climbing
 #define ALT_HOLD_CAPTURE_MIN_CLIMB_MPS 0.16f
-#define ALT_HOLD_CAPTURE_MIN_OFFSET_US 35 // minimum above-hover throttle while materially below target
+#define ALT_HOLD_CAPTURE_MIN_OFFSET_US 35 // minimum above-hover throttle while low and climbing weakly
+#define ALT_HOLD_RECOVERY_DESCENT_MPS -0.08f // below this, use stronger recovery floor
+#define ALT_HOLD_RECOVERY_MIN_OFFSET_US 70
 
 // Inner loop: vario filtering
 #define VARIO_TAU_S             0.05f   // seconds, light low-pass; avoid lag on low-alt ToF vario
@@ -144,7 +153,7 @@
 #define VARIO_MAX_PLAUSIBLE_CMS 400     // cm/s — reject ToF/FC spikes above ~4 m/s
 #define USE_BF_VARIO_PRIMARY    1       // use Betaflight vario as a low-altitude assist and above ToF range
 #define BF_VARIO_MIN_VALID_CMS  3       // below this, treat FC vario as zero/idle and use derived fallback
-#define BF_VARIO_GROUND_EFFECT_M 0.45f  // below this, ignore BF vario and trust ToF-derived speed
+#define DEFAULT_BF_VARIO_GROUND_EFFECT_M 1.20f // below this, ignore BF vario and trust ToF-derived speed
 #define BF_VARIO_TOF_INDECISIVE_CMS 8   // above ground-effect zone, BF can override tiny ToF derivative
 #define VSPEED_I_MAX_US         150.0f  // max integral throttle contribution in us
 
@@ -161,10 +170,10 @@
 #define LANDING_KP_VSPEED       120.0f  // fixed P gain for landing velocity controller
 
 // Takeoff ground guard — avoids integrator windup and baro-spike at liftoff
-#define TAKEOFF_ALT_M            0.25f  // ToF-confirmed altitude before closed-loop engages
-#define TAKEOFF_NUDGE_US         10     // us above HOVER_THROTTLE for ground-phase thrust
-#define TAKEOFF_RAMP_US_PER_S    25     // additional takeoff throttle ramp while waiting for liftoff
-#define TAKEOFF_MAX_OFFSET_US    65     // max takeoff throttle above HOVER_THROTTLE
+#define TAKEOFF_ALT_M            0.12f  // ToF-confirmed altitude before closed-loop engages
+#define TAKEOFF_NUDGE_US         0      // us above HOVER_THROTTLE for ground-phase thrust
+#define TAKEOFF_RAMP_US_PER_S    15     // additional takeoff throttle ramp while waiting for liftoff
+#define TAKEOFF_MAX_OFFSET_US    45     // max takeoff throttle above HOVER_THROTTLE
 #define TAKEOFF_INVALID_TOF_MAX_OFFSET_US 60   // cap takeoff thrust until ToF confirms altitude
 #define TAKEOFF_CONFIRM_SAMPLES  3      // consecutive ToF-valid samples before cascade latch
 #define BARO_SETTLE_MS           500    // ms after throttle step for baro to settle at hover pressure
