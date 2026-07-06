@@ -18,7 +18,8 @@ NUMERIC_FIELDS = {
     "cbaro", "src", "rawV", "usedV", "bfV", "derV", "vsrc", "desV", "aErr", "vErr", "P", "I", "rawThr",
     "thr", "minThr", "maxThr", "sat", "accX", "accY", "accZ", "gyroX",
     "gyroY", "gyroZ", "roll", "pitch", "yaw", "cycle", "sensors", "rcThr",
-    "rcArm", "rcAngle", "vbat", "amps", "diag",
+    "rcArm", "rcAngle", "vbat", "amps", "diag", "tofRaw", "tofReadOk",
+    "tofReject", "tofDt", "tofStatus", "tofI2c",
 }
 
 

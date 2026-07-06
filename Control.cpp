@@ -119,7 +119,7 @@ uint16_t holdCascaded(float altitude, bool isMission) {
     float finalThrottle = (float)HOVER_THROTTLE + HOLD_KD * vspeedError + HOLD_KI * vspeedIntegral;
     float clampedThrottle = constrain(finalThrottle, thrMin, thrMax);
     int8_t sat = finalThrottle > thrMax ? 1 : (finalThrottle < thrMin ? -1 : 0);
-    if (captureNeedsHelp) {
+    if (captureNeedsHelp && filteredVario < ALT_HOLD_CAPTURE_FLOOR_MAX_V_MPS) {
         float captureOffsetUs = filteredVario < ALT_HOLD_RECOVERY_DESCENT_MPS
             ? (float)ALT_HOLD_RECOVERY_MIN_OFFSET_US
             : (float)ALT_HOLD_CAPTURE_MIN_OFFSET_US;

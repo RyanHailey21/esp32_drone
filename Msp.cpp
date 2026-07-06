@@ -1,5 +1,6 @@
 #include "Msp.h"
 #include "Tof.h"
+#include "AltitudeKF.h"
 
 static bool baroOffsetInitialized = false;
 static float baroToTofOffsetM = 0.0f;
@@ -7,6 +8,16 @@ static float trustedTofAltM = 0.0f;
 static uint32_t trustedTofMs = 0;
 static bool fusedOutputOffsetInitialized = false;
 static float fusedOutputOffsetM = 0.0f;
+static AltitudeKF altitudeKf;
+static bool altitudeKfInitialized = false;
+static uint32_t lastKfMs = 0;
+static float derivBaseAltM = 0.0f;
+static uint32_t derivBaseMs = 0;
+static float tofDerivBaseAltM = 0.0f;
+static uint32_t tofDerivBaseMs = 0;
+static int16_t heldDerivedVario = 0;
+static float filteredDerivedCms = 0.0f;
+static float filteredTofDerivedCms = 0.0f;
 
 void resetAltitudeFusion() {
     baroOffsetInitialized = false;
@@ -15,6 +26,22 @@ void resetAltitudeFusion() {
     trustedTofMs = 0;
     fusedOutputOffsetInitialized = false;
     fusedOutputOffsetM = 0.0f;
+    altitudeKf.reset();
+    altitudeKfInitialized = false;
+    lastKfMs = 0;
+    derivBaseAltM = 0.0f;
+    derivBaseMs = 0;
+    tofDerivBaseAltM = 0.0f;
+    tofDerivBaseMs = 0;
+    heldDerivedVario = 0;
+    filteredDerivedCms = 0.0f;
+    filteredTofDerivedCms = 0.0f;
+    lastTofReadOk = false;
+    lastTofRawM = 0.0f;
+    lastTofRejectReason = 0;
+    lastTofRangeStatus = 255;
+    lastTofI2cStatus = 0;
+    lastTofReadDtMs = 0;
     resetTofFilter();
 }
 
@@ -89,41 +116,48 @@ static int16_t constrainVario(float cms) {
     return (int16_t)constrain(cms, -32768.0f, 32767.0f);
 }
 
-static int16_t selectVarioForControl(int16_t fcVario, int16_t derivedVario) {
-    bool derivedPlausible = abs(derivedVario) <= VARIO_MAX_PLAUSIBLE_CMS;
-#if USE_BF_VARIO_PRIMARY
-    bool fcPlausible = abs(fcVario) >= BF_VARIO_MIN_VALID_CMS
-        && abs(fcVario) <= VARIO_MAX_PLAUSIBLE_CMS;
-    bool tofPrimary = lastTofValid && (lastTofWeightPct >= 80 || lastAltitudeSource == 3);
+static float tofVerticalM(float tofRangeM, uint32_t nowMs) {
+    if (nowMs - lastFcAttitudeMs > ATTITUDE_ABORT_MAX_AGE_MS) return tofRangeM;
 
-    if (lastAltitudeSource == 3 && derivedPlausible) {
-        lastVarioSource = 0;
-        return derivedVario;
-    }
+    const float degToRad = 0.01745329252f;
+    float rollRad = (lastFcRollDeciDeg / 10.0f) * degToRad;
+    float pitchRad = (lastFcPitchDeciDeg / 10.0f) * degToRad;
+    float verticalM = tofRangeM * cosf(rollRad) * cosf(pitchRad);
+    return constrain(verticalM, 0.0f, (float)TOF_VALID_MAX_M);
+}
 
-    // ToF remains authoritative for low-altitude AGL. BF vario is baro/FC
-    // fused and can be polluted by prop wash or ground pressure near the floor,
-    // so only let it assist once ToF is clearly above that zone.
-    if (fcPlausible && tofPrimary && lastTofAltM >= BF_VARIO_GROUND_EFFECT_M) {
-        bool sameDirection = derivedPlausible
-            && derivedVario != 0
-            && ((fcVario > 0) == (derivedVario > 0));
-        bool tofIndecisive = !derivedPlausible || abs(derivedVario) <= BF_VARIO_TOF_INDECISIVE_CMS;
-        if (sameDirection || tofIndecisive) {
-            lastVarioSource = 1;
-            return fcVario;
+static int16_t updateDerivedVario(float measurementAltM, bool tofPrimary, uint32_t nowMs) {
+    if (tofPrimary) {
+        derivBaseMs = 0;
+        if (tofDerivBaseMs == 0) {
+            tofDerivBaseAltM = measurementAltM;
+            tofDerivBaseMs = nowMs;
+        } else if (nowMs - tofDerivBaseMs >= 180) {
+            float dtSec = (nowMs - tofDerivBaseMs) / 1000.0f;
+            float rawTofCms = (measurementAltM - tofDerivBaseAltM) * 100.0f / dtSec;
+            constexpr float TOF_DERIVED_ALPHA = 0.30f;
+            filteredTofDerivedCms += TOF_DERIVED_ALPHA * (rawTofCms - filteredTofDerivedCms);
+            heldDerivedVario = constrainVario(filteredTofDerivedCms);
+            tofDerivBaseAltM = measurementAltM;
+            tofDerivBaseMs = nowMs;
+        }
+    } else {
+        tofDerivBaseMs = 0;
+        if (derivBaseMs == 0) {
+            derivBaseAltM = measurementAltM;
+            derivBaseMs = nowMs;
+        } else if (nowMs - derivBaseMs >= 400) {
+            float dtSec = (nowMs - derivBaseMs) / 1000.0f;
+            float rawDerivedCms = (measurementAltM - derivBaseAltM) * 100.0f / dtSec;
+            constexpr float DERIVED_ALPHA = 0.25f;
+            filteredDerivedCms += DERIVED_ALPHA * (rawDerivedCms - filteredDerivedCms);
+            heldDerivedVario = constrainVario(filteredDerivedCms);
+            derivBaseAltM = measurementAltM;
+            derivBaseMs = nowMs;
         }
     }
 
-    // Above ToF's useful range, use the FC's fused vario if it is available.
-    if (fcPlausible && !tofPrimary) {
-        lastVarioSource = 1;
-        return fcVario;
-    }
-#endif
-
-    lastVarioSource = 0;
-    return derivedVario;
+    return heldDerivedVario;
 }
 
 static void pollFcDiagnostics(uint32_t nowMs) {
@@ -217,41 +251,83 @@ static void pollFcDiagnostics(uint32_t nowMs) {
 #endif
 }
 
-static float fuseAltitude(float baroAltM) {
+static float fuseAltitude(float baroAltM, int16_t fcVarioCms) {
     float tofAltM = 0.0f;
-    bool rawTofValid = readTofAltitude(tofAltM);
+    bool tofUsable = readTofAltitude(tofAltM);
+    bool tofFresh = tofUsable && lastTofReadOk;
     uint32_t nowMs = millis();
 
-    bool tofHoldoverValid = false;
-    if (rawTofValid) {
-        trustedTofAltM = tofAltM;
-        trustedTofMs = nowMs;
-    } else if (trustedTofMs != 0 && nowMs - trustedTofMs <= TOF_HOLDOVER_MS
-               && trustedTofAltM <= TOF_BLEND_FULL_M) {
-        tofAltM = trustedTofAltM;
-        tofHoldoverValid = true;
+    if (tofUsable) {
+        tofAltM = tofVerticalM(tofAltM, nowMs);
     }
 
-    bool tofValid = rawTofValid || tofHoldoverValid;
-    float tofWeight = tofBlendWeight(tofAltM, tofValid);
-    if (tofHoldoverValid) {
-        tofWeight = min(tofWeight, (float)TOF_HOLDOVER_WEIGHT_PCT / 100.0f);
-    }
-
-    if (rawTofValid && tofWeight >= 0.25f) {
-        float measuredOffset = tofAltM - baroAltM;
-        if (!baroOffsetInitialized) {
-            baroToTofOffsetM = measuredOffset;
-            baroOffsetInitialized = true;
-        } else {
-            baroToTofOffsetM += TOF_OFFSET_ALPHA * (measuredOffset - baroToTofOffsetM);
+    if (tofFresh && trustedTofMs != 0) {
+        float dtSec = max((nowMs - trustedTofMs) / 1000.0f, 0.02f);
+        float maxStepM = TOF_FUSION_MAX_STEP_MPS * dtSec;
+        if (fabsf(tofAltM - trustedTofAltM) > maxStepM) {
+            tofUsable = false;
+            tofFresh = false;
+            lastTofReadOk = false;
+            lastTofRejectReason = 6;
         }
     }
 
+    float tofWeight = tofBlendWeight(tofAltM, tofUsable);
+    if (tofUsable && !tofFresh) {
+        tofWeight = min(tofWeight, (float)TOF_HELD_WEIGHT_PCT / 100.0f);
+    }
     float correctedBaroM = baroAltM + (baroOffsetInitialized ? baroToTofOffsetM : 0.0f);
-    float fusedAltM = tofValid
-        ? correctedBaroM + tofWeight * (tofAltM - correctedBaroM)
-        : correctedBaroM;
+
+    int16_t derivedVarioCms = updateDerivedVario(
+        tofFresh && tofWeight >= 0.80f ? tofAltM : correctedBaroM,
+        tofFresh && tofWeight >= 0.80f,
+        nowMs);
+
+    altitudeKf.ground_effect_alt_m = BF_VARIO_GROUND_EFFECT_M;
+    altitudeKf.tof_max_rate_mps = TOF_FUSION_MAX_STEP_MPS;
+
+    if (!altitudeKfInitialized) {
+        float initialV = abs(fcVarioCms) <= VARIO_MAX_PLAUSIBLE_CMS ? fcVarioCms / 100.0f : 0.0f;
+        altitudeKf.reset(correctedBaroM, initialV);
+        altitudeKfInitialized = true;
+        lastKfMs = nowMs;
+    } else {
+        float dtSec = (nowMs - lastKfMs) / 1000.0f;
+        altitudeKf.predict(dtSec);
+        lastKfMs = nowMs;
+    }
+
+    altitudeKf.updateBaro(correctedBaroM);
+    bool tofApplied = altitudeKf.updateTof(tofAltM, tofFresh, nowMs);
+    if (tofFresh && !tofApplied) {
+        tofUsable = false;
+        tofFresh = false;
+        tofWeight = 0.0f;
+        lastTofReadOk = false;
+        lastTofRejectReason = 6;
+    }
+    if (tofApplied) {
+        trustedTofAltM = tofAltM;
+        trustedTofMs = nowMs;
+        if (tofWeight >= 0.25f) {
+            float measuredOffset = tofAltM - baroAltM;
+            if (!baroOffsetInitialized) {
+                baroToTofOffsetM = measuredOffset;
+                baroOffsetInitialized = true;
+            } else {
+                baroToTofOffsetM += TOF_OFFSET_ALPHA * (measuredOffset - baroToTofOffsetM);
+            }
+        }
+    }
+
+#if USE_BF_VARIO_PRIMARY
+    bool fcPlausible = abs(fcVarioCms) <= VARIO_MAX_PLAUSIBLE_CMS;
+    altitudeKf.updateBfVario(fcVarioCms / 100.0f, fcPlausible);
+#endif
+    bool derivedPlausible = abs(derivedVarioCms) <= VARIO_MAX_PLAUSIBLE_CMS;
+    altitudeKf.updateDerivedVario(derivedVarioCms / 100.0f, derivedPlausible);
+
+    float fusedAltM = altitudeKf.altitude;
     if (!fusedOutputOffsetInitialized) {
         fusedOutputOffsetM = fusedAltM - baroAltM;
         fusedOutputOffsetInitialized = true;
@@ -259,13 +335,18 @@ static float fuseAltitude(float baroAltM) {
     fusedAltM -= fusedOutputOffsetM;
     correctedBaroM -= fusedOutputOffsetM;
 
-    lastTofValid = tofValid;
-    lastTofAltM = tofValid ? tofAltM : 0.0f;
+    lastTofValid = tofUsable;
+    lastTofAltM = tofUsable ? tofAltM : 0.0f;
     lastTofWeightPct = (uint8_t)constrain(tofWeight * 100.0f + 0.5f, 0.0f, 100.0f);
     lastBaroAltM = baroAltM;
     lastCorrectedBaroAltM = correctedBaroM;
     lastFusedAltM = fusedAltM;
-    lastAltitudeSource = tofHoldoverValid ? 3 : (tofWeight >= 0.95f ? 1 : (tofWeight > 0.0f ? 2 : 0));
+    lastAltitudeSource = tofWeight >= 0.95f ? 1 : (tofWeight > 0.0f ? (!tofFresh ? 3 : 2) : 0);
+    lastVario = constrainVario(altitudeKf.velocity * 100.0f);
+    lastFcVario = fcVarioCms;
+    lastDerivedVario = derivedVarioCms;
+    lastVarioSource = 2;  // covariance-weighted KF velocity estimate.
+    lastVarioMs = nowMs;
 
     return fusedAltM;
 }
@@ -349,62 +430,17 @@ float getAltitude() {
 #endif
 
             float baroAltM = alt_cm / 100.0f;
-            float fusedAltM = fuseAltitude(baroAltM);
-
-            // If Betaflight sends 0 vario, derive speed from altitude. Use a
-            // shorter ToF window when valid; fall back to a slower fused/baro
-            // derivative to avoid baro quantization pulses.
-            static float derivBaseAltM = 0.0f;
-            static uint32_t derivBaseMs = 0;
-            static float tofDerivBaseAltM = 0.0f;
-            static uint32_t tofDerivBaseMs = 0;
-            static int16_t heldDerivedVario = 0;
-            static float filteredDerivedCms = 0.0f;
-            static float filteredTofDerivedCms = 0.0f;
-            if (lastTofValid && lastTofWeightPct >= 80) {
-                if (tofDerivBaseMs == 0) {
-                    tofDerivBaseAltM = lastTofAltM;
-                    tofDerivBaseMs = nowMs;
-                } else if (nowMs - tofDerivBaseMs >= 180) {
-                    float dtSec = (nowMs - tofDerivBaseMs) / 1000.0f;
-                    float rawTofCms = (lastTofAltM - tofDerivBaseAltM) * 100.0f / dtSec;
-                    constexpr float TOF_DERIVED_ALPHA = 0.30f;
-                    filteredTofDerivedCms += TOF_DERIVED_ALPHA * (rawTofCms - filteredTofDerivedCms);
-                    heldDerivedVario = constrainVario(filteredTofDerivedCms);
-                    tofDerivBaseAltM = lastTofAltM;
-                    tofDerivBaseMs = nowMs;
-                }
-            } else {
-                tofDerivBaseMs = 0;
-                if (derivBaseMs == 0) {
-                    derivBaseAltM = fusedAltM;
-                    derivBaseMs = nowMs;
-                } else if (nowMs - derivBaseMs >= 400) {
-                    float dtSec = (nowMs - derivBaseMs) / 1000.0f;
-                    float rawDerivedCms = (fusedAltM - derivBaseAltM) * 100.0f / dtSec;
-                    constexpr float DERIVED_ALPHA = 0.25f;
-                    filteredDerivedCms += DERIVED_ALPHA * (rawDerivedCms - filteredDerivedCms);
-                    heldDerivedVario = constrainVario(filteredDerivedCms);
-                    derivBaseAltM = fusedAltM;
-                    derivBaseMs = nowMs;
-                }
-            }
-
-            int16_t usedVario = selectVarioForControl(vario, heldDerivedVario);
+            float fusedAltM = fuseAltitude(baroAltM, vario);
 
             lastAlt     = fusedAltM;
-            lastVario   = usedVario;
-            lastFcVario = vario;
-            lastDerivedVario = heldDerivedVario;
-            lastVarioMs = nowMs;
 #if SERIAL_FLIGHT_DEBUG
             static uint32_t varioLogMs = 0;
             if (nowMs - varioLogMs >= 500) {
                 varioLogMs = nowMs;
-                Serial.printf("[ALT] fused=%.2f baro=%.2f cbaro=%.2f src=%u tof=%s%.2f w=%u%% bf_vario=%d derived=%d used=%d vsrc=%u cm/s\n",
+                Serial.printf("[ALT] fused=%.2f baro=%.2f cbaro=%.2f src=%u tof=%s%.2f w=%u%% bf_vario=%d derived=%d kf_v=%d vsrc=%u cm/s\n",
                     lastAlt, baroAltM, lastCorrectedBaroAltM, lastAltitudeSource,
                     lastTofValid ? "" : "invalid:",
-                    lastTofAltM, lastTofWeightPct, vario, heldDerivedVario, usedVario, lastVarioSource);
+                    lastTofAltM, lastTofWeightPct, vario, lastDerivedVario, lastVario, lastVarioSource);
             }
 #endif
             pollFcDiagnostics(nowMs);
@@ -475,6 +511,12 @@ float getAltitude() {
     lastTofValid = false;
     lastTofAltM = 0.0f;
     lastTofWeightPct = 0;
+    lastTofReadOk = false;
+    lastTofRawM = 0.0f;
+    lastTofRejectReason = 0;
+    lastTofRangeStatus = 255;
+    lastTofI2cStatus = 0;
+    lastTofReadDtMs = 0;
     lastAltitudeSource = 0;
 
     return benchAlt;

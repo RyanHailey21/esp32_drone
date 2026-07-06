@@ -23,7 +23,7 @@ const BF_GROUND_EFFECT_UUID  = 'ab0828c7-198e-4351-b779-901fa0e0371e';
 const STATE_NAMES  = ['IDLE','ARMING','SPRINTING','HOLDING','PUNCHING','CUT','HOVER TEST','AUTO HOVER CAL','LANDING','DONE','ALT HOLD'];
 const STATE_COLORS = ['','var(--amber)','var(--amber)','var(--green)','var(--red)','var(--red)','var(--cyan)','var(--cyan)','var(--amber)','var(--text-mid)','var(--green)'];
 const ALT_SOURCE_NAMES = ['BARO', 'TOF', 'BLEND', 'TOF HOLD'];
-const VARIO_SOURCE_NAMES = ['DERIVED', 'BF VARIO'];
+const VARIO_SOURCE_NAMES = ['DERIVED', 'BF VARIO', 'KF'];
 const PARAM_PRESET_KEY = 'quad-tuner-param-preset-v1';
 
 const CMD_HOVER_TEST     = 1;
@@ -659,7 +659,8 @@ function onTelemetry(e) {
   el('d-vf').style.color = varColor(filtVarCs);
   el('d-vfc').style.color = varColor(fcVarioCs);
   el('d-vd').style.color = varColor(derivVarCs);
-  el('d-vsrc').style.color = varioSource === 1 ? 'var(--green)' : 'var(--amber)';
+  el('d-vsrc').style.color = varioSource === 2 ? 'var(--cyan)'
+                            : varioSource === 1 ? 'var(--green)' : 'var(--amber)';
   el('d-tof').textContent = tofValid && tofCm >= 0 ? (tofCm / 100).toFixed(2) + 'm' : 'INVALID';
   el('d-tw').textContent = tofWeight + '%';
   el('d-baro').textContent = (baroCm / 100).toFixed(2) + 'm';

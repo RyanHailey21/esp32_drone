@@ -17,7 +17,7 @@ float    currentRelAlt   = 0;
 int16_t  lastVario       = 0;
 int16_t  lastFcVario     = 0;
 int16_t  lastDerivedVario = 0;
-uint8_t  lastVarioSource = 0;  // 0=derived fallback, 1=Betaflight MSP vario
+uint8_t  lastVarioSource = 0;  // 0=derived fallback, 1=Betaflight MSP vario, 2=KF velocity
 uint8_t  lastMspAltitudePayload[6] = {0};
 int16_t  lastFcAccX      = 0;
 int16_t  lastFcAccY      = 0;
@@ -45,6 +45,12 @@ uint32_t lastFcDiagMs    = 0;
 bool     lastTofValid    = false;
 float    lastTofAltM     = 0.0f;
 uint8_t  lastTofWeightPct = 0;
+bool     lastTofReadOk   = false;
+float    lastTofRawM     = 0.0f;
+uint8_t  lastTofRejectReason = 0;
+uint8_t  lastTofRangeStatus = 255;
+uint8_t  lastTofI2cStatus = 0;
+uint16_t lastTofReadDtMs = 0;
 float    lastBaroAltM    = 0.0f;
 float    lastCorrectedBaroAltM = 0.0f;
 float    lastFusedAltM   = 0.0f;

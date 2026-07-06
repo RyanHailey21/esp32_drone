@@ -204,10 +204,10 @@ def main():
     print(f"Best observed delay band: ~{best_lag * 80}ms (corr={best_corr:+.3f})")
 
     candidates = [
-        (0.7, 70, 0.25, 0.20, 0.4),
-        (0.8, 70, 0.30, 0.22, 0.5),
-        (0.9, 75, 0.35, 0.25, 0.6),
-        (1.0, 80, 0.45, 0.30, 0.8),
+        (0.8, 90, 0.25, 0.30, 0.4),
+        (0.8, 110, 0.25, 0.35, 0.4),
+        (0.9, 110, 0.35, 0.35, 0.6),
+        (1.0, 120, 0.45, 0.40, 0.8),
     ]
     print("Recorded-sensor command replay:")
     for c in candidates:
