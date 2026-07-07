@@ -66,6 +66,10 @@ bool readTofAltitude(float& altitudeM) {
         lastTofRejectReason = 3;
         return false;
     }
+    if (lastTofRangeStatus != 0) {
+        lastTofRejectReason = 7;
+        return false;
+    }
 
     float measuredM = distanceMm / 1000.0f;
     lastTofRawM = measuredM;
@@ -76,7 +80,7 @@ bool readTofAltitude(float& altitudeM) {
     if (measuredM < TOF_VALID_MIN_M) {
         // Mounted close to the ground, the VL53L1X can report below its useful
         // range while the aircraft is still sitting on the floor. Treat that
-        // as a valid ground reference instead of blocking ToF baseline setup.
+        // as a valid ground reference instead of rejecting startup readings.
         measuredM = 0.0f;
     }
 

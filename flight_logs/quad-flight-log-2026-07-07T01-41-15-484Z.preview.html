@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>quad-flight-log-2026-07-07T01-41-15-484Z.csv preview</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+body { margin: 0; font-family: system-ui, Segoe UI, Arial, sans-serif; background: #101316; color: #e8eef2; }
+main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+h1 { margin: 0 0 6px; font-size: 22px; }
+.run { color: #9fb0bd; margin-bottom: 18px; font-family: Consolas, monospace; font-size: 13px; }
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.card { background: #171c20; border: 1px solid #2a343c; border-radius: 8px; padding: 10px 12px; }
+.label { color: #91a1ad; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.value { font-size: 18px; margin-top: 3px; }
+.plot { background: #151a1f; border: 1px solid #2a343c; border-radius: 8px; margin: 14px 0; padding: 12px; }
+.plot-title { display: flex; justify-content: space-between; color: #cbd5dc; font-size: 13px; margin-bottom: 8px; }
+.chart-wrap { height: 360px; background: #0d1115; border-radius: 4px; padding: 10px; }
+.chart-wrap.compact { height: 240px; }
+canvas { width: 100% !important; height: 100% !important; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: #9fb0bd; font-size: 12px; margin-top: 8px; }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 18px; height: 3px; border-radius: 2px; }
+.hint { color: #91a1ad; font-size: 12px; margin-top: 10px; }
+@media (max-width: 760px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } main { padding: 14px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>quad-flight-log-2026-07-07T01-41-15-484Z.csv</h1>
+  <div class="run">[RUN] ALT_HOLD hover=1355 target=1.50 kp=0.80 ki=0.00 kd=110.00 tofFull=3.60 tofZero=3.80</div>
+  <div class="grid" id="stats"></div>
+  <section class="plot">
+    <div class="plot-title"><span>Altitude Sources</span><span>meters vs time</span></div>
+    <div class="chart-wrap"><canvas id="altPlot" role="img" aria-label="Altitude plot"></canvas></div>
+  </section>
+  <section class="plot">
+    <div class="plot-title"><span>Control</span><span>left: vertical speed m/s, right: throttle us</span></div>
+    <div class="chart-wrap"><canvas id="ctrlPlot" role="img" aria-label="Control plot"></canvas></div>
+  </section>
+  <section class="plot">
+    <div class="plot-title"><span>Altitude Source</span><span>0 baro, 1 tof, 2 blend, 3 tof hold</span></div>
+    <div class="chart-wrap compact"><canvas id="srcPlot" role="img" aria-label="Source plot"></canvas></div>
+    <div class="hint">Red vertical markers indicate parsed altitude jumps above the configured threshold.</div>
+  </section>
+  <section class="plot">
+    <div class="plot-title"><span>FC IMU / Attitude</span><span>raw accel, roll/pitch degrees</span></div>
+    <div class="chart-wrap"><canvas id="imuPlot" role="img" aria-label="IMU plot"></canvas></div>
+  </section>
+</main>
+<script>
+const DATA = {"title":"quad-flight-log-2026-07-07T01-41-15-484Z.csv","run":"[RUN] ALT_HOLD hover=1355 target=1.50 kp=0.80 ki=0.00 kd=110.00 tofFull=3.60 tofZero=3.80","points":[{"ms":98.0,"t":0.098,"phase":"settle","alt":-0.074,"lowRel":-0.074,"tof":0.0,"tofW":100.0,"baro":0.07,"cbaro":0.07,"setpt":0.0,"fV":0.0,"usedV":5.0,"bfV":9.0,"derV":0.0,"vsrc":2.0,"desV":0.0,"thr":1275.0,"sat":0.0,"src":1.0,"accX":22.0,"accY":10.0,"accZ":525.0,"gyroX":-7.0,"gyroY":29.0,"gyroZ":19.0,"roll":0.5,"pitch":-1.3,"yaw":75.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":12.0,"amps":0.32,"diag":31.0},{"ms":180.0,"t":0.18,"phase":"settle","alt":-0.0,"lowRel":-0.0,"tof":0.0,"tofW":80.0,"baro":0.04,"cbaro":-0.03,"setpt":0.0,"fV":0.0,"usedV":2.0,"bfV":0.0,"derV":0.0,"vsrc":2.0,"desV":0.0,"thr":1275.0,"sat":0.0,"src":3.0,"accX":12.0,"accY":-17.0,"accZ":516.0,"gyroX":-25.0,"gyroY":38.0,"gyroZ":35.0,"roll":0.5,"pitch":-1.3,"yaw":75.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":12.0,"amps":0.32,"diag":31.0},{"ms":262.0,"t":0.262,"phase":"settle","alt":-0.001,"lowRel":-0.001,"tof":0.0,"tofW":80.0,"baro":0.07,"cbaro":0.004,"setpt":0.0,"fV":0.0,"usedV":0.0,"bfV":0.0,"derV":-17.0,"vsrc":2.0,"desV":0.0,"thr":1275.0,"sat":0.0,"src":3.0,"accX":12.0,"accY":-17.0,"accZ":516.0,"gyroX":-25.0,"gyroY":38.0,"gyroZ":35.0,"roll":0.3,"pitch":-1.1,"yaw":75.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":12.0,"amps":0.32,"diag":31.0},{"ms":344.0,"t":0.344,"phase":"settle","alt":0.001,"lowRel":0.001,"tof":0.0,"tofW":80.0,"baro":0.13,"cbaro":0.058,"setpt":0.0,"fV":0.0,"usedV":0.0,"bfV":11.0,"derV":0.0,"vsrc":2.0,"desV":0.0,"thr":1275.0,"sat":0.0,"src":3.0,"accX":12.0,"accY":-17.0,"accZ":516.0,"gyroX":-25.0,"gyroY":38.0,"gyroZ":35.0,"roll":0.3,"pitch":-1.1,"yaw":75.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.9,"amps":1.32,"diag":31.0},{"ms":422.0,"t":0.422,"phase":"settle","alt":0.001,"lowRel":0.001,"tof":0.0,"tofW":80.0,"baro":0.12,"cbaro":0.043,"setpt":0.0,"fV":0.0,"usedV":1.0,"bfV":12.0,"derV":0.0,"vsrc":2.0,"desV":0.0,"thr":1275.0,"sat":0.0,"src":3.0,"accX":-6.0,"accY":37.0,"accZ":543.0,"gyroX":-20.0,"gyroY":-18.0,"gyroZ":-357.0,"roll":0.1,"pitch":-0.7,"yaw":78.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.9,"amps":1.32,"diag":31.0},{"ms":503.0,"t":0.503,"phase":"guard","alt":-0.0,"lowRel":-0.0,"tof":0.0,"tofW":80.0,"baro":0.09,"cbaro":0.009,"setpt":-0.0,"fV":0.0,"usedV":0.0,"bfV":1.0,"derV":-8.0,"vsrc":2.0,"desV":0.0,"thr":1275.0,"sat":0.0,"src":3.0,"accX":-6.0,"accY":37.0,"accZ":543.0,"gyroX":-20.0,"gyroY":-18.0,"gyroZ":-357.0,"roll":0.1,"pitch":-0.7,"yaw":78.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.9,"amps":1.57,"diag":31.0},{"ms":585.0,"t":0.585,"phase":"guard","alt":-0.002,"lowRel":-0.002,"tof":0.0,"tofW":100.0,"baro":0.05,"cbaro":-0.031,"setpt":-0.002,"fV":0.0,"usedV":0.0,"bfV":0.0,"derV":0.0,"vsrc":2.0,"desV":0.0,"thr":1281.0,"sat":0.0,"src":1.0,"accX":6.0,"accY":60.0,"accZ":552.0,"gyroX":-214.0,"gyroY":423.0,"gyroZ":-397.0,"roll":0.1,"pitch":-0.7,"yaw":78.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.9,"amps":1.57,"diag":31.0},{"ms":666.0,"t":0.666,"phase":"guard","alt":-0.001,"lowRel":-0.001,"tof":0.0,"tofW":100.0,"baro":0.21,"cbaro":0.132,"setpt":-0.001,"fV":0.0,"usedV":0.0,"bfV":11.0,"derV":0.0,"vsrc":2.0,"desV":0.0,"thr":1288.0,"sat":0.0,"src":1.0,"accX":6.0,"accY":60.0,"accZ":552.0,"gyroX":-214.0,"gyroY":423.0,"gyroZ":-397.0,"roll":-1.2,"pitch":1.4,"yaw":82.0,"cycle":125.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.9,"amps":1.57,"diag":31.0},{"ms":748.0,"t":0.748,"phase":"guard","alt":0.018,"lowRel":0.018,"tof":0.04,"tofW":100.0,"baro":0.3,"cbaro":0.207,"setpt":0.018,"fV":0.028,"usedV":5.0,"bfV":52.0,"derV":32.0,"vsrc":2.0,"desV":0.0,"thr":1294.0,"sat":0.0,"src":1.0,"accX":6.0,"accY":60.0,"accZ":552.0,"gyroX":-214.0,"gyroY":423.0,"gyroZ":-397.0,"roll":-1.2,"pitch":1.4,"yaw":82.0,"cycle":125.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.9,"amps":2.6,"diag":31.0},{"ms":826.0,"t":0.826,"phase":"guard","alt":0.038,"lowRel":0.038,"tof":0.056,"tofW":100.0,"baro":0.28,"cbaro":0.167,"setpt":0.038,"fV":0.065,"usedV":9.0,"bfV":58.0,"derV":24.0,"vsrc":2.0,"desV":0.0,"thr":1301.0,"sat":0.0,"src":1.0,"accX":-34.0,"accY":22.0,"accZ":358.0,"gyroX":541.0,"gyroY":-408.0,"gyroZ":115.0,"roll":1.3,"pitch":-0.1,"yaw":79.0,"cycle":125.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.9,"amps":2.6,"diag":31.0},{"ms":907.0,"t":0.907,"phase":"guard","alt":0.044,"lowRel":0.044,"tof":0.056,"tofW":80.0,"baro":0.11,"cbaro":-0.017,"setpt":0.044,"fV":0.081,"usedV":8.0,"bfV":3.0,"derV":-23.0,"vsrc":2.0,"desV":0.0,"thr":1307.0,"sat":0.0,"src":3.0,"accX":-34.0,"accY":22.0,"accZ":358.0,"gyroX":541.0,"gyroY":-408.0,"gyroZ":115.0,"roll":1.3,"pitch":-0.1,"yaw":79.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":2.77,"diag":31.0},{"ms":989.0,"t":0.989,"phase":"guard","alt":0.029,"lowRel":0.029,"tof":0.0,"tofW":80.0,"baro":-0.03,"cbaro":-0.142,"setpt":0.029,"fV":0.058,"usedV":4.0,"bfV":-52.0,"derV":-21.0,"vsrc":2.0,"desV":0.0,"thr":1314.0,"sat":0.0,"src":3.0,"accX":-28.0,"accY":24.0,"accZ":392.0,"gyroX":454.0,"gyroY":-577.0,"gyroZ":1075.0,"roll":1.3,"pitch":-0.1,"yaw":79.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":2.77,"diag":31.0},{"ms":1071.0,"t":1.071,"phase":"guard","alt":0.017,"lowRel":0.017,"tof":0.0,"tofW":80.0,"baro":0.05,"cbaro":-0.051,"setpt":0.017,"fV":0.027,"usedV":1.0,"bfV":-45.0,"derV":-7.0,"vsrc":2.0,"desV":0.0,"thr":1320.0,"sat":0.0,"src":3.0,"accX":-28.0,"accY":24.0,"accZ":392.0,"gyroX":454.0,"gyroY":-577.0,"gyroZ":1075.0,"roll":0.6,"pitch":2.3,"yaw":72.0,"cycle":125.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":2.77,"diag":31.0},{"ms":1153.0,"t":1.153,"phase":"guard","alt":0.006,"lowRel":0.006,"tof":0.0,"tofW":80.0,"baro":-0.04,"cbaro":-0.132,"setpt":0.006,"fV":0.003,"usedV":-1.0,"bfV":-42.0,"derV":-34.0,"vsrc":2.0,"desV":0.0,"thr":1327.0,"sat":0.0,"src":3.0,"accX":-28.0,"accY":24.0,"accZ":392.0,"gyroX":454.0,"gyroY":-577.0,"gyroZ":1075.0,"roll":0.6,"pitch":2.3,"yaw":72.0,"cycle":125.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":3.37,"diag":31.0},{"ms":1231.0,"t":1.231,"phase":"guard","alt":-0.004,"lowRel":-0.004,"tof":0.0,"tofW":80.0,"baro":-0.12,"cbaro":-0.191,"setpt":-0.004,"fV":-0.017,"usedV":-3.0,"bfV":-60.0,"derV":0.0,"vsrc":2.0,"desV":0.0,"thr":1333.0,"sat":0.0,"src":3.0,"accX":-54.0,"accY":31.0,"accZ":553.0,"gyroX":511.0,"gyroY":136.0,"gyroZ":-716.0,"roll":0.6,"pitch":0.5,"yaw":76.0,"cycle":125.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":3.37,"diag":31.0},{"ms":1312.0,"t":1.312,"phase":"guard","alt":-0.014,"lowRel":-0.014,"tof":0.0,"tofW":100.0,"baro":-0.17,"cbaro":-0.241,"setpt":-0.014,"fV":-0.033,"usedV":-4.0,"bfV":-65.0,"derV":0.0,"vsrc":2.0,"desV":0.0,"thr":1339.0,"sat":0.0,"src":1.0,"accX":-54.0,"accY":31.0,"accZ":553.0,"gyroX":511.0,"gyroY":136.0,"gyroZ":-716.0,"roll":0.6,"pitch":0.5,"yaw":76.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":3.65,"diag":31.0},{"ms":1394.0,"t":1.394,"phase":"guard","alt":-0.018,"lowRel":-0.018,"tof":0.0,"tofW":100.0,"baro":0.02,"cbaro":-0.022,"setpt":-0.018,"fV":-0.045,"usedV":-5.0,"bfV":-15.0,"derV":0.0,"vsrc":2.0,"desV":0.0,"thr":1346.0,"sat":0.0,"src":1.0,"accX":-24.0,"accY":41.0,"accZ":782.0,"gyroX":-214.0,"gyroY":365.0,"gyroZ":-605.0,"roll":0.6,"pitch":0.5,"yaw":76.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":3.65,"diag":31.0},{"ms":1475.0,"t":1.475,"phase":"guard","alt":0.005,"lowRel":0.005,"tof":0.091,"tofW":100.0,"baro":0.21,"cbaro":0.17,"setpt":0.005,"fV":-0.023,"usedV":0.0,"bfV":51.0,"derV":73.0,"vsrc":2.0,"desV":0.0,"thr":1353.0,"sat":0.0,"src":1.0,"accX":-24.0,"accY":41.0,"accZ":782.0,"gyroX":-214.0,"gyroY":365.0,"gyroZ":-605.0,"roll":-2.9,"pitch":3.9,"yaw":86.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":3.65,"diag":31.0},{"ms":1557.0,"t":1.557,"phase":"guard","alt":0.046,"lowRel":0.046,"tof":0.164,"tofW":100.0,"baro":0.11,"cbaro":0.061,"setpt":0.046,"fV":0.03,"usedV":7.0,"bfV":59.0,"derV":84.0,"vsrc":2.0,"desV":0.0,"thr":1359.0,"sat":0.0,"src":1.0,"accX":-24.0,"accY":41.0,"accZ":782.0,"gyroX":-214.0,"gyroY":365.0,"gyroZ":-605.0,"roll":-2.9,"pitch":3.9,"yaw":86.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":4.47,"diag":31.0},{"ms":1635.0,"t":1.635,"phase":"cascade","alt":0.054,"lowRel":0.054,"tof":0.164,"tofW":80.0,"baro":0.04,"cbaro":0.003,"setpt":0.064,"fV":0.057,"usedV":7.0,"bfV":9.0,"derV":14.0,"vsrc":2.0,"desV":0.16,"thr":1364.0,"sat":0.0,"src":3.0,"accX":-27.0,"accY":27.0,"accZ":637.0,"gyroX":298.0,"gyroY":-428.0,"gyroZ":-1056.0,"roll":0.3,"pitch":0.2,"yaw":95.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":4.47,"diag":31.0},{"ms":1718.0,"t":1.718,"phase":"cascade","alt":0.104,"lowRel":0.104,"tof":0.26,"tofW":80.0,"baro":0.08,"cbaro":0.07,"setpt":0.105,"fV":0.113,"usedV":14.0,"bfV":0.0,"derV":80.0,"vsrc":2.0,"desV":0.16,"thr":1357.0,"sat":0.0,"src":3.0,"accX":-27.0,"accY":27.0,"accZ":637.0,"gyroX":298.0,"gyroY":-428.0,"gyroZ":-1056.0,"roll":0.3,"pitch":0.2,"yaw":95.0,"cycle":125.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":4.22,"diag":31.0},{"ms":1800.0,"t":1.8,"phase":"cascade","alt":0.171,"lowRel":0.171,"tof":0.372,"tofW":80.0,"baro":0.22,"cbaro":0.238,"setpt":0.146,"fV":0.185,"usedV":22.0,"bfV":26.0,"derV":57.0,"vsrc":2.0,"desV":-0.073,"thr":1322.0,"sat":0.0,"src":3.0,"accX":-39.0,"accY":3.0,"accZ":672.0,"gyroX":-82.0,"gyroY":42.0,"gyroZ":-833.0,"roll":0.3,"pitch":0.2,"yaw":95.0,"cycle":125.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":4.22,"diag":31.0},{"ms":1883.0,"t":1.883,"phase":"cascade","alt":0.264,"lowRel":0.264,"tof":0.498,"tofW":80.0,"baro":0.4,"cbaro":0.437,"setpt":0.188,"fV":0.28,"usedV":33.0,"bfV":86.0,"derV":141.0,"vsrc":2.0,"desV":-0.14,"thr":1303.0,"sat":0.0,"src":3.0,"accX":-39.0,"accY":3.0,"accZ":672.0,"gyroX":-82.0,"gyroY":42.0,"gyroZ":-833.0,"roll":-1.2,"pitch":1.4,"yaw":108.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":4.22,"diag":31.0},{"ms":1965.0,"t":1.965,"phase":"cascade","alt":0.381,"lowRel":0.381,"tof":0.659,"tofW":80.0,"baro":0.55,"cbaro":0.608,"setpt":0.229,"fV":0.41,"usedV":48.0,"bfV":123.0,"derV":176.0,"vsrc":2.0,"desV":-0.237,"thr":1276.0,"sat":0.0,"src":3.0,"accX":-39.0,"accY":3.0,"accZ":672.0,"gyroX":-82.0,"gyroY":42.0,"gyroZ":-833.0,"roll":-1.2,"pitch":1.4,"yaw":108.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":4.07,"diag":31.0},{"ms":2043.0,"t":2.043,"phase":"cascade","alt":0.507,"lowRel":0.507,"tof":0.811,"tofW":100.0,"baro":0.67,"cbaro":0.728,"setpt":0.268,"fV":0.523,"usedV":61.0,"bfV":148.0,"derV":143.0,"vsrc":2.0,"desV":-0.315,"thr":1253.0,"sat":0.0,"src":1.0,"accX":-37.0,"accY":3.0,"accZ":497.0,"gyroX":54.0,"gyroY":-145.0,"gyroZ":-604.0,"roll":0.2,"pitch":0.3,"yaw":116.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":4.07,"diag":31.0},{"ms":2124.0,"t":2.124,"phase":"cascade","alt":0.646,"lowRel":0.646,"tof":0.972,"tofW":100.0,"baro":0.78,"cbaro":0.848,"setpt":0.308,"fV":0.652,"usedV":75.0,"bfV":154.0,"derV":179.0,"vsrc":2.0,"desV":-0.35,"thr":1234.0,"sat":0.0,"src":1.0,"accX":-37.0,"accY":3.0,"accZ":497.0,"gyroX":54.0,"gyroY":-145.0,"gyroZ":-604.0,"roll":0.2,"pitch":0.3,"yaw":116.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":3.4,"diag":31.0},{"ms":2206.0,"t":2.206,"phase":"cascade","alt":0.79,"lowRel":0.79,"tof":1.101,"tofW":100.0,"baro":0.9,"cbaro":0.983,"setpt":0.349,"fV":0.785,"usedV":88.0,"bfV":158.0,"derV":167.0,"vsrc":2.0,"desV":-0.35,"thr":1219.0,"sat":0.0,"src":1.0,"accX":-41.0,"accY":-43.0,"accZ":430.0,"gyroX":102.0,"gyroY":-116.0,"gyroZ":351.0,"roll":0.2,"pitch":0.3,"yaw":116.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":3.4,"diag":31.0},{"ms":2288.0,"t":2.288,"phase":"cascade","alt":0.946,"lowRel":0.946,"tof":1.281,"tofW":100.0,"baro":1.05,"cbaro":1.147,"setpt":0.39,"fV":0.916,"usedV":101.0,"bfV":163.0,"derV":201.0,"vsrc":2.0,"desV":-0.35,"thr":1205.0,"sat":0.0,"src":1.0,"accX":-41.0,"accY":-43.0,"accZ":430.0,"gyroX":102.0,"gyroY":-116.0,"gyroZ":351.0,"roll":-0.2,"pitch":0.4,"yaw":117.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":3.4,"diag":31.0},{"ms":2370.0,"t":2.37,"phase":"cascade","alt":1.049,"lowRel":1.049,"tof":1.281,"tofW":80.0,"baro":1.13,"cbaro":1.243,"setpt":0.431,"fV":1.016,"usedV":107.0,"bfV":156.0,"derV":201.0,"vsrc":2.0,"desV":-0.35,"thr":1198.0,"sat":0.0,"src":3.0,"accX":-41.0,"accY":-43.0,"accZ":430.0,"gyroX":102.0,"gyroY":-116.0,"gyroZ":351.0,"roll":-0.2,"pitch":0.4,"yaw":117.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":2.02,"diag":31.0},{"ms":2448.0,"t":2.448,"phase":"cascade","alt":1.188,"lowRel":1.188,"tof":1.364,"tofW":80.0,"baro":1.2,"cbaro":1.324,"setpt":0.47,"fV":1.092,"usedV":113.0,"bfV":140.0,"derV":134.0,"vsrc":2.0,"desV":-0.35,"thr":1192.0,"sat":0.0,"src":3.0,"accX":-45.0,"accY":-21.0,"accZ":250.0,"gyroX":0.0,"gyroY":6.0,"gyroZ":71.0,"roll":1.1,"pitch":-1.1,"yaw":115.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.7,"amps":2.02,"diag":31.0},{"ms":2529.0,"t":2.529,"phase":"cascade","alt":1.311,"lowRel":1.311,"tof":1.424,"tofW":80.0,"baro":1.27,"cbaro":1.401,"setpt":0.511,"fV":1.142,"usedV":116.0,"bfV":124.0,"derV":88.0,"vsrc":2.0,"desV":-0.35,"thr":1188.0,"sat":0.0,"src":3.0,"accX":-45.0,"accY":-21.0,"accZ":250.0,"gyroX":0.0,"gyroY":6.0,"gyroZ":71.0,"roll":1.1,"pitch":-1.1,"yaw":115.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":1.3,"diag":31.0},{"ms":2611.0,"t":2.611,"phase":"cascade","alt":1.401,"lowRel":1.401,"tof":1.403,"tofW":80.0,"baro":1.42,"cbaro":1.541,"setpt":0.552,"fV":1.143,"usedV":114.0,"bfV":131.0,"derV":13.0,"vsrc":2.0,"desV":-0.35,"thr":1191.0,"sat":0.0,"src":3.0,"accX":-43.0,"accY":-6.0,"accZ":124.0,"gyroX":217.0,"gyroY":-262.0,"gyroZ":633.0,"roll":1.1,"pitch":-1.1,"yaw":115.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":1.3,"diag":31.0},{"ms":2693.0,"t":2.693,"phase":"cascade","alt":1.484,"lowRel":1.484,"tof":1.414,"tofW":80.0,"baro":1.46,"cbaro":1.562,"setpt":0.593,"fV":1.127,"usedV":112.0,"bfV":122.0,"derV":118.0,"vsrc":2.0,"desV":-0.35,"thr":1193.0,"sat":0.0,"src":3.0,"accX":-43.0,"accY":-6.0,"accZ":124.0,"gyroX":217.0,"gyroY":-262.0,"gyroZ":633.0,"roll":-0.3,"pitch":0.0,"yaw":110.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":1.3,"diag":31.0},{"ms":2775.0,"t":2.775,"phase":"cascade","alt":1.531,"lowRel":1.531,"tof":1.352,"tofW":100.0,"baro":1.49,"cbaro":1.592,"setpt":0.634,"fV":1.09,"usedV":105.0,"bfV":96.0,"derV":-28.0,"vsrc":2.0,"desV":-0.35,"thr":1201.0,"sat":0.0,"src":1.0,"accX":-43.0,"accY":-6.0,"accZ":124.0,"gyroX":217.0,"gyroY":-262.0,"gyroZ":633.0,"roll":-0.3,"pitch":0.0,"yaw":110.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":0.9,"diag":31.0},{"ms":2853.0,"t":2.853,"phase":"cascade","alt":1.525,"lowRel":1.525,"tof":1.195,"tofW":100.0,"baro":1.51,"cbaro":1.583,"setpt":0.673,"fV":0.989,"usedV":90.0,"bfV":77.0,"derV":-135.0,"vsrc":2.0,"desV":-0.35,"thr":1217.0,"sat":0.0,"src":1.0,"accX":-42.0,"accY":-14.0,"accZ":148.0,"gyroX":-373.0,"gyroY":114.0,"gyroZ":89.0,"roll":-0.9,"pitch":-0.1,"yaw":108.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":0.9,"diag":31.0},{"ms":2934.0,"t":2.934,"phase":"cascade","alt":1.476,"lowRel":1.476,"tof":0.971,"tofW":100.0,"baro":1.51,"cbaro":1.536,"setpt":0.713,"fV":0.839,"usedV":71.0,"bfV":44.0,"derV":-227.0,"vsrc":2.0,"desV":-0.35,"thr":1238.0,"sat":0.0,"src":1.0,"accX":-42.0,"accY":-14.0,"accZ":148.0,"gyroX":-373.0,"gyroY":114.0,"gyroZ":89.0,"roll":-0.9,"pitch":-0.1,"yaw":108.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":0.87,"diag":31.0},{"ms":3016.0,"t":3.016,"phase":"cascade","alt":1.49,"lowRel":1.49,"tof":0.971,"tofW":80.0,"baro":1.58,"cbaro":1.539,"setpt":0.754,"fV":0.681,"usedV":59.0,"bfV":53.0,"derV":-227.0,"vsrc":2.0,"desV":-0.35,"thr":1251.0,"sat":0.0,"src":3.0,"accX":-35.0,"accY":37.0,"accZ":277.0,"gyroX":90.0,"gyroY":95.0,"gyroZ":-328.0,"roll":-0.9,"pitch":-0.1,"yaw":108.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":0.87,"diag":31.0},{"ms":3095.0,"t":3.095,"phase":"cascade","alt":1.367,"lowRel":1.367,"tof":0.725,"tofW":80.0,"baro":1.07,"cbaro":0.956,"setpt":0.794,"fV":0.459,"usedV":34.0,"bfV":-56.0,"derV":-93.0,"vsrc":2.0,"desV":-0.35,"thr":1279.0,"sat":0.0,"src":3.0,"accX":5.0,"accY":1.0,"accZ":291.0,"gyroX":154.0,"gyroY":521.0,"gyroZ":111.0,"roll":0.9,"pitch":1.2,"yaw":111.0,"cycle":124.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":0.87,"diag":31.0},{"ms":3176.0,"t":3.176,"phase":"cascade","alt":1.335,"lowRel":1.335,"tof":0.725,"tofW":80.0,"baro":0.89,"cbaro":0.776,"setpt":0.834,"fV":0.297,"usedV":20.0,"bfV":-177.0,"derV":-93.0,"vsrc":2.0,"desV":-0.35,"thr":1294.0,"sat":0.0,"src":3.0,"accX":5.0,"accY":1.0,"accZ":291.0,"gyroX":154.0,"gyroY":521.0,"gyroZ":111.0,"roll":0.9,"pitch":1.2,"yaw":111.0,"cycle":125.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":1.22,"diag":31.0},{"ms":3258.0,"t":3.258,"phase":"cascade","alt":1.277,"lowRel":1.277,"tof":-1.0,"tofW":0.0,"baro":0.61,"cbaro":0.496,"setpt":0.875,"fV":0.135,"usedV":3.0,"bfV":-223.0,"derV":-93.0,"vsrc":2.0,"desV":-0.31,"thr":1317.0,"sat":0.0,"src":0.0,"accX":-325.0,"accY":73.0,"accZ":855.0,"gyroX":-6160.0,"gyroY":-5308.0,"gyroZ":1695.0,"roll":0.9,"pitch":1.2,"yaw":111.0,"cycle":125.0,"rcThr":1500.0,"rcArm":1800.0,"rcAngle":1800.0,"vbat":11.8,"amps":1.22,"diag":31.0}],"jumps":[],"jumpThreshold":0.35,"sourceSummary":"BARO=1, TOF=16, TOF HOLD=23"};
+const COLORS = { alt:'#39d98a', tof:'#61dafb', baro:'#f7b955', cbaro:'#b084f5', setpt:'#fff', thr:'#ff6b6b', fV:'#61dafb', usedV:'#39d98a', desV:'#f7b955', src:'#39d98a', accX:'#61dafb', accY:'#f7b955', accZ:'#39d98a', roll:'#ffffff', pitch:'#b084f5', jump:'#ff4d4d' };
+const pts = DATA.points;
+function finite(v) { return typeof v === 'number' && Number.isFinite(v); }
+function seriesData(key, scale=1) {
+  return pts.map(p => finite(p[key]) ? p[key] * scale : null);
+}
+function timeLabels() {
+  return pts.map(p => (p.t ?? ((p.ms - (pts[0]?.ms ?? 0)) / 1000)).toFixed(2));
+}
+const jumpLinePlugin = {
+  id: 'jumpLines',
+  afterDatasetsDraw(chart, args, opts) {
+    if (!opts || !opts.enabled || !DATA.jumps.length || !pts.length) return;
+    const xScale = chart.scales.x;
+    const yArea = chart.chartArea;
+    const firstMs = pts[0].ms;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = COLORS.jump;
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 1;
+    for (const jump of DATA.jumps) {
+      const x = xScale.getPixelForValue(((jump.to - firstMs) / 1000).toFixed(2));
+      ctx.beginPath();
+      ctx.moveTo(x, yArea.top);
+      ctx.lineTo(x, yArea.bottom);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+};
+function chartOptions(yTitle, extraScales={}, jumpLines=false) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { labels: { color: '#cbd5dc', usePointStyle: true, boxWidth: 8 } },
+      jumpLines: { enabled: jumpLines },
+      tooltip: {
+        callbacks: {
+          title: items => items.length ? `t=${items[0].label}s` : ''
+        }
+      }
+    },
+    scales: Object.assign({
+      x: {
+        title: { display: true, text: 'time s', color: '#91a1ad' },
+        ticks: { color: '#91a1ad', maxTicksLimit: 10 },
+        grid: { color: '#1f2930' }
+      },
+      y: {
+        title: { display: true, text: yTitle, color: '#91a1ad' },
+        ticks: { color: '#91a1ad' },
+        grid: { color: '#1f2930' }
+      }
+    }, extraScales)
+  };
+}
+function dataset(label, key, color, opts={}) {
+  return Object.assign({
+    label,
+    data: seriesData(key, opts.scale ?? 1),
+    yAxisID: opts.yAxisID || 'y',
+    borderColor: color,
+    backgroundColor: color,
+    pointRadius: opts.pointRadius ?? 0,
+    borderWidth: opts.borderWidth ?? 2,
+    borderDash: opts.borderDash,
+    hidden: opts.hidden || false,
+    tension: opts.tension ?? 0.15,
+    stepped: opts.stepped || false
+  }, opts.chart || {});
+}
+function drawChart(id, datasets, yTitle, options={}) {
+  const ctx = document.getElementById(id);
+  if (!window.Chart || !ctx) return;
+  new Chart(ctx, {
+    type: 'line',
+    data: { labels: timeLabels(), datasets },
+    options: chartOptions(yTitle, options.scales || {}, !!options.jumpLines),
+    plugins: [jumpLinePlugin]
+  });
+}
+function drawAltitudeChart() {
+  drawChart('altPlot', [
+    dataset('Altitude', 'alt', COLORS.alt),
+    dataset('ToF', 'tof', COLORS.tof),
+    dataset('Baro', 'baro', COLORS.baro),
+    dataset('Corrected baro', 'cbaro', COLORS.cbaro),
+    dataset('Setpoint', 'setpt', COLORS.setpt)
+  ], 'meters', { jumpLines: true });
+}
+function drawControlChart() {
+  const ctx = document.getElementById('ctrlPlot');
+  if (!window.Chart || !ctx) return;
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: timeLabels(),
+      datasets: [
+        { label: 'Throttle', data: seriesData('thr'), yAxisID: 'thr', borderColor: COLORS.thr, backgroundColor: COLORS.thr, pointRadius: 0, borderWidth: 2, tension: 0.15 },
+        { label: 'Filtered vario', data: seriesData('fV'), yAxisID: 'v', borderColor: COLORS.fV, backgroundColor: COLORS.fV, pointRadius: 0, borderWidth: 2, tension: 0.15 },
+        { label: 'Used vario', data: seriesData('usedV', 0.01), yAxisID: 'v', borderColor: COLORS.usedV, backgroundColor: COLORS.usedV, pointRadius: 0, borderWidth: 2, tension: 0.15 },
+        { label: 'BF vario', data: seriesData('bfV', 0.01), yAxisID: 'v', borderColor: '#b084f5', backgroundColor: '#b084f5', pointRadius: 0, borderWidth: 1.5, borderDash: [5, 4], tension: 0.15, hidden: true },
+        { label: 'Desired speed', data: seriesData('desV'), yAxisID: 'v', borderColor: COLORS.desV, backgroundColor: COLORS.desV, pointRadius: 0, borderWidth: 2, tension: 0.15 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#cbd5dc', usePointStyle: true, boxWidth: 8 } },
+        tooltip: {
+          callbacks: {
+            title: items => items.length ? `t=${items[0].label}s` : '',
+            label: item => {
+              const unit = item.dataset.yAxisID === 'thr' ? ' us' : ' m/s';
+              return `${item.dataset.label}: ${Number(item.raw).toFixed(item.dataset.yAxisID === 'thr' ? 0 : 2)}${unit}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'time s', color: '#91a1ad' },
+          ticks: { color: '#91a1ad', maxTicksLimit: 10 },
+          grid: { color: '#1f2930' }
+        },
+        v: {
+          position: 'left',
+          title: { display: true, text: 'vertical speed m/s', color: '#91a1ad' },
+          ticks: { color: '#91a1ad' },
+          grid: { color: '#1f2930' },
+          suggestedMin: -1.5,
+          suggestedMax: 1.5
+        },
+        thr: {
+          position: 'right',
+          title: { display: true, text: 'throttle us', color: '#91a1ad' },
+          ticks: { color: '#91a1ad' },
+          grid: { drawOnChartArea: false }
+        }
+      }
+    },
+    plugins: [jumpLinePlugin]
+  });
+}
+function drawSourceChart() {
+  drawChart('srcPlot', [
+    dataset('Altitude source', 'src', COLORS.src, { stepped: true, pointRadius: 2 })
+  ], 'source id', {
+    jumpLines: true,
+    scales: {
+      y: {
+        min: -0.2,
+        max: 3.2,
+        title: { display: true, text: 'source id', color: '#91a1ad' },
+        ticks: {
+          color: '#91a1ad',
+          stepSize: 1,
+          callback: value => ({0:'BARO',1:'TOF',2:'BLEND',3:'HOLD'}[value] ?? value)
+        },
+        grid: { color: '#1f2930' }
+      }
+    }
+  });
+}
+function drawImuChart() {
+  drawChart('imuPlot', [
+    dataset('accZ', 'accZ', COLORS.accZ, { yAxisID: 'acc' }),
+    dataset('accX', 'accX', COLORS.accX, { yAxisID: 'acc', hidden: true }),
+    dataset('accY', 'accY', COLORS.accY, { yAxisID: 'acc', hidden: true }),
+    dataset('roll', 'roll', COLORS.roll, { yAxisID: 'att' }),
+    dataset('pitch', 'pitch', COLORS.pitch, { yAxisID: 'att' })
+  ], 'raw accel', {
+    scales: {
+      acc: {
+        position: 'left',
+        title: { display: true, text: 'raw accel', color: '#91a1ad' },
+        ticks: { color: '#91a1ad' },
+        grid: { color: '#1f2930' }
+      },
+      att: {
+        position: 'right',
+        title: { display: true, text: 'attitude deg', color: '#91a1ad' },
+        ticks: { color: '#91a1ad' },
+        grid: { drawOnChartArea: false }
+      }
+    }
+  });
+}
+function stat(label, value) {
+  return `<div class="card"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+document.getElementById('stats').innerHTML = [
+  stat('Rows', pts.length),
+  stat('Duration', pts.length ? ((pts[pts.length-1].ms - pts[0].ms)/1000).toFixed(2) + 's' : 'n/a'),
+  stat('Source counts', DATA.sourceSummary),
+  stat('Altitude jumps', DATA.jumps.length + ' >= ' + DATA.jumpThreshold.toFixed(2) + 'm'),
+  stat('Diag mask', pts.length ? '0x' + (pts[pts.length-1].diag ?? 0).toString(16) : 'n/a')
+].join('');
+drawAltitudeChart();
+drawControlChart();
+drawSourceChart();
+drawImuChart();
+</script>
+</body>
+</html>

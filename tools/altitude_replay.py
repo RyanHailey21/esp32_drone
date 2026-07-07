@@ -1,10 +1,9 @@
 """
-Python mirror of AltitudeKF.h, used to replay the actual logged flight and
-compare against the existing fuseAltitude()/selectVarioForControl() output
-that was recorded in the same log (the `alt` column).
+Python mirror of AltitudeKF.h, used to replay logged flights against the raw
+sensor columns recorded by the ESP32.
 
-This lets you validate the KF design against real sensor sequences BEFORE
-porting it to the ESP32 -- no new flights needed.
+This lets you validate KF tuning against real sensor sequences before flying
+new firmware.
 """
 import numpy as np
 

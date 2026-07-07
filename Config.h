@@ -13,13 +13,13 @@
 #define TOF_SCL_PIN       11
 #define TOF_SHUT_PIN      -1   // optional VL53L1X SHUT/XSHUT pin; -1 = not connected
 #define TOF_I2C_HZ        400000
-#define TOF_TIMEOUT_MS    50
-#define TOF_PERIOD_MS     50
-#define TOF_TIMING_BUDGET_US 50000
+#define TOF_TIMEOUT_MS    30
+#define TOF_PERIOD_MS     25
+#define TOF_TIMING_BUDGET_US 20000
 #define TOF_VALID_MIN_M   0.04f
-#define TOF_VALID_MAX_M   3.80f
-#define TOF_BLEND_FULL_M  3.60f
-#define TOF_BLEND_ZERO_M  3.80f
+#define TOF_VALID_MAX_M   2.50f
+#define TOF_BLEND_FULL_M  1.60f
+#define TOF_BLEND_ZERO_M  2.20f
 #define TOF_RECENT_VALID_MS 130   // allow guard/landing to use recent ToF when no new sample is ready
 #define TOF_HELD_WEIGHT_PCT 80    // visible confidence for a recent held ToF sample
 #define TOF_MAX_STEP_MIN_M 0.18f // reject sudden single-sample range jumps near the ground
@@ -29,12 +29,12 @@
 
 // Linear altitude KF tuning. These are the only compile-time defaults for the
 // filter; AltitudeKF.h consumes them rather than carrying independent values.
-#define KF_Q_ACCEL_PSD              0.5f
+#define KF_Q_ACCEL_PSD              1.5f
 #define KF_R_BARO                   0.6f
 #define KF_R_TOF                    0.02f
-#define KF_R_BF_VARIO               0.5f
-#define KF_R_BF_VARIO_GROUND_MULT   6.0f
-#define KF_R_DER_VARIO              1.2f
+#define KF_R_BF_VARIO               0.3f
+#define KF_R_BF_VARIO_GROUND_MULT   2.0f
+#define KF_R_DER_VARIO              0.6f
 
 // ── Brushed Motor PWM ────────────────────────────────────────
 #define PWM_FREQ        25000
@@ -49,6 +49,9 @@
 #define MSP_ALTITUDE    109
 #define MSP_ANALOG      110
 #define MSP_SET_RAW_RC  200
+#define MSP_ALTITUDE_PERIOD_MS 25
+#define MSP_DIAG_PERIOD_MS     50
+#define MSP_ALTITUDE_STALE_MS  250
 
 // ── RC Channel Indices ────────────────────────────────────────
 #define CH_THROTTLE  2
@@ -58,8 +61,6 @@
 // ── BLE UUIDs ────────────────────────────────────────────────
 #define SERVICE_UUID        "ab0828b1-198e-4351-b779-901fa0e0371e"
 #define HOVER_UUID          "ab0828b2-198e-4351-b779-901fa0e0371e"
-#define CEILING_UUID        "ab0828b3-198e-4351-b779-901fa0e0371e"  // unused now, kept for compat
-#define PRESPIN_UUID        "ab0828b4-198e-4351-b779-901fa0e0371e"  // unused now, kept for compat
 #define SPRINT_THROT_UUID   "ab0828b5-198e-4351-b779-901fa0e0371e"
 #define SPRINT_CUTOFF_UUID  "ab0828b6-198e-4351-b779-901fa0e0371e"
 #define HOLD_KP_UUID        "ab0828b7-198e-4351-b779-901fa0e0371e"
@@ -161,21 +162,25 @@
 #define ALT_HOLD_CAPTURE_MARGIN_M 0.25f // below target by this much, keep climbing
 #define ALT_HOLD_CAPTURE_MIN_CLIMB_MPS 0.16f
 #define ALT_HOLD_CAPTURE_FLOOR_MAX_V_MPS 0.05f // only force throttle floor while barely climbing
-#define ALT_HOLD_CAPTURE_MIN_OFFSET_US 10 // small above-hover floor before clean liftoff is established
+#define ALT_HOLD_CAPTURE_MIN_OFFSET_US 10 // small above-hover floor while climb has not established
 #define ALT_HOLD_RECOVERY_DESCENT_MPS -0.08f // below this, use stronger recovery floor
 #define ALT_HOLD_RECOVERY_MIN_OFFSET_US 70
+#define ALT_HOLD_RECOVERY_BF_DESCENT_CMS -80 // raw BF vario can trigger recovery floor before KF catches up
+#define HOLD_KD_DOWN_SCALE    0.55f // reduce aggressive throttle pull-down on delayed velocity estimates
+#define THROTTLE_SLEW_DOWN_US 25    // max throttle decrease per cascade update
+#define THROTTLE_SLEW_UP_US   100   // allow fast recovery when falling
 
 // Inner loop: vario filtering
 #define VARIO_TAU_S             0.05f   // seconds, light low-pass; avoid lag on low-alt ToF vario
 #define VARIO_STALE_MS          500     // ms before vario reading is considered stale
 #define VARIO_MAX_PLAUSIBLE_CMS 400     // cm/s — reject ToF/FC spikes above ~4 m/s
-#define USE_BF_VARIO_PRIMARY    1       // use Betaflight vario as a low-altitude assist and above ToF range
 #define DEFAULT_BF_VARIO_GROUND_EFFECT_M 1.20f // below this, inflate BF vario covariance
 #define VSPEED_I_MAX_US         150.0f  // max integral throttle contribution in us
 
 // Throttle authority around hover
 #define THR_UP_OFFSET_US        300     // max µs above HOVER_THROTTLE
 #define THR_DOWN_OFFSET_US      300     // max µs below HOVER_THROTTLE (more for braking)
+#define THR_DOWN_OFFSET_ALT_HOLD_US 150 // gentler low-alt test braking to avoid delayed throttle chops
 #define MIN_ALT_HOLD_THROTTLE_US 1000   // low-altitude test mode can fully unload for braking
 #define MIN_MISSION_THROTTLE_US  1050   // mission hold preserves attitude-control authority
 
@@ -185,12 +190,9 @@
 #define ATTITUDE_ABORT_MAX_AGE_MS 300
 #define LANDING_KP_VSPEED       120.0f  // fixed P gain for landing velocity controller
 
-// Takeoff ground guard — avoids integrator windup and baro-spike at liftoff
-#define TAKEOFF_ALT_M            0.12f  // ToF-confirmed altitude before closed-loop engages
+// Alt Hold settle throttle — avoids a hover-throttle jump before closed-loop engages
 #define TAKEOFF_NUDGE_US         -80    // start below HOVER_THROTTLE so guard does not launch before cascade
-#define TAKEOFF_RAMP_US_PER_S    80     // additional takeoff throttle ramp while waiting for liftoff
-#define TAKEOFF_MAX_OFFSET_US    45     // max takeoff throttle above HOVER_THROTTLE
-#define TAKEOFF_INVALID_TOF_MAX_OFFSET_US 60   // cap takeoff thrust until ToF confirms altitude
-#define TAKEOFF_CONFIRM_SAMPLES  3      // consecutive ToF-valid samples before cascade latch
+#define TAKEOFF_RAMP_US_PER_S    80     // settle throttle ramp before cascade takes over
+#define TAKEOFF_MAX_OFFSET_US    45     // max settle throttle above HOVER_THROTTLE
+#define TAKEOFF_INVALID_TOF_MAX_OFFSET_US 60   // slightly higher cap if ToF is unavailable during settle
 #define BARO_SETTLE_MS           500    // ms after throttle step for baro to settle at hover pressure
-#define GROUND_GUARD_TIMEOUT_MS  8000   // ms before aborting if ToF/fused altitude hasn't confirmed liftoff

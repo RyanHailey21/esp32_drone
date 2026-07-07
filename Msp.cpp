@@ -18,6 +18,28 @@ static uint32_t tofDerivBaseMs = 0;
 static int16_t heldDerivedVario = 0;
 static float filteredDerivedCms = 0.0f;
 static float filteredTofDerivedCms = 0.0f;
+static float lastCachedAltitudeM = 0.0f;
+static uint32_t lastAltitudeFrameMs = 0;
+static uint32_t lastAltitudeRequestMs = 0;
+static uint32_t lastDiagRequestMs = 0;
+static uint8_t nextDiagSlot = 0;
+
+enum MspParseState : uint8_t {
+    MSP_WAIT_DOLLAR,
+    MSP_WAIT_M,
+    MSP_WAIT_DIR,
+    MSP_WAIT_LEN,
+    MSP_WAIT_CMD,
+    MSP_READ_PAYLOAD,
+    MSP_READ_CHECKSUM,
+};
+
+static MspParseState mspParseState = MSP_WAIT_DOLLAR;
+static uint8_t mspPayload[32];
+static uint8_t mspPayloadLen = 0;
+static uint8_t mspPayloadIndex = 0;
+static uint8_t mspCmd = 0;
+static uint8_t mspChecksum = 0;
 
 void resetAltitudeFusion() {
     baroOffsetInitialized = false;
@@ -56,13 +78,6 @@ static void sendMSP(uint8_t cmd, const uint8_t* data, uint8_t len) {
     fcSerial.write(cs);
 }
 
-static bool readByteUntil(uint8_t& value, uint32_t deadline) {
-    while (!fcSerial.available() && millis() < deadline);
-    if (!fcSerial.available()) return false;
-    value = (uint8_t)fcSerial.read();
-    return true;
-}
-
 static int16_t readS16(const uint8_t* p) {
     return (int16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
 }
@@ -71,50 +86,11 @@ static uint16_t readU16(const uint8_t* p) {
     return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
 }
 
-static uint32_t readU32(const uint8_t* p) {
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-}
-
-static bool requestMSP(uint8_t cmd, uint8_t* payload, uint8_t payloadCapacity,
-                       uint8_t& payloadLen, uint32_t timeoutMs) {
-    payloadLen = 0;
-    while (fcSerial.available()) fcSerial.read();
-    sendMSP(cmd, nullptr, 0);
-    uint32_t timeout = millis() + timeoutMs;
-
-    while (millis() < timeout) {
-        uint8_t b = 0;
-        if (!readByteUntil(b, timeout)) break;
-        if (b != '$') continue;
-        if (!readByteUntil(b, timeout) || b != 'M') continue;
-        if (!readByteUntil(b, timeout) || b != '>') continue;
-
-        uint8_t len = 0;
-        uint8_t responseCmd = 0;
-        if (!readByteUntil(len, timeout)) break;
-        if (!readByteUntil(responseCmd, timeout)) break;
-
-        uint8_t checksum = len ^ responseCmd;
-        uint8_t scratch[32];
-        for (uint8_t i = 0; i < len; i++) {
-            if (!readByteUntil(b, timeout)) return false;
-            checksum ^= b;
-            if (i < sizeof(scratch)) scratch[i] = b;
-        }
-        if (!readByteUntil(b, timeout)) break;
-        if (checksum != b || responseCmd != cmd) continue;
-
-        payloadLen = min(len, payloadCapacity);
-        memcpy(payload, scratch, payloadLen);
-        return true;
-    }
-
-    return false;
-}
-
 static int16_t constrainVario(float cms) {
     return (int16_t)constrain(cms, -32768.0f, 32767.0f);
 }
+
+static float updateAltitudeFusion(float baroAltM, int16_t fcVarioCms);
 
 static float tofVerticalM(float tofRangeM, uint32_t nowMs) {
     if (nowMs - lastFcAttitudeMs > ATTITUDE_ABORT_MAX_AGE_MS) return tofRangeM;
@@ -128,28 +104,26 @@ static float tofVerticalM(float tofRangeM, uint32_t nowMs) {
 
 static int16_t updateDerivedVario(float measurementAltM, bool tofPrimary, uint32_t nowMs) {
     if (tofPrimary) {
-        derivBaseMs = 0;
         if (tofDerivBaseMs == 0) {
             tofDerivBaseAltM = measurementAltM;
             tofDerivBaseMs = nowMs;
-        } else if (nowMs - tofDerivBaseMs >= 180) {
+        } else if (nowMs - tofDerivBaseMs >= 45) {
             float dtSec = (nowMs - tofDerivBaseMs) / 1000.0f;
             float rawTofCms = (measurementAltM - tofDerivBaseAltM) * 100.0f / dtSec;
-            constexpr float TOF_DERIVED_ALPHA = 0.30f;
+            constexpr float TOF_DERIVED_ALPHA = 0.65f;
             filteredTofDerivedCms += TOF_DERIVED_ALPHA * (rawTofCms - filteredTofDerivedCms);
             heldDerivedVario = constrainVario(filteredTofDerivedCms);
             tofDerivBaseAltM = measurementAltM;
             tofDerivBaseMs = nowMs;
         }
     } else {
-        tofDerivBaseMs = 0;
         if (derivBaseMs == 0) {
             derivBaseAltM = measurementAltM;
             derivBaseMs = nowMs;
-        } else if (nowMs - derivBaseMs >= 400) {
+        } else if (nowMs - derivBaseMs >= 180) {
             float dtSec = (nowMs - derivBaseMs) / 1000.0f;
             float rawDerivedCms = (measurementAltM - derivBaseAltM) * 100.0f / dtSec;
-            constexpr float DERIVED_ALPHA = 0.25f;
+            constexpr float DERIVED_ALPHA = 0.45f;
             filteredDerivedCms += DERIVED_ALPHA * (rawDerivedCms - filteredDerivedCms);
             heldDerivedVario = constrainVario(filteredDerivedCms);
             derivBaseAltM = measurementAltM;
@@ -160,28 +134,35 @@ static int16_t updateDerivedVario(float measurementAltM, bool tofPrimary, uint32
     return heldDerivedVario;
 }
 
-static void pollFcDiagnostics(uint32_t nowMs) {
-    static uint8_t slot = 0;
-    static uint32_t lastPollMs = 0;
-    if (nowMs - lastPollMs < 20) return;
-    lastPollMs = nowMs;
-
-    uint8_t payload[32] = {0};
-    uint8_t len = 0;
-    uint8_t cmd = MSP_RAW_IMU;
-    uint16_t bit = 0;
-
-    switch (slot++ % 5) {
-        case 0: cmd = MSP_RAW_IMU;  bit = 1 << 0; break;
-        case 1: cmd = MSP_ATTITUDE; bit = 1 << 1; break;
-        case 2: cmd = MSP_STATUS;   bit = 1 << 2; break;
-        case 3: cmd = MSP_ANALOG;   bit = 1 << 3; break;
-        default: cmd = MSP_RC;      bit = 1 << 4; break;
-    }
-
-    if (!requestMSP(cmd, payload, sizeof(payload), len, 15)) return;
-
+static void handleMspFrame(uint8_t cmd, const uint8_t* payload, uint8_t len) {
+    uint32_t nowMs = millis();
     switch (cmd) {
+        case MSP_ALTITUDE:
+            if (len == 6) {
+                int32_t alt_cm = 0;
+                alt_cm  = (uint32_t)payload[0];
+                alt_cm |= (uint32_t)payload[1] << 8;
+                alt_cm |= (uint32_t)payload[2] << 16;
+                alt_cm |= (uint32_t)payload[3] << 24;
+                memcpy(lastMspAltitudePayload, payload, sizeof(lastMspAltitudePayload));
+                int16_t vario = 0;
+                vario  = (uint16_t)payload[4];
+                vario |= (uint16_t)payload[5] << 8;
+                float baroAltM = alt_cm / 100.0f;
+                lastCachedAltitudeM = updateAltitudeFusion(baroAltM, vario);
+                lastAltitudeFrameMs = nowMs;
+#if SERIAL_FLIGHT_DEBUG
+                static uint32_t varioLogMs = 0;
+                if (nowMs - varioLogMs >= 500) {
+                    varioLogMs = nowMs;
+                    Serial.printf("[ALT] fused=%.2f baro=%.2f cbaro=%.2f src=%u tof=%s%.2f w=%u%% bf_vario=%d derived=%d kf_v=%d vsrc=%u cm/s\n",
+                        lastCachedAltitudeM, baroAltM, lastCorrectedBaroAltM, lastAltitudeSource,
+                        lastTofValid ? "" : "invalid:",
+                        lastTofAltM, lastTofWeightPct, vario, lastDerivedVario, lastVario, lastVarioSource);
+                }
+#endif
+            }
+            break;
         case MSP_RAW_IMU:
             if (len >= 18) {
                 lastFcAccX = readS16(payload + 0);
@@ -193,7 +174,7 @@ static void pollFcDiagnostics(uint32_t nowMs) {
                 lastFcMagX = readS16(payload + 12);
                 lastFcMagY = readS16(payload + 14);
                 lastFcMagZ = readS16(payload + 16);
-                lastFcDiagMask |= bit;
+                lastFcDiagMask |= 1 << 0;
                 lastFcDiagMs = nowMs;
             }
             break;
@@ -203,7 +184,7 @@ static void pollFcDiagnostics(uint32_t nowMs) {
                 lastFcPitchDeciDeg = readS16(payload + 2);
                 lastFcYawDeg = readS16(payload + 4);
                 lastFcAttitudeMs = nowMs;
-                lastFcDiagMask |= bit;
+                lastFcDiagMask |= 1 << 1;
                 lastFcDiagMs = nowMs;
             }
             break;
@@ -212,7 +193,7 @@ static void pollFcDiagnostics(uint32_t nowMs) {
                 lastFcCycleTimeUs = readU16(payload + 0);
                 lastFcI2cErrors = readU16(payload + 2);
                 lastFcSensorsMask = readU16(payload + 4);
-                lastFcDiagMask |= bit;
+                lastFcDiagMask |= 1 << 2;
                 lastFcDiagMs = nowMs;
             }
             break;
@@ -220,7 +201,7 @@ static void pollFcDiagnostics(uint32_t nowMs) {
             if (len >= 7) {
                 lastFcVbatDeciV = payload[0];
                 lastFcAmperageCentiA = readS16(payload + 5);
-                lastFcDiagMask |= bit;
+                lastFcDiagMask |= 1 << 3;
                 lastFcDiagMs = nowMs;
             }
             break;
@@ -229,7 +210,7 @@ static void pollFcDiagnostics(uint32_t nowMs) {
                 lastFcRcThrottle = readU16(payload + CH_THROTTLE * 2);
                 lastFcRcArm = readU16(payload + CH_ARM * 2);
                 lastFcRcAngle = readU16(payload + CH_ANGLE * 2);
-                lastFcDiagMask |= bit;
+                lastFcDiagMask |= 1 << 4;
                 lastFcDiagMs = nowMs;
             }
             break;
@@ -251,7 +232,83 @@ static void pollFcDiagnostics(uint32_t nowMs) {
 #endif
 }
 
-static float fuseAltitude(float baroAltM, int16_t fcVarioCms) {
+static void resetMspParser() {
+    mspParseState = MSP_WAIT_DOLLAR;
+    mspPayloadLen = 0;
+    mspPayloadIndex = 0;
+    mspCmd = 0;
+    mspChecksum = 0;
+}
+
+static void feedMspByte(uint8_t b) {
+    switch (mspParseState) {
+        case MSP_WAIT_DOLLAR:
+            if (b == '$') mspParseState = MSP_WAIT_M;
+            break;
+        case MSP_WAIT_M:
+            mspParseState = (b == 'M') ? MSP_WAIT_DIR : MSP_WAIT_DOLLAR;
+            break;
+        case MSP_WAIT_DIR:
+            mspParseState = (b == '>') ? MSP_WAIT_LEN : MSP_WAIT_DOLLAR;
+            break;
+        case MSP_WAIT_LEN:
+            mspPayloadLen = b;
+            mspPayloadIndex = 0;
+            mspChecksum = b;
+            if (mspPayloadLen > sizeof(mspPayload)) {
+                resetMspParser();
+            } else {
+                mspParseState = MSP_WAIT_CMD;
+            }
+            break;
+        case MSP_WAIT_CMD:
+            mspCmd = b;
+            mspChecksum ^= b;
+            mspParseState = mspPayloadLen == 0 ? MSP_READ_CHECKSUM : MSP_READ_PAYLOAD;
+            break;
+        case MSP_READ_PAYLOAD:
+            mspPayload[mspPayloadIndex++] = b;
+            mspChecksum ^= b;
+            if (mspPayloadIndex >= mspPayloadLen) {
+                mspParseState = MSP_READ_CHECKSUM;
+            }
+            break;
+        case MSP_READ_CHECKSUM:
+            if (mspChecksum == b) {
+                handleMspFrame(mspCmd, mspPayload, mspPayloadLen);
+            }
+            resetMspParser();
+            break;
+    }
+}
+
+static void pumpMspParser() {
+    while (fcSerial.available()) {
+        feedMspByte((uint8_t)fcSerial.read());
+    }
+}
+
+static void scheduleMspRequests(uint32_t nowMs) {
+    if (nowMs - lastAltitudeRequestMs >= MSP_ALTITUDE_PERIOD_MS) {
+        sendMSP(MSP_ALTITUDE, nullptr, 0);
+        lastAltitudeRequestMs = nowMs;
+    }
+
+    if (nowMs - lastDiagRequestMs < MSP_DIAG_PERIOD_MS) return;
+    lastDiagRequestMs = nowMs;
+
+    uint8_t cmd = MSP_RAW_IMU;
+    switch (nextDiagSlot++ % 5) {
+        case 0: cmd = MSP_RAW_IMU; break;
+        case 1: cmd = MSP_ATTITUDE; break;
+        case 2: cmd = MSP_STATUS; break;
+        case 3: cmd = MSP_ANALOG; break;
+        default: cmd = MSP_RC; break;
+    }
+    sendMSP(cmd, nullptr, 0);
+}
+
+static float updateAltitudeFusion(float baroAltM, int16_t fcVarioCms) {
     float tofAltM = 0.0f;
     bool tofUsable = readTofAltitude(tofAltM);
     bool tofFresh = tofUsable && lastTofReadOk;
@@ -320,10 +377,8 @@ static float fuseAltitude(float baroAltM, int16_t fcVarioCms) {
         }
     }
 
-#if USE_BF_VARIO_PRIMARY
     bool fcPlausible = abs(fcVarioCms) <= VARIO_MAX_PLAUSIBLE_CMS;
     altitudeKf.updateBfVario(fcVarioCms / 100.0f, fcPlausible);
-#endif
     bool derivedPlausible = abs(derivedVarioCms) <= VARIO_MAX_PLAUSIBLE_CMS;
     altitudeKf.updateDerivedVario(derivedVarioCms / 100.0f, derivedPlausible);
 
@@ -362,100 +417,19 @@ void sendRC() {
 
 float getAltitude() {
     if (!BENCH_MODE_ENABLED) {
-        static float lastAlt = 0;
-        while (fcSerial.available()) fcSerial.read();
-        sendMSP(MSP_ALTITUDE, nullptr, 0);
-        uint32_t timeout = millis() + 60;
-        uint16_t rxBytes = 0;
-        uint8_t lastByte = 0;
-        while (millis() < timeout) {
-            uint8_t b = 0;
-            if (!readByteUntil(b, timeout)) break;
-            rxBytes++;
-            lastByte = b;
-            if (b != '$') continue;
-            if (!readByteUntil(b, timeout)) break;
-            rxBytes++;
-            lastByte = b;
-            if (b != 'M') continue;
-            if (!readByteUntil(b, timeout)) break;
-            rxBytes++;
-            lastByte = b;
-            if (b != '>') continue;
-
-            uint8_t len = 0, cmd = 0;
-            if (!readByteUntil(len, timeout)) break;
-            rxBytes++;
-            lastByte = len;
-            if (!readByteUntil(cmd, timeout)) break;
-            rxBytes++;
-            lastByte = cmd;
-
-            uint8_t checksum = len ^ cmd;
-            uint8_t payload[16];
-            bool keepPayload = (cmd == MSP_ALTITUDE && len == 6);
-            for (uint8_t i = 0; i < len; i++) {
-                if (!readByteUntil(b, timeout)) return lastAlt;
-                rxBytes++;
-                lastByte = b;
-                checksum ^= b;
-                if (keepPayload && i < sizeof(payload)) payload[i] = b;
-            }
-            if (!readByteUntil(b, timeout)) break;
-            rxBytes++;
-            lastByte = b;
-            if (checksum != b) continue;
-            if (!keepPayload) continue;
-
-            int32_t alt_cm = 0;
-            alt_cm  = (uint32_t)payload[0];
-            alt_cm |= (uint32_t)payload[1] << 8;
-            alt_cm |= (uint32_t)payload[2] << 16;
-            alt_cm |= (uint32_t)payload[3] << 24;
-            memcpy(lastMspAltitudePayload, payload, sizeof(lastMspAltitudePayload));
-            int16_t vario = 0;
-            vario  = (uint16_t)payload[4];
-            vario |= (uint16_t)payload[5] << 8;
-            uint32_t nowMs = millis();
-#if SERIAL_FLIGHT_DEBUG
-            static uint32_t mspRawLogMs = 0;
-            if (nowMs - mspRawLogMs >= 500) {
-                mspRawLogMs = nowMs;
-                Serial.printf("[MSP_ALTITUDE] len=%u raw=", len);
-                for (uint8_t i = 0; i < len; i++) {
-                    Serial.printf("%02X ", payload[i]);
-                }
-                Serial.printf("alt=%ld fcVario=%d\n", (long)alt_cm, vario);
-            }
-#endif
-
-            float baroAltM = alt_cm / 100.0f;
-            float fusedAltM = fuseAltitude(baroAltM, vario);
-
-            lastAlt     = fusedAltM;
-#if SERIAL_FLIGHT_DEBUG
-            static uint32_t varioLogMs = 0;
-            if (nowMs - varioLogMs >= 500) {
-                varioLogMs = nowMs;
-                Serial.printf("[ALT] fused=%.2f baro=%.2f cbaro=%.2f src=%u tof=%s%.2f w=%u%% bf_vario=%d derived=%d kf_v=%d vsrc=%u cm/s\n",
-                    lastAlt, baroAltM, lastCorrectedBaroAltM, lastAltitudeSource,
-                    lastTofValid ? "" : "invalid:",
-                    lastTofAltM, lastTofWeightPct, vario, lastDerivedVario, lastVario, lastVarioSource);
-            }
-#endif
-            pollFcDiagnostics(nowMs);
-            return lastAlt;
-        }
-#if SERIAL_FLIGHT_DEBUG
-        static uint32_t mspTimeoutLogMs = 0;
         uint32_t nowMs = millis();
-        if (nowMs - mspTimeoutLogMs >= 500) {
-            mspTimeoutLogMs = nowMs;
-            Serial.printf("[MSP_ALTITUDE] no valid response rxBytes=%u last=0x%02X lastAlt=%.2f\n",
-                rxBytes, lastByte, lastAlt);
+        pumpMspParser();
+        scheduleMspRequests(nowMs);
+        pumpMspParser();
+#if SERIAL_FLIGHT_DEBUG
+        static uint32_t mspStaleLogMs = 0;
+        if (nowMs - lastAltitudeFrameMs > MSP_ALTITUDE_STALE_MS && nowMs - mspStaleLogMs >= 500) {
+            mspStaleLogMs = nowMs;
+            Serial.printf("[MSP_ALTITUDE] stale age=%ums lastAlt=%.2f\n",
+                nowMs - lastAltitudeFrameMs, lastCachedAltitudeM);
         }
 #endif
-        return lastAlt;
+        return lastCachedAltitudeM;
     }
 
     uint32_t now = millis();

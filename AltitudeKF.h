@@ -6,24 +6,19 @@
 // ============================================================================
 // AltitudeKF
 //
-// Drop-in replacement for fuseAltitude() + selectVarioForControl() in Msp.cpp.
+// Linear altitude/vertical-speed fusion helper used by Msp.cpp.
 // State: x = [altitude (m), vertical_velocity (m/s)]
 //
 // Design goals, mapped directly to the bugs found in flight log analysis:
-//   1. Physical-plausibility gate on ToF (updateTof) -- catches sensor spikes
-//      like the +0.97m/82ms jump found in the 2026-07-05 log, which the old
-//      holdover mechanism did NOT catch (holdover only fires on explicit
-//      sensor-invalid, not on an implausible-but-"valid" reading).
-//   2. Uses cbaro (already baro-shifted toward ToF reference) as the position
-//      measurement -- this eliminates the dual-baseline drift between
-//      `lowRel` (fixed baseline) and `altitude` (separately drifting offset)
-//      that caused reference-frame step discontinuities in mission.cpp.
+//   1. Physical-plausibility gate on ToF (updateTof) catches sensor spikes
+//      like the +0.97m/82ms jump found in the 2026-07-05 log.
+//   2. Uses corrected baro as the always-available position measurement while
+//      accepting ToF as a low-altitude position measurement when fresh/valid.
 //   3. Both vario sources (bfVario, derVario) are offered as independent,
-//      covariance-weighted measurements instead of chosen by nested if/else
-//      in selectVarioForControl(). Ground-effect zone inflates R on bfVario
-//      rather than hard-switching away from it.
+//      covariance-weighted velocity measurements. Ground-effect zone inflates
+//      R on bfVario rather than hard-switching away from it.
 //
-// Call order per getAltitude() cycle:
+// Call order per received MSP_ALTITUDE frame:
 //   predict(dt)
 //   updateBaro(cbaroM)
 //   updateTof(tofM, tofValid)        // internally gated -- may no-op
@@ -107,8 +102,7 @@ public:
         p_vel_vel = p_vel_vel_new;
     }
 
-    // Corrected-baro position update -- always available, replaces `altitude`
-    // (the drifting baro/launchAlt-relative value) in the old code.
+    // Corrected-baro position update -- always available.
     void updateBaro(float cbaroM) {
         updatePosition(cbaroM, r_baro);
     }

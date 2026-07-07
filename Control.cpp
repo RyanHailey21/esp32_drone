@@ -20,12 +20,16 @@ void resetCascadeController(float currentAlt) {
     vspeedIntegral   = 0.0f;
     vspeedLastMs     = millis();
     lastVarioMs      = millis();
+    lastRawThrottle = HOVER_THROTTLE;
+    lastClampedThrottle = HOVER_THROTTLE;
 }
 
 void primeCascadeController(float currentAlt) {
     internalSetpoint = currentAlt;
     vspeedIntegral   = 0.0f;
     vspeedLastMs     = millis();
+    lastRawThrottle = HOVER_THROTTLE;
+    lastClampedThrottle = HOVER_THROTTLE;
 }
 
 uint16_t holdCascaded(float altitude, bool isMission) {
@@ -37,9 +41,10 @@ uint16_t holdCascaded(float altitude, bool isMission) {
         vspeedIntegral = 0.0f;
     }
 
+    float controlVario = lastVario / 100.0f;
     bool varioValid = (now - lastVarioMs) <= VARIO_STALE_MS
-                      && isfinite(filteredVario)
-                      && fabsf(filteredVario) <= (VARIO_MAX_PLAUSIBLE_CMS / 100.0f);
+                      && isfinite(controlVario)
+                      && fabsf(controlVario) <= (VARIO_MAX_PLAUSIBLE_CMS / 100.0f);
     if (!varioValid || !isfinite(altitude)) {
         vspeedIntegral = 0.0f;
         lastAltError = 0.0f;
@@ -53,8 +58,8 @@ uint16_t holdCascaded(float altitude, bool isMission) {
         lastClampedThrottle = HOVER_THROTTLE;
         lastThrottleSat = 0;
 #if SERIAL_FLIGHT_DEBUG
-        Serial.printf("[CASCADE] invalid sensor data: alt=%.2f filtV=%.2f age=%ums -> LANDING\n",
-            altitude, filteredVario, now - lastVarioMs);
+        Serial.printf("[CASCADE] invalid sensor data: alt=%.2f controlV=%.2f age=%ums -> LANDING\n",
+            altitude, controlVario, now - lastVarioMs);
 #endif
         startLanding(altitude);
         return HOVER_THROTTLE;
@@ -72,7 +77,7 @@ uint16_t holdCascaded(float altitude, bool isMission) {
 
     // 2. Outer loop: altitude error → desired vertical speed
     // Predict altitude slightly ahead to compensate the observed control lag.
-    float predictionVario = constrain(filteredVario,
+    float predictionVario = constrain(controlVario,
                                       -ALT_HOLD_LOOKAHEAD_MAX_V_MPS,
                                       ALT_HOLD_LOOKAHEAD_MAX_V_MPS);
     float predictedAlt = altitude + predictionVario * ALT_HOLD_LOOKAHEAD_S;
@@ -90,25 +95,28 @@ uint16_t holdCascaded(float altitude, bool isMission) {
     float desiredVspeed = constrain(HOLD_KP * altError, -maxDesc, maxClimb);
     bool captureNeedsHelp = !isMission
         && altitude < target - ALT_HOLD_CAPTURE_MARGIN_M
-        && filteredVario < ALT_HOLD_CAPTURE_MIN_CLIMB_MPS;
+        && controlVario < ALT_HOLD_CAPTURE_MIN_CLIMB_MPS;
     if (captureNeedsHelp) {
         desiredVspeed = max(desiredVspeed, min((float)ALT_HOLD_CAPTURE_MIN_CLIMB_MPS, maxClimb));
     }
 
-    // filteredVario is maintained by runMissionLoop() every iteration.
+    // lastVario is the KF velocity and is used directly for control. filteredVario
+    // is maintained by runMissionLoop() for display/logging only.
     // Sensor validity is checked above before throttle corrections are made.
 
     // Inner PI loop with conditional anti-windup
-    float vspeedError  = desiredVspeed - filteredVario;
+    float vspeedError  = desiredVspeed - controlVario;
     float minControlThrottle = isMission ? (float)MIN_MISSION_THROTTLE_US : (float)MIN_ALT_HOLD_THROTTLE_US;
+    float downAuthorityUs = isMission ? (float)THR_DOWN_OFFSET_US : (float)THR_DOWN_OFFSET_ALT_HOLD_US;
     float thrMin = max(minControlThrottle,
-                       (float)HOVER_THROTTLE - THR_DOWN_OFFSET_US);
+                       (float)HOVER_THROTTLE - downAuthorityUs);
     float thrMax = (float)HOVER_THROTTLE + THR_UP_OFFSET_US;
+    float effectiveKd = vspeedError < 0.0f ? HOLD_KD * HOLD_KD_DOWN_SCALE : HOLD_KD;
 
     float iLimit = (HOLD_KI > 0.001f) ? (VSPEED_I_MAX_US / HOLD_KI) : 0.0f;
     float candidateIntegral = constrain(vspeedIntegral + vspeedError * dt, -iLimit, iLimit);
     float candidateThrottle = (float)HOVER_THROTTLE
-                            + HOLD_KD * vspeedError
+                            + effectiveKd * vspeedError
                             + HOLD_KI * candidateIntegral;
     bool satHigh = candidateThrottle > thrMax && vspeedError > 0.0f;
     bool satLow  = candidateThrottle < thrMin && vspeedError < 0.0f;
@@ -116,11 +124,14 @@ uint16_t holdCascaded(float altitude, bool isMission) {
         vspeedIntegral = candidateIntegral;
     }
 
-    float finalThrottle = (float)HOVER_THROTTLE + HOLD_KD * vspeedError + HOLD_KI * vspeedIntegral;
+    float finalThrottle = (float)HOVER_THROTTLE + effectiveKd * vspeedError + HOLD_KI * vspeedIntegral;
     float clampedThrottle = constrain(finalThrottle, thrMin, thrMax);
     int8_t sat = finalThrottle > thrMax ? 1 : (finalThrottle < thrMin ? -1 : 0);
-    if (captureNeedsHelp && filteredVario < ALT_HOLD_CAPTURE_FLOOR_MAX_V_MPS) {
-        float captureOffsetUs = filteredVario < ALT_HOLD_RECOVERY_DESCENT_MPS
+    bool bfRecoveryDescent = abs(lastFcVario) <= VARIO_MAX_PLAUSIBLE_CMS
+        && lastFcVario <= ALT_HOLD_RECOVERY_BF_DESCENT_CMS;
+    bool recoveryDescent = controlVario < ALT_HOLD_RECOVERY_DESCENT_MPS || bfRecoveryDescent;
+    if (captureNeedsHelp && (controlVario < ALT_HOLD_CAPTURE_FLOOR_MAX_V_MPS || recoveryDescent)) {
+        float captureOffsetUs = recoveryDescent
             ? (float)ALT_HOLD_RECOVERY_MIN_OFFSET_US
             : (float)ALT_HOLD_CAPTURE_MIN_OFFSET_US;
         float captureMinThrottle = min(thrMax, (float)HOVER_THROTTLE + captureOffsetUs);
@@ -129,11 +140,19 @@ uint16_t holdCascaded(float altitude, bool isMission) {
             sat = 1;
         }
     }
+    if (lastClampedThrottle > 0) {
+        float minSlewThrottle = max(thrMin, (float)lastClampedThrottle - (float)THROTTLE_SLEW_DOWN_US);
+        float maxSlewThrottle = min(thrMax, (float)lastClampedThrottle + (float)THROTTLE_SLEW_UP_US);
+        float beforeSlewThrottle = clampedThrottle;
+        clampedThrottle = constrain(clampedThrottle, minSlewThrottle, maxSlewThrottle);
+        if (clampedThrottle > beforeSlewThrottle) sat = -1;
+        else if (clampedThrottle < beforeSlewThrottle) sat = 1;
+    }
 
     lastAltError = altError;
     lastDesiredVspeed = desiredVspeed;
     lastVspeedError = vspeedError;
-    lastControlPUs = HOLD_KD * vspeedError;
+    lastControlPUs = effectiveKd * vspeedError;
     lastControlIUs = HOLD_KI * vspeedIntegral;
     lastRawThrottle = finalThrottle;
     lastThrMin = thrMin;
@@ -147,7 +166,7 @@ uint16_t holdCascaded(float altitude, bool isMission) {
         lastLogMs = now;
         Serial.printf("[CASCADE] setpt=%.2f aErr=%.2f desV=%.2f fV=%.2f vErr=%.2f "
                       "P=%.0f I=%.0f raw=%.0f out=%.0f min=%.0f max=%.0f sat=%s\n",
-            internalSetpoint, altError, desiredVspeed, filteredVario, vspeedError,
+            internalSetpoint, altError, desiredVspeed, controlVario, vspeedError,
             lastControlPUs, lastControlIUs, finalThrottle, clampedThrottle, thrMin, thrMax,
             sat > 0 ? "HI" : (sat < 0 ? "LO" : "ok"));
     }
