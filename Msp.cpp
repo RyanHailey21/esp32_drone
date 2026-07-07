@@ -136,6 +136,7 @@ static int16_t updateDerivedVario(float measurementAltM, bool tofPrimary, uint32
 
 static void handleMspFrame(uint8_t cmd, const uint8_t* payload, uint8_t len) {
     uint32_t nowMs = millis();
+
     switch (cmd) {
         case MSP_ALTITUDE:
             if (len == 6) {
@@ -145,9 +146,11 @@ static void handleMspFrame(uint8_t cmd, const uint8_t* payload, uint8_t len) {
                 alt_cm |= (uint32_t)payload[2] << 16;
                 alt_cm |= (uint32_t)payload[3] << 24;
                 memcpy(lastMspAltitudePayload, payload, sizeof(lastMspAltitudePayload));
+
                 int16_t vario = 0;
                 vario  = (uint16_t)payload[4];
                 vario |= (uint16_t)payload[5] << 8;
+
                 float baroAltM = alt_cm / 100.0f;
                 lastCachedAltitudeM = updateAltitudeFusion(baroAltM, vario);
                 lastAltitudeFrameMs = nowMs;
@@ -163,6 +166,7 @@ static void handleMspFrame(uint8_t cmd, const uint8_t* payload, uint8_t len) {
 #endif
             }
             break;
+
         case MSP_RAW_IMU:
             if (len >= 18) {
                 lastFcAccX = readS16(payload + 0);
@@ -178,6 +182,7 @@ static void handleMspFrame(uint8_t cmd, const uint8_t* payload, uint8_t len) {
                 lastFcDiagMs = nowMs;
             }
             break;
+
         case MSP_ATTITUDE:
             if (len >= 6) {
                 lastFcRollDeciDeg = readS16(payload + 0);
@@ -188,6 +193,7 @@ static void handleMspFrame(uint8_t cmd, const uint8_t* payload, uint8_t len) {
                 lastFcDiagMs = nowMs;
             }
             break;
+
         case MSP_STATUS:
             if (len >= 6) {
                 lastFcCycleTimeUs = readU16(payload + 0);
@@ -197,6 +203,7 @@ static void handleMspFrame(uint8_t cmd, const uint8_t* payload, uint8_t len) {
                 lastFcDiagMs = nowMs;
             }
             break;
+
         case MSP_ANALOG:
             if (len >= 7) {
                 lastFcVbatDeciV = payload[0];
@@ -205,6 +212,7 @@ static void handleMspFrame(uint8_t cmd, const uint8_t* payload, uint8_t len) {
                 lastFcDiagMs = nowMs;
             }
             break;
+
         case MSP_RC:
             if (len >= 12) {
                 lastFcRcThrottle = readU16(payload + CH_THROTTLE * 2);
@@ -400,7 +408,7 @@ static float updateAltitudeFusion(float baroAltM, int16_t fcVarioCms) {
     lastVario = constrainVario(altitudeKf.velocity * 100.0f);
     lastFcVario = fcVarioCms;
     lastDerivedVario = derivedVarioCms;
-    lastVarioSource = 2;  // covariance-weighted KF velocity estimate.
+    lastVarioSource = 2;
     lastVarioMs = nowMs;
 
     return fusedAltM;
@@ -462,12 +470,12 @@ float getAltitude() {
         case HOLDING:
         case ALT_HOLD:
             benchAlt = launchAlt + (state == ALT_HOLD ? ALT_HOLD_TARGET_M : TARGET_ALT_M);
-            lastVario   = 0;
+            lastVario = 0;
             lastFcVario = 0;
             lastDerivedVario = 0;
             lastVarioSource = 0;
             memset(lastMspAltitudePayload, 0, sizeof(lastMspAltitudePayload));
-            lastVarioMs = millis();   // keep vario "fresh" so cascade filter stays active
+            lastVarioMs = millis();
             break;
 
         case PUNCHING:
@@ -476,6 +484,9 @@ float getAltitude() {
 
         case CUT:
         case DONE:
+            break;
+
+        case LANDING:
             break;
     }
 
