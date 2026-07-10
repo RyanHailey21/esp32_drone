@@ -20,6 +20,21 @@ public:
     }
 };
 
+class CBu16Range : public NimBLECharacteristicCallbacks {
+    volatile uint16_t* t; const char* n; uint16_t low; uint16_t high;
+public:
+    CBu16Range(volatile uint16_t* t, const char* n, uint16_t low, uint16_t high)
+        : t(t), n(n), low(low), high(high) {}
+    void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
+        if (c->getValue().length() < 2) return;
+        uint16_t requested = *(uint16_t*)c->getValue().data();
+        *t = constrain(requested, low, high);
+        uint16_t accepted = *t;
+        c->setValue((uint8_t*)&accepted, 2);
+        Serial.printf("[BLE] %s = %u\n", n, *t);
+    }
+};
+
 class CBu32 : public NimBLECharacteristicCallbacks {
     volatile uint32_t* t; const char* n;
 public:
@@ -221,6 +236,10 @@ void setupBLE() {
     makeChar(svc, SPRINT_THROT_UUID,
         new CBu16(&SPRINT_THROTTLE, "SPRINT_THROTTLE"),
         (uint8_t*)&SPRINT_THROTTLE, 2);
+
+    makeChar(svc, SPRINT_YAW_UUID,
+        new CBu16Range(&SPRINT_YAW, "SPRINT_YAW", SPRINT_YAW_MIN_US, SPRINT_YAW_MAX_US),
+        (uint8_t*)&SPRINT_YAW, 2);
 
     makeFloat(svc, SPRINT_CUTOFF_UUID, &SPRINT_CUTOFF_M, "SPRINT_CUTOFF_M", 100.0f);
     makeFloat(svc, TARGET_ALT_UUID,    &TARGET_ALT_M,    "TARGET_ALT_M",    10.0f);

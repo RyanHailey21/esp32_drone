@@ -352,7 +352,7 @@ static float updateAltitudeFusion(float baroAltM, int16_t fcVarioCms) {
     altitudeKf.tof_max_rate_mps = TOF_FUSION_MAX_STEP_MPS;
 
     if (!altitudeKfInitialized) {
-        float initialV = abs(fcVarioCms) <= VARIO_MAX_PLAUSIBLE_CMS ? fcVarioCms / 100.0f : 0.0f;
+        float initialV = abs(fcVarioCms) <= VARIO_MEAS_MAX_CMS ? fcVarioCms / 100.0f : 0.0f;
         altitudeKf.reset(correctedBaroM, initialV);
         altitudeKfInitialized = true;
         lastKfMs = nowMs;
@@ -385,9 +385,9 @@ static float updateAltitudeFusion(float baroAltM, int16_t fcVarioCms) {
         }
     }
 
-    bool fcPlausible = abs(fcVarioCms) <= VARIO_MAX_PLAUSIBLE_CMS;
+    bool fcPlausible = abs(fcVarioCms) <= VARIO_MEAS_MAX_CMS;
     altitudeKf.updateBfVario(fcVarioCms / 100.0f, fcPlausible);
-    bool derivedPlausible = abs(derivedVarioCms) <= VARIO_MAX_PLAUSIBLE_CMS;
+    bool derivedPlausible = abs(derivedVarioCms) <= VARIO_MEAS_MAX_CMS;
     altitudeKf.updateDerivedVario(derivedVarioCms / 100.0f, derivedPlausible);
 
     float fusedAltM = altitudeKf.altitude;

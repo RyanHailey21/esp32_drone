@@ -80,6 +80,7 @@ volatile bool bleRequestedLand = false;
 // ── Tunable Parameters (BLE-writable) ────────────────────────
 volatile uint16_t HOVER_THROTTLE  = (uint16_t)(AltitudeParameters::HOVER_THROTTLE + 0.5f);
 volatile uint16_t SPRINT_THROTTLE = 2000;
+volatile uint16_t SPRINT_YAW      = DEFAULT_SPRINT_YAW_US;
 volatile float    SPRINT_CUTOFF_M = 12.0f;
 volatile float    TARGET_ALT_M    = 18.3f;
 volatile float    ALT_HOLD_TARGET_M = 1.5f;

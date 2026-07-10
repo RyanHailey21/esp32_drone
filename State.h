@@ -100,6 +100,7 @@ extern volatile bool bleRequestedLand;
 // ── Tunable Parameters (BLE-writable) ────────────────────────
 extern volatile uint16_t HOVER_THROTTLE;
 extern volatile uint16_t SPRINT_THROTTLE;
+extern volatile uint16_t SPRINT_YAW;
 extern volatile float    SPRINT_CUTOFF_M;
 extern volatile float    TARGET_ALT_M;
 extern volatile float    ALT_HOLD_TARGET_M;

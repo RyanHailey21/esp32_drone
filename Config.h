@@ -55,8 +55,10 @@
 
 // ── RC Channel Indices ────────────────────────────────────────
 #define CH_THROTTLE  2
+#define CH_YAW       3
 #define CH_ARM       4
 #define CH_ANGLE     5
+#define RC_NEUTRAL_US 1500
 
 // ── BLE UUIDs ────────────────────────────────────────────────
 #define SERVICE_UUID        "ab0828b1-198e-4351-b779-901fa0e0371e"
@@ -81,9 +83,13 @@
 #define MAX_DESCENT_TEST_UUID  "ab0828c6-198e-4351-b779-901fa0e0371e"
 #define BF_GROUND_EFFECT_UUID  "ab0828c7-198e-4351-b779-901fa0e0371e"
 #define MISSION_TYPE_UUID      "ab0828c8-198e-4351-b779-901fa0e0371e"
+#define SPRINT_YAW_UUID        "ab0828c9-198e-4351-b779-901fa0e0371e"
 
 // Mission hardware mode default. 0=powered landing, 1=autorotor pre-spin + motor cut.
 #define DEFAULT_MISSION_TYPE         0
+#define DEFAULT_SPRINT_YAW_US        1700  // right/CW aircraft yaw viewed from above
+#define SPRINT_YAW_MIN_US            RC_NEUTRAL_US
+#define SPRINT_YAW_MAX_US            1900
 
 // BLE flight-log dump
 #define FLIGHT_LOG_BYTES       60000
@@ -177,7 +183,9 @@
 // Inner loop: vario filtering
 #define VARIO_TAU_S             0.05f   // seconds, light low-pass; avoid lag on low-alt ToF vario
 #define VARIO_STALE_MS          500     // ms before vario reading is considered stale
-#define VARIO_MAX_PLAUSIBLE_CMS 400     // cm/s — reject ToF/FC spikes above ~4 m/s
+#define VARIO_MEAS_MAX_CMS       1000    // raw velocity input gate; sprint can legitimately exceed 4 m/s
+#define VARIO_CONTROL_MAX_CMS    1000    // fused control-state envelope before declaring sensor failure
+#define CASCADE_INVALID_GRACE_MS 300     // tolerate brief stale/out-of-envelope estimates at handoff
 #define DEFAULT_BF_VARIO_GROUND_EFFECT_M 1.20f // below this, inflate BF vario covariance
 #define VSPEED_I_MAX_US         150.0f  // max integral throttle contribution in us
 

@@ -17,7 +17,7 @@ NUMERIC_FIELDS = {
     "ms", "state", "alt", "lowRel", "tof", "tofW", "baro", "setpt", "fV",
     "cbaro", "src", "rawV", "usedV", "bfV", "derV", "vsrc", "desV", "aErr", "vErr", "P", "I", "rawThr",
     "thr", "minThr", "maxThr", "sat", "accX", "accY", "accZ", "gyroX",
-    "gyroY", "gyroZ", "roll", "pitch", "yaw", "cycle", "sensors", "rcThr",
+    "gyroY", "gyroZ", "roll", "pitch", "yaw", "cycle", "sensors", "rcThr", "cmdYaw",
     "rcArm", "rcAngle", "vbat", "amps", "diag", "tofRaw", "tofReadOk",
     "tofReject", "tofDt", "tofStatus", "tofI2c",
 }
@@ -526,7 +526,7 @@ def summarize(path: Path, jump_threshold_m: float):
         print(f"ToF invalid runs: {len(invalid_runs)}, longest={longest}ms, {preview}{suffix}")
 
     for key in ("alt", "lowRel", "tof", "baro", "cbaro", "setpt", "fV", "usedV", "bfV", "derV", "vsrc", "desV", "thr",
-                "accZ", "roll", "pitch", "cycle", "rcThr", "vbat"):
+                "accZ", "roll", "pitch", "cycle", "rcThr", "cmdYaw", "vbat"):
         low, high = span(rows, key)
         print(f"{key}: min={fmt(low)} max={fmt(high)}")
 

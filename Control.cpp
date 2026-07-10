@@ -14,12 +14,14 @@
 //  at ALT_RAMP_RATE_MPS to avoid stepping the setpoint.
 // ============================================================
 
+static uint32_t cascadeInvalidSinceMs = 0;
+
 void resetCascadeController(float currentAlt) {
     internalSetpoint = currentAlt;
     filteredVario    = 0.0f;
     vspeedIntegral   = 0.0f;
     vspeedLastMs     = millis();
-    lastVarioMs      = millis();
+    cascadeInvalidSinceMs = 0;
     lastRawThrottle = HOVER_THROTTLE;
     lastClampedThrottle = HOVER_THROTTLE;
 }
@@ -28,6 +30,7 @@ void primeCascadeController(float currentAlt) {
     internalSetpoint = currentAlt;
     vspeedIntegral   = 0.0f;
     vspeedLastMs     = millis();
+    cascadeInvalidSinceMs = 0;
     lastRawThrottle = HOVER_THROTTLE;
     lastClampedThrottle = HOVER_THROTTLE;
 }
@@ -44,32 +47,49 @@ uint16_t holdCascaded(float altitude, bool isMission) {
     float controlVario = lastVario / 100.0f;
     bool varioValid = (now - lastVarioMs) <= VARIO_STALE_MS
                       && isfinite(controlVario)
-                      && fabsf(controlVario) <= (VARIO_MAX_PLAUSIBLE_CMS / 100.0f);
+                      && fabsf(controlVario) <= (VARIO_CONTROL_MAX_CMS / 100.0f);
     if (!varioValid || !isfinite(altitude)) {
+        if (cascadeInvalidSinceMs == 0) cascadeInvalidSinceMs = now;
+        bool invalidPersisted = now - cascadeInvalidSinceMs >= CASCADE_INVALID_GRACE_MS;
+        uint16_t fallbackThrottle = lastClampedThrottle >= 1000 && lastClampedThrottle <= 2000
+            ? lastClampedThrottle
+            : HOVER_THROTTLE;
         vspeedIntegral = 0.0f;
         lastAltError = 0.0f;
         lastDesiredVspeed = 0.0f;
         lastVspeedError = 0.0f;
         lastControlPUs = 0.0f;
         lastControlIUs = 0.0f;
-        lastRawThrottle = HOVER_THROTTLE;
-        lastThrMin = HOVER_THROTTLE;
-        lastThrMax = HOVER_THROTTLE;
-        lastClampedThrottle = HOVER_THROTTLE;
+        lastRawThrottle = fallbackThrottle;
+        lastThrMin = fallbackThrottle;
+        lastThrMax = fallbackThrottle;
+        lastClampedThrottle = fallbackThrottle;
         lastThrottleSat = 0;
 #if SERIAL_FLIGHT_DEBUG
-        Serial.printf("[CASCADE] invalid sensor data: alt=%.2f controlV=%.2f age=%ums -> LANDING\n",
-            altitude, controlVario, now - lastVarioMs);
+        Serial.printf("[CASCADE] invalid sensor data: alt=%.2f controlV=%.2f age=%ums invalidFor=%ums\n",
+            altitude, controlVario, now - lastVarioMs, now - cascadeInvalidSinceMs);
 #endif
+        if (!invalidPersisted) return fallbackThrottle;
+
+        if (isMission && MISSION_TYPE == 1) {
+            ledcWrite(MOTOR_PWM_PIN, 0);
+            state = CUT;
+            return 1000;
+        }
         startLanding(altitude);
         return HOVER_THROTTLE;
     }
+    cascadeInvalidSinceMs = 0;
 
     // 1. Reference shaping: ramp internal setpoint toward the active target.
     float target = isMission
         ? TARGET_ALT_M
         : constrain((float)ALT_HOLD_TARGET_M, ALT_HOLD_TARGET_MIN_M, ALT_HOLD_TARGET_MAX_M);
-    if (internalSetpoint < target) {
+    if (isMission) {
+        // Sprint already provides a shaped launch. Hold must capture the real
+        // mission target immediately; the low-rate ramp is only for test mode.
+        internalSetpoint = target;
+    } else if (internalSetpoint < target) {
         internalSetpoint = min(internalSetpoint + ALT_RAMP_RATE_MPS * dt, target);
     } else if (internalSetpoint > target) {
         internalSetpoint = max(internalSetpoint - ALT_RAMP_RATE_MPS * dt, target);
@@ -127,7 +147,7 @@ uint16_t holdCascaded(float altitude, bool isMission) {
     float finalThrottle = (float)HOVER_THROTTLE + effectiveKd * vspeedError + HOLD_KI * vspeedIntegral;
     float clampedThrottle = constrain(finalThrottle, thrMin, thrMax);
     int8_t sat = finalThrottle > thrMax ? 1 : (finalThrottle < thrMin ? -1 : 0);
-    bool bfRecoveryDescent = abs(lastFcVario) <= VARIO_MAX_PLAUSIBLE_CMS
+    bool bfRecoveryDescent = abs(lastFcVario) <= VARIO_MEAS_MAX_CMS
         && lastFcVario <= ALT_HOLD_RECOVERY_BF_DESCENT_CMS;
     bool recoveryDescent = controlVario < ALT_HOLD_RECOVERY_DESCENT_MPS || bfRecoveryDescent;
     if (captureNeedsHelp && (controlVario < ALT_HOLD_CAPTURE_FLOOR_MAX_V_MPS || recoveryDescent)) {
@@ -217,6 +237,7 @@ void disarmToIdle(const char* reason) {
     channels[CH_ARM]      = 1000;
     channels[CH_ANGLE]    = 1000;
     channels[CH_THROTTLE] = 1000;
+    channels[CH_YAW]      = RC_NEUTRAL_US;
     launchAlt = 0;
     state     = IDLE;
     Serial.println(reason);

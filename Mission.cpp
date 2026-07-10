@@ -58,15 +58,19 @@ static uint16_t takeoffGuardThrottle(uint32_t timeInAltHoldMs, bool tofReady) {
 
 static void printFlightLogHeader(const char* label, float targetM) {
     flightLogReset();
-    flightLogAppendf("[RUN] %s hover=%u target=%.2f kp=%.2f ki=%.2f kd=%.2f tofFull=%.2f tofZero=%.2f\n",
-        label, HOVER_THROTTLE, targetM, (float)HOLD_KP, (float)HOLD_KI,
+    flightLogAppendf("[RUN] %s type=%u hover=%u sprintThr=%u sprintYaw=%u cutoff=%.2f target=%.2f punchStart=%lu punchThr=%u kp=%.2f ki=%.2f kd=%.2f tofFull=%.2f tofZero=%.2f\n",
+        label, MISSION_TYPE, HOVER_THROTTLE, SPRINT_THROTTLE, SPRINT_YAW,
+        (float)SPRINT_CUTOFF_M, targetM, (unsigned long)PUNCH_START_MS, PUNCH_THROTTLE,
+        (float)HOLD_KP, (float)HOLD_KI,
         (float)HOLD_KD, (float)TOF_BLEND_FULL_M, (float)TOF_BLEND_ZERO_M);
-    flightLogAppend("[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,usedV,bfV,derV,vsrc,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat,accX,accY,accZ,gyroX,gyroY,gyroZ,roll,pitch,yaw,cycle,sensors,rcThr,rcArm,rcAngle,vbat,amps,diag,tofRaw,tofReadOk,tofReject,tofDt,tofStatus,tofI2c\n");
+    flightLogAppend("[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,usedV,bfV,derV,vsrc,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat,accX,accY,accZ,gyroX,gyroY,gyroZ,roll,pitch,yaw,cycle,sensors,rcThr,cmdYaw,rcArm,rcAngle,vbat,amps,diag,tofRaw,tofReadOk,tofReject,tofDt,tofStatus,tofI2c\n");
 #if SERIAL_FLIGHT_DEBUG
-    Serial.printf("[RUN] %s hover=%u target=%.2f kp=%.2f ki=%.2f kd=%.2f tofFull=%.2f tofZero=%.2f\n",
-        label, HOVER_THROTTLE, targetM, (float)HOLD_KP, (float)HOLD_KI,
+    Serial.printf("[RUN] %s type=%u hover=%u sprintThr=%u sprintYaw=%u cutoff=%.2f target=%.2f punchStart=%lu punchThr=%u kp=%.2f ki=%.2f kd=%.2f tofFull=%.2f tofZero=%.2f\n",
+        label, MISSION_TYPE, HOVER_THROTTLE, SPRINT_THROTTLE, SPRINT_YAW,
+        (float)SPRINT_CUTOFF_M, targetM, (unsigned long)PUNCH_START_MS, PUNCH_THROTTLE,
+        (float)HOLD_KP, (float)HOLD_KI,
         (float)HOLD_KD, (float)TOF_BLEND_FULL_M, (float)TOF_BLEND_ZERO_M);
-    Serial.println("[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,usedV,bfV,derV,vsrc,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat,accX,accY,accZ,gyroX,gyroY,gyroZ,roll,pitch,yaw,cycle,sensors,rcThr,rcArm,rcAngle,vbat,amps,diag,tofRaw,tofReadOk,tofReject,tofDt,tofStatus,tofI2c");
+    Serial.println("[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,usedV,bfV,derV,vsrc,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat,accX,accY,accZ,gyroX,gyroY,gyroZ,roll,pitch,yaw,cycle,sensors,rcThr,cmdYaw,rcArm,rcAngle,vbat,amps,diag,tofRaw,tofReadOk,tofReject,tofDt,tofStatus,tofI2c");
 #endif
 }
 
@@ -88,7 +92,7 @@ static void logFlightSample(uint32_t elapsedMs, const char* phase, float altitud
     static uint32_t lastLogMs = 0;
     if (elapsedMs < lastLogMs || elapsedMs - lastLogMs >= 50) {
         lastLogMs = elapsedMs;
-        flightLogAppendf("[FLT] %lu,%d,%s,%.3f,%.3f,%.3f,%u,%.3f,%.3f,%u,%.3f,%.3f,%d,%d,%d,%u,%.3f,%.3f,%.3f,%.0f,%.0f,%.0f,%u,%.0f,%.0f,%d,%d,%d,%d,%d,%d,%d,%.1f,%.1f,%d,%u,%u,%u,%u,%u,%.1f,%.2f,%u,%.3f,%u,%u,%u,%u,%u\n",
+        flightLogAppendf("[FLT] %lu,%d,%s,%.3f,%.3f,%.3f,%u,%.3f,%.3f,%u,%.3f,%.3f,%d,%d,%d,%u,%.3f,%.3f,%.3f,%.0f,%.0f,%.0f,%u,%.0f,%.0f,%d,%d,%d,%d,%d,%d,%d,%.1f,%.1f,%d,%u,%u,%u,%u,%u,%u,%.1f,%.2f,%u,%.3f,%u,%u,%u,%u,%u\n",
             (unsigned long)elapsedMs,
             (int)state,
             phase,
@@ -127,6 +131,7 @@ static void logFlightSample(uint32_t elapsedMs, const char* phase, float altitud
             lastFcCycleTimeUs,
             lastFcSensorsMask,
             lastFcRcThrottle,
+            channels[CH_YAW],
             lastFcRcArm,
             lastFcRcAngle,
             lastFcVbatDeciV / 10.0f,
@@ -240,12 +245,16 @@ void runMissionLoop() {
     currentRelAlt        = altitude;
     uint32_t missionTime = millis() - launchTime;
 
+    // Yaw is opt-in only during the autorotor sprint. Reset it every loop so
+    // every transition, abort, test mode, and landing immediately returns to neutral.
+    channels[CH_YAW] = RC_NEUTRAL_US;
+
     pushTelemetry(rawAlt, altitude);
 
     // Keep vario filter current every loop so LANDING and other states see fresh data.
     // Use a time-based filter so smoothing does not change with loop-rate jitter.
     bool varioFresh = (millis() - lastVarioMs) < VARIO_STALE_MS
-                      && abs(lastVario) <= VARIO_MAX_PLAUSIBLE_CMS;
+                      && abs(lastVario) <= VARIO_CONTROL_MAX_CMS;
     if (varioFresh) {
         static uint32_t varioFilterLastMs = 0;
         uint32_t nowMs = millis();
@@ -355,6 +364,11 @@ void runMissionLoop() {
         case SPRINTING:
             channels[CH_ANGLE]    = angleModeChannelValue();
             channels[CH_THROTTLE] = SPRINT_THROTTLE;
+            if (MISSION_TYPE == 1) {
+                channels[CH_YAW] = constrain((uint16_t)SPRINT_YAW,
+                                             (uint16_t)SPRINT_YAW_MIN_US,
+                                             (uint16_t)SPRINT_YAW_MAX_US);
+            }
             markOpenLoopControl(channels[CH_THROTTLE]);
             sendRC();
             logFlightSample(missionTime, "sprint", altitude, altitude, channels[CH_THROTTLE]);
@@ -443,6 +457,7 @@ void runMissionLoop() {
 
         // ── CUT ──────────────────────────────────────────────
         case CUT:
+            ledcWrite(MOTOR_PWM_PIN, 0);
             channels[CH_ARM]      = 1000;
             channels[CH_THROTTLE] = 1000;
             sendRC();
@@ -607,7 +622,7 @@ void runMissionLoop() {
             }
 
             bool landingVarioFresh = (millis() - lastVarioMs) < VARIO_STALE_MS
-                                      && abs(lastVario) <= VARIO_MAX_PLAUSIBLE_CMS;
+                                      && abs(lastVario) <= VARIO_CONTROL_MAX_CMS;
             float landingVario = landingVarioFresh ? lastVario / 100.0f : filteredVario;
             float predictedLandingAlt = max(0.0f, landingAlt + landingVario * LANDING_LOOKAHEAD_S);
             float targetDescentMps = DESCENT_RATE_MPS;
