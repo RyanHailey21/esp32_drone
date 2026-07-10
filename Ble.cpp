@@ -148,9 +148,29 @@ public:
     }
 };
 
+class CBmissionType : public NimBLECharacteristicCallbacks {
+public:
+    void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
+        if (c->getValue().length() < 1) return;
+
+        uint8_t requested = c->getValue()[0] ? 1 : 0;
+        if (state != IDLE && state != DONE) {
+            Serial.println("[BLE] Ignored mission type change: not idle");
+            c->setValue((uint8_t*)&MISSION_TYPE, 1);
+            return;
+        }
+
+        MISSION_TYPE = requested;
+        c->setValue((uint8_t*)&MISSION_TYPE, 1);
+        Serial.printf("[BLE] MISSION_TYPE = %s\n",
+            MISSION_TYPE ? "AUTOROTOR_CUT" : "POWERED_LAND");
+    }
+};
+
 class CBflightLogOffset : public NimBLECharacteristicCallbacks {
 public:
     void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
+        if (state != IDLE && state != DONE) return;
         if (c->getValue().length() < 2) return;
         uint16_t offset = *(uint16_t*)c->getValue().data();
         flightLogSetReadOffset(offset);
@@ -160,6 +180,11 @@ public:
 class CBflightLogChunk : public NimBLECharacteristicCallbacks {
 public:
     void onRead(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
+        if (state != IDLE && state != DONE) {
+            uint8_t empty = 0;
+            c->setValue(&empty, 0);
+            return;
+        }
         uint8_t chunk[FLIGHT_LOG_CHUNK_BYTES];
         uint16_t n = flightLogReadChunk(chunk, sizeof(chunk));
         c->setValue(chunk, n);
@@ -228,6 +253,10 @@ void setupBLE() {
     makeChar(svc, ANGLE_MODE_UUID,
         new CBangleMode(),
         (uint8_t*)&ANGLE_MODE_ENABLED, 1);
+
+    makeChar(svc, MISSION_TYPE_UUID,
+        new CBmissionType(),
+        (uint8_t*)&MISSION_TYPE, 1);
 
     uint16_t logOffsetInit = 0;
     makeChar(svc, FLIGHT_LOG_OFFSET_UUID,

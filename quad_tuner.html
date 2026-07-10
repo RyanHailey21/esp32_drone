@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Quad Tuner</title>
+<title>Quad Mission Controller</title>
 <link rel="stylesheet" href="quad_tuner.css">
 </head>
 <body>
@@ -12,27 +12,50 @@
 
   <header>
     <div class="title">
-      <h1>QUAD // TUNER</h1>
+      <h1>Quad Mission Controller</h1>
       <div class="sub">ESP32-S3 · MSP · BLE</div>
     </div>
-    <div class="status-block">
-      <span id="status-text">disconnected</span>
-      <div class="status-ring" id="status-dot">
-        <div class="dot"></div>
-        <div class="ring"></div>
+    <div class="header-actions">
+      <button class="judge-toggle" id="judge-view-btn" disabled>Judge View</button>
+      <div class="status-block">
+        <span id="status-text">disconnected</span>
+        <div class="status-ring" id="status-dot">
+          <div class="dot"></div>
+          <div class="ring"></div>
+        </div>
       </div>
     </div>
   </header>
 
-  <!-- ── ACTIVE STATE STRIP ──────────────────────────── -->
-  <div class="state-strip" id="state-strip">
-    <div class="strip-state" id="strip-state">ARMING</div>
-    <div class="strip-telem">
-      <span id="strip-alt">ALT —</span>
-      <span id="strip-throt">THROT —</span>
+  <!-- ── MISSION TIMELINE ─────────────────────────────
+       Sticky readout while any state is active: phase
+       progression, elapsed time, throttle, kill switch. -->
+  <div class="mission-timeline" id="mission-timeline">
+    <div class="mt-phases" id="mt-phases">
+      <span class="mt-phase" data-phase="arm">ARM</span>
+      <span class="mt-phase" data-phase="sprint">SPRINT</span>
+      <span class="mt-phase" data-phase="hold">HOLD</span>
+      <span class="mt-phase" data-phase="punch">PUNCH</span>
+      <span class="mt-phase" data-phase="land">LAND</span>
     </div>
-    <button class="strip-land" id="strip-land">LAND</button>
-    <button class="strip-disarm" id="strip-disarm">KILL</button>
+    <div class="mt-readouts">
+      <div class="mt-readout">
+        <div class="mt-lbl">State</div>
+        <div class="mt-val" id="mt-state">—</div>
+      </div>
+      <div class="mt-readout">
+        <div class="mt-lbl">Time</div>
+        <div class="mt-val" id="mt-time">0:00.0</div>
+      </div>
+      <div class="mt-readout">
+        <div class="mt-lbl">Throttle</div>
+        <div class="mt-val" id="mt-throttle">—</div>
+      </div>
+    </div>
+    <div class="mt-actions">
+      <button class="mt-land" id="mt-land">Land</button>
+      <button class="mt-kill" id="mt-kill">Kill</button>
+    </div>
   </div>
 
   <!-- ── TABS ──────────────────────────────────────────── -->
@@ -60,7 +83,7 @@
       <div class="cal-bar-row">
         <div class="cal-bar-lbl">THROT</div>
         <div class="cal-bar-track">
-          <div class="cal-bar-fill" id="cal-throt-fill" style="background:var(--amber)"></div>
+          <div class="cal-bar-fill" id="cal-throt-fill" style="background:var(--caution)"></div>
         </div>
         <div class="cal-bar-val" id="cal-throt-val">1150</div>
       </div>
@@ -242,11 +265,11 @@
       <div class="dash-sec" id="d-hover" style="display:none">
         <div class="dash-sec-hd">HOVER THROTTLE</div>
         <div class="dash-hover-readout">
-          <span class="dash-hover-val" id="val-hover">1570</span>
+          <span class="dash-hover-val" id="val-hover">1230</span>
           <span class="dash-hover-unit">µs</span>
         </div>
         <input type="range" class="hover-t dash-hover-slider" id="slider-hover"
-               min="1000" max="1600" value="1570" step="5">
+               min="1000" max="1600" value="1230" step="5">
         <div class="dash-hover-bounds">
           <span>1000 — off</span><span>1600</span>
         </div>
@@ -276,6 +299,7 @@
     <!-- ── MISSION CONTROLS ──────────────────────────── -->
     <div class="controls" id="mission-controls">
       <button class="cmd-btn wide" id="btn-angle-mode">Angle Mode: Off</button>
+      <button class="cmd-btn wide" id="btn-mission-type">Mission: Powered Land</button>
       <button class="cmd-btn" id="btn-hover-test">Hover Test</button>
       <button class="cmd-btn" id="btn-auto-hover">Auto Hover Cal</button>
       <button class="cmd-btn" id="btn-alt-hold">Alt Hold</button>
@@ -303,7 +327,7 @@
     <!-- ── SPRINT PHASE ──────────────────────────────── -->
     <div class="sec">
       <span class="sec-label">Sprint Phase</span>
-      <span class="badge b-sprint">full power to 60ft</span>
+      <span class="badge b-sprint">controlled climb to 60ft</span>
       <span class="sec-line"></span>
     </div>
 
@@ -311,24 +335,24 @@
       <div class="param-head">
         <span class="param-label">Sprint Throttle</span>
         <div class="param-readout">
-          <span class="param-value" id="val-sprint">1850</span><span class="param-unit">µs</span>
+          <span class="param-value" id="val-sprint">2000</span><span class="param-unit">µs</span>
         </div>
       </div>
-      <input type="range" class="sprint" id="slider-sprint" min="1500" max="2000" value="1850" step="10">
-      <div class="param-bounds"><span>1500</span><span>2000</span></div>
-      <div class="param-desc">Full climb throttle. Higher = faster to 60ft = more punch time.</div>
+      <input type="range" class="sprint" id="slider-sprint" min="1300" max="2000" value="2000" step="10">
+      <div class="param-bounds"><span>1300</span><span>2000</span></div>
+      <div class="param-desc">Open-loop sprint throttle before cascade handoff. Current profile uses max throttle with an early cutoff.</div>
     </div>
 
     <div class="param" id="param-cutoff">
       <div class="param-head">
         <span class="param-label">Sprint Cutoff</span>
         <div class="param-readout">
-          <span class="param-value" id="val-cutoff">17.0</span><span class="param-unit">m</span>
+          <span class="param-value" id="val-cutoff">12.0</span><span class="param-unit">m</span>
         </div>
       </div>
-      <input type="range" class="sprint" id="slider-cutoff" min="1400" max="1820" value="1700" step="10">
-      <div class="param-bounds"><span>14m (~46ft)</span><span>18.2m (~60ft)</span></div>
-      <div class="param-desc">Altitude to stop sprinting. Keep below 60ft to absorb baro lag and avoid overshoot.</div>
+      <input type="range" class="sprint" id="slider-cutoff" min="500" max="1820" value="1200" step="10">
+      <div class="param-bounds"><span>5m (~16ft)</span><span>18.2m (~60ft)</span></div>
+      <div class="param-desc">Altitude where max-throttle sprint hands off to the cascaded hold controller. Keep well below target to leave braking room.</div>
     </div>
 
     <!-- ── HOLD PHASE ────────────────────────────────── -->
@@ -469,12 +493,12 @@
       <div class="param-head">
         <span class="param-label">Punch Throttle</span>
         <div class="param-readout">
-          <span class="param-value" id="val-punch-throt">2000</span><span class="param-unit">µs</span>
+          <span class="param-value" id="val-punch-throt">1750</span><span class="param-unit">µs</span>
         </div>
       </div>
-      <input type="range" class="punch" id="slider-punch-throt" min="1600" max="2000" value="2000" step="10">
-      <div class="param-bounds"><span>1600</span><span>2000 — max</span></div>
-      <div class="param-desc">Max throttle for the final burst. Leave at 2000 unless there's a reason to reduce.</div>
+      <input type="range" class="punch" id="slider-punch-throt" min="1300" max="2000" value="1750" step="10">
+      <div class="param-bounds"><span>1300</span><span>2000 — max</span></div>
+      <div class="param-desc">Final burst throttle for the current 4-inch setup. Raise only after sprint and hold behavior are verified.</div>
     </div>
 
     <div id="log"><span class="info">— ready —</span></div>
@@ -482,6 +506,25 @@
   </div><!-- /pane-params -->
 
 </div><!-- /wrap -->
+
+<!-- ── JUDGE VIEW ─────────────────────────────────────
+     Full-screen isolated readout for the competition run:
+     throttle, elapsed mission time, armed/motor status. -->
+<div class="judge-view" id="judge-view">
+  <button class="jv-exit" id="jv-exit">Exit</button>
+  <div class="jv-phase" id="jv-phase">IDLE</div>
+  <div class="jv-armed" id="jv-armed">DISARMED</div>
+  <div class="jv-metrics">
+    <div class="jv-metric">
+      <div class="jv-metric-lbl">Elapsed</div>
+      <div class="jv-metric-val" id="jv-time">0:00.0</div>
+    </div>
+    <div class="jv-metric">
+      <div class="jv-metric-lbl">Throttle</div>
+      <div class="jv-metric-val" id="jv-throttle">—<span class="jv-unit">µs</span></div>
+    </div>
+  </div>
+</div>
 
 <script src="quad_tuner.js"></script>
 </body>

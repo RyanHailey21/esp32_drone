@@ -423,6 +423,10 @@ void sendRC() {
     sendMSP(MSP_SET_RAW_RC, data, 16);
 }
 
+bool mspAltitudeFresh() {
+    return BENCH_MODE_ENABLED || (millis() - lastAltitudeFrameMs <= MSP_ALTITUDE_STALE_MS);
+}
+
 float getAltitude() {
     if (!BENCH_MODE_ENABLED) {
         uint32_t nowMs = millis();

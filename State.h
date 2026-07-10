@@ -116,6 +116,7 @@ extern volatile uint16_t PUNCH_THROTTLE;
 // Runtime BLE-controlled bench mode
 extern volatile uint8_t  BENCH_MODE_ENABLED;
 extern volatile uint8_t  ANGLE_MODE_ENABLED;
+extern volatile uint8_t  MISSION_TYPE;
 
 // ── RC Channels ──────────────────────────────────────────────
 extern uint16_t channels[8];

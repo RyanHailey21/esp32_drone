@@ -80,9 +80,13 @@
 #define MAX_CLIMB_TEST_UUID    "ab0828c5-198e-4351-b779-901fa0e0371e"
 #define MAX_DESCENT_TEST_UUID  "ab0828c6-198e-4351-b779-901fa0e0371e"
 #define BF_GROUND_EFFECT_UUID  "ab0828c7-198e-4351-b779-901fa0e0371e"
+#define MISSION_TYPE_UUID      "ab0828c8-198e-4351-b779-901fa0e0371e"
+
+// Mission hardware mode default. 0=powered landing, 1=autorotor pre-spin + motor cut.
+#define DEFAULT_MISSION_TYPE         0
 
 // BLE flight-log dump
-#define FLIGHT_LOG_BYTES       32768
+#define FLIGHT_LOG_BYTES       60000
 #define FLIGHT_LOG_CHUNK_BYTES 220
 
 // Serial output is not useful during flight and can add timing jitter. Keep

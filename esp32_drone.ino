@@ -23,7 +23,8 @@ void setup() {
     setupBLE();
 
     Serial.println("[BOOT] Ready. Control via BLE — open quad_tuner.html in Chrome.");
-    Serial.println("[BOOT] Mission profile: SPRINT → HOLD → PUNCH → CUT");
+    Serial.printf("[BOOT] Mission profile: SPRINT -> HOLD -> PUNCH -> %s\n",
+        MISSION_TYPE ? "AUTOROTOR CUT" : "POWERED LAND");
 }
 
 void loop() {

@@ -79,8 +79,8 @@ volatile bool bleRequestedLand = false;
 
 // ── Tunable Parameters (BLE-writable) ────────────────────────
 volatile uint16_t HOVER_THROTTLE  = (uint16_t)(AltitudeParameters::HOVER_THROTTLE + 0.5f);
-volatile uint16_t SPRINT_THROTTLE = 1850;
-volatile float    SPRINT_CUTOFF_M = 17.0f;
+volatile uint16_t SPRINT_THROTTLE = 2000;
+volatile float    SPRINT_CUTOFF_M = 12.0f;
 volatile float    TARGET_ALT_M    = 18.3f;
 volatile float    ALT_HOLD_TARGET_M = 1.5f;
 volatile float    HOLD_KP         = AltitudeParameters::HOLD_KP;
@@ -91,11 +91,12 @@ volatile float    MAX_CLIMB_MPS_TEST = DEFAULT_MAX_CLIMB_MPS_TEST;
 volatile float    MAX_DESCENT_MPS_TEST = DEFAULT_MAX_DESCENT_MPS_TEST;
 volatile float    BF_VARIO_GROUND_EFFECT_M = DEFAULT_BF_VARIO_GROUND_EFFECT_M;
 volatile uint32_t PUNCH_START_MS  = 7500;
-volatile uint16_t PUNCH_THROTTLE  = 2000;
+volatile uint16_t PUNCH_THROTTLE  = 1750;
 
 // Runtime BLE-controlled bench mode
 volatile uint8_t  BENCH_MODE_ENABLED = 0;
 volatile uint8_t  ANGLE_MODE_ENABLED = DEFAULT_ANGLE_MODE;
+volatile uint8_t  MISSION_TYPE = DEFAULT_MISSION_TYPE;
 
 // ── RC Channels ──────────────────────────────────────────────
 // CH1=Roll CH2=Pitch CH3=Throttle CH4=Yaw CH5=AUX1(Arm) CH6=AUX2(Angle)

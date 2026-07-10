@@ -5,4 +5,5 @@
 
 void sendRC();
 float getAltitude();
+bool mspAltitudeFresh();
 void resetAltitudeFusion();

@@ -19,12 +19,32 @@ const ALT_RAMP_RATE_UUID     = 'ab0828c4-198e-4351-b779-901fa0e0371e';
 const MAX_CLIMB_TEST_UUID    = 'ab0828c5-198e-4351-b779-901fa0e0371e';
 const MAX_DESCENT_TEST_UUID  = 'ab0828c6-198e-4351-b779-901fa0e0371e';
 const BF_GROUND_EFFECT_UUID  = 'ab0828c7-198e-4351-b779-901fa0e0371e';
+const MISSION_TYPE_UUID      = 'ab0828c8-198e-4351-b779-901fa0e0371e';
 
-const STATE_NAMES  = ['IDLE','ARMING','SPRINTING','HOLDING','PUNCHING','CUT','HOVER TEST','AUTO HOVER CAL','LANDING','DONE','ALT HOLD'];
-const STATE_COLORS = ['','var(--amber)','var(--amber)','var(--green)','var(--red)','var(--red)','var(--cyan)','var(--cyan)','var(--amber)','var(--text-mid)','var(--green)'];
+// Single source of truth for state classification — replaces what used to be
+// three separate things (a name array, a color array, and inline isX booleans
+// recomputed in onTelemetry every tick). `phase` keys a CSS var (--<phase>)
+// used for text/border/tint color; `timeline` keys which Mission Timeline
+// segment lights up (null = state isn't part of the 5-step mission sequence).
+const STATE_META = [
+  /* 0  IDLE           */ { name: 'IDLE',           phase: 'neutral-phase', timeline: null,     isIdle: true },
+  /* 1  ARMING         */ { name: 'ARMING',         phase: 'neutral-phase', timeline: 'arm' },
+  /* 2  SPRINTING      */ { name: 'SPRINTING',      phase: 'caution',       timeline: 'sprint',  isMission: true },
+  /* 3  HOLDING        */ { name: 'HOLDING',        phase: 'live',          timeline: 'hold',    isMission: true },
+  /* 4  PUNCHING       */ { name: 'PUNCHING',       phase: 'armed',         timeline: 'punch',   isMission: true },
+  /* 5  CUT            */ { name: 'CUT',            phase: 'safe',         timeline: 'land',    isMission: true },
+  /* 6  HOVER_TEST     */ { name: 'HOVER TEST',     phase: 'live',          timeline: null,      isTest: true },
+  /* 7  AUTO_HOVER_CAL */ { name: 'AUTO HOVER CAL', phase: 'live',          timeline: null,      isTest: true },
+  /* 8  LANDING        */ { name: 'LANDING',        phase: 'safe',         timeline: 'land',    isLanding: true },
+  /* 9  DONE           */ { name: 'DONE',           phase: 'neutral-phase', timeline: null,      isDone: true },
+  /* 10 ALT_HOLD       */ { name: 'ALT HOLD',       phase: 'live',          timeline: null,      isTest: true },
+];
+function stateMeta(id) { return STATE_META[id] || STATE_META[0]; }
+function phaseVar(phase) { return 'var(--' + phase + ')'; }
+
 const ALT_SOURCE_NAMES = ['BARO', 'TOF', 'BLEND', 'TOF HOLD'];
 const VARIO_SOURCE_NAMES = ['DERIVED', 'BF VARIO', 'KF'];
-const PARAM_PRESET_KEY = 'quad-tuner-param-preset-v1';
+const PARAM_PRESET_KEY = 'quad-tuner-param-preset-v3-4in-maxsprint-12m';
 
 const CMD_HOVER_TEST     = 1;
 const CMD_START_MISSION  = 2;
@@ -41,8 +61,10 @@ let chars = {};
 let device = null, connected = false;
 let benchMode = 0;
 let angleMode = 0;
+let missionType = 0;
 let prevStateId = -1;
 let suppressPresetAutosave = false;
+let missionStartMs = null; // performance.now() timestamp; null while not armed
 
 // Serialise all BLE writes — prevents "GATT operation already in progress"
 let _bleQ = Promise.resolve();
@@ -54,6 +76,7 @@ const statusText = document.getElementById('status-text');
 const logEl      = document.getElementById('log');
 const benchBtn   = document.getElementById('btn-bench-mode');
 const angleBtn   = document.getElementById('btn-angle-mode');
+const missionTypeBtn = document.getElementById('btn-mission-type');
 
 if (!navigator.bluetooth) {
   const ua  = navigator.userAgent;
@@ -137,6 +160,7 @@ async function connect() {
     chars.command    = await service.getCharacteristic(COMMAND_UUID);
     chars.benchMode  = await service.getCharacteristic(BENCH_MODE_UUID);
     chars.angleMode  = await service.getCharacteristic(ANGLE_MODE_UUID);
+    chars.missionType = await service.getCharacteristic(MISSION_TYPE_UUID);
     chars.telemetry  = await service.getCharacteristic(TELEMETRY_UUID);
     chars.logOffset  = await service.getCharacteristic(FLIGHT_LOG_OFFSET_UUID);
     chars.logChunk   = await service.getCharacteristic(FLIGHT_LOG_CHUNK_UUID);
@@ -155,6 +179,7 @@ async function connect() {
     connectBtn.textContent = 'Disconnect';
     connectBtn.classList.add('active');
     enableAll(true);
+    document.getElementById('judge-view-btn').disabled = false;
     updatePresetButtons();
     log('Connected to ' + device.name, 'ok');
   } catch(e) {
@@ -173,13 +198,18 @@ function onDisconnected() {
   connected = false; chars = {};
   benchMode = 0;
   angleMode = 0;
+  missionType = 0;
   _bleQ = Promise.resolve();
   setBenchButton();
   setAngleButton();
+  setMissionTypeButton();
   setStatus('', 'disconnected');
   connectBtn.textContent = 'Connect to Quad-Tuner';
   connectBtn.classList.remove('active');
   enableAll(false);
+  document.getElementById('judge-view-btn').disabled = true;
+  el('judge-view').classList.remove('active');
+  missionStartMs = null;
   updatePresetButtons();
   log('Disconnected', 'err');
 }
@@ -203,6 +233,7 @@ async function readAll() {
     const punchThrot = new DataView((await chars.punchThrot.readValue()).buffer).getUint16(0, true);
     benchMode        = new DataView((await chars.benchMode.readValue()).buffer).getUint8(0);
     angleMode        = new DataView((await chars.angleMode.readValue()).buffer).getUint8(0);
+    missionType      = new DataView((await chars.missionType.readValue()).buffer).getUint8(0);
 
     setParam('hover',       hover,      v => v,                   v => v);
     setParam('sprint',      sprint,     v => v,                   v => v);
@@ -221,6 +252,7 @@ async function readAll() {
 
     setBenchButton();
     setAngleButton();
+    setMissionTypeButton();
     log('Values read from ESP32', 'ok');
   } catch(e) { log('Read failed: ' + e.message, 'err'); }
 }
@@ -250,6 +282,11 @@ function setBenchButton() {
 function setAngleButton() {
   angleBtn.textContent = angleMode ? 'Angle Mode: On' : 'Angle Mode: Off';
   angleBtn.classList.toggle('angle-on', !!angleMode);
+}
+
+function setMissionTypeButton() {
+  missionTypeBtn.textContent = missionType ? 'Mission: Autorotor Cut' : 'Mission: Powered Land';
+  missionTypeBtn.classList.toggle('autorotor-on', !!missionType);
 }
 
 function sendCommand(cmd, label) {
@@ -379,11 +416,16 @@ document.getElementById('btn-disarm').addEventListener('click', () =>
 document.getElementById('btn-kill').addEventListener('click', () =>
   sendCommand(CMD_KILL, 'Kill command sent'));
 
-document.getElementById('strip-land').addEventListener('click', () =>
-  sendCommand(CMD_DISARM, 'Land command sent (strip)'));
+document.getElementById('mt-land').addEventListener('click', () =>
+  sendCommand(CMD_DISARM, 'Land command sent (timeline)'));
 
-document.getElementById('strip-disarm').addEventListener('click', () =>
-  sendCommand(CMD_KILL, 'Kill command sent (strip)'));
+document.getElementById('mt-kill').addEventListener('click', () =>
+  sendCommand(CMD_KILL, 'Kill command sent (timeline)'));
+
+// ── JUDGE VIEW ───────────────────────────────────────────
+const judgeViewBtn = document.getElementById('judge-view-btn');
+judgeViewBtn.addEventListener('click', () => el('judge-view').classList.add('active'));
+document.getElementById('jv-exit').addEventListener('click', () => el('judge-view').classList.remove('active'));
 
 document.getElementById('btn-sync').addEventListener('click', async () => {
   if (!connected) return;
@@ -402,7 +444,7 @@ document.getElementById('btn-download-log').addEventListener('click', async () =
     const decoder = new TextDecoder();
     let offset = 0;
     let text = '';
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 400; i++) {
       await chars.logOffset.writeValue(u16buf(offset));
       const value = await chars.logChunk.readValue();
       if (!value.byteLength) break;
@@ -462,6 +504,21 @@ angleBtn.addEventListener('click', () => {
   });
 });
 
+missionTypeBtn.addEventListener('click', () => {
+  if (!connected) return;
+  const next = missionType ? 0 : 1;
+  bleWrite(async () => {
+    try {
+      await chars.missionType.writeValue(u8buf(next));
+      missionType = new DataView((await chars.missionType.readValue()).buffer).getUint8(0);
+      setMissionTypeButton();
+      log(missionType ? 'Mission type: autorotor cut' : 'Mission type: powered land', missionType ? 'err' : 'ok');
+    } catch(e) {
+      log('Mission type change failed: ' + e.message, 'err');
+    }
+  });
+});
+
 // ── SLIDER LISTENERS ─────────────────────────────────────
 const timers = {};
 function debounce(key, fn, delay = 150) {
@@ -514,15 +571,29 @@ function signedMs(cms) {
   const v = cms / 100;
   return (v >= 0 ? '+' : '') + v.toFixed(2) + ' m/s';
 }
+function formatElapsed(startMs) {
+  if (startMs === null) return '0:00.0';
+  const s = (performance.now() - startMs) / 1000;
+  const m = Math.floor(s / 60);
+  const rem = (s - m * 60).toFixed(1).padStart(4, '0');
+  return m + ':' + rem;
+}
+// Ticks the elapsed-time readouts independently of the ~10Hz telemetry rate
+// so the stopwatch reads smoothly instead of stepping in telemetry-sized jumps.
+setInterval(() => {
+  if (missionStartMs === null) return;
+  el('mt-time').textContent = formatElapsed(missionStartMs);
+  el('jv-time').textContent = formatElapsed(missionStartMs);
+}, 100);
 function varColor(cms) {
-  if (cms >  15) return 'var(--amber)';
-  if (cms < -15) return 'var(--cyan)';
-  return 'var(--text-mid)';
+  if (cms >  15) return 'var(--caution)';
+  if (cms < -15) return 'var(--live)';
+  return 'var(--ink-mid)';
 }
 function thrOffColor(off) {
-  if (off >  10) return 'var(--amber)';
-  if (off < -10) return 'var(--cyan)';
-  return 'var(--text-mid)';
+  if (off >  10) return 'var(--caution)';
+  if (off < -10) return 'var(--live)';
+  return 'var(--ink-mid)';
 }
 
 function el(id) { return document.getElementById(id); }
@@ -532,17 +603,18 @@ let lastTelemetryDumpMs = 0;
 function onTelemetry(e) {
   const dv         = e.target.value;
   const nowMs      = performance.now();
+  const compactTelemetry = dv.byteLength >= 28 && dv.byteLength < 77;
   if (nowMs - lastTelemetryDumpMs >= 1000) {
     lastTelemetryDumpMs = nowMs;
     const bytes = Array.from(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength))
       .map(v => v.toString(16).padStart(2, '0'))
       .join(' ');
-    const mspRawHex = dv.byteLength >= 28
+    const mspRawHex = !compactTelemetry && dv.byteLength >= 28
       ? Array.from(new Uint8Array(dv.buffer, dv.byteOffset + 22, 6))
           .map(v => v.toString(16).padStart(2, '0'))
           .join(' ')
       : '';
-    console.log('Telemetry length:', dv.byteLength, 'bytes:', bytes, 'mspAlt:', mspRawHex);
+    console.log('Telemetry length:', dv.byteLength, 'compact:', compactTelemetry, 'bytes:', bytes, 'mspAlt:', mspRawHex);
   }
 
   const altCm      = dv.getInt32(0, true);
@@ -557,12 +629,14 @@ function onTelemetry(e) {
   const derivVarCs = dv.byteLength >= 22 ? dv.getInt16(20, true) : 0;
   const angleAux   = dv.byteLength >= 30 ? dv.getUint16(28, true) : (angleMode ? 1800 : 1000);
   const tofCm      = dv.byteLength >= 32 ? dv.getInt16(30, true) : -1;
-  const tofWeight  = dv.byteLength >= 33 ? dv.getUint8(32) : 0;
-  const tofValid   = dv.byteLength >= 34 ? !!dv.getUint8(33) : false;
-  const baroCm     = dv.byteLength >= 38 ? dv.getInt32(34, true) : altCm;
-  const altSource  = dv.byteLength >= 39 ? dv.getUint8(38) : (tofWeight > 70 ? 1 : (tofWeight > 0 ? 2 : 0));
-  const cbaroCm    = dv.byteLength >= 43 ? dv.getInt32(39, true) : baroCm;
-  const fcDiagMask = dv.byteLength >= 45 ? dv.getUint16(43, true) : 0;
+  const compactDiagMask = compactTelemetry ? dv.getUint16(22, true) : 0;
+  const compactSensorFlags = compactTelemetry ? dv.getUint8(24) : 0;
+  const tofWeight  = compactTelemetry ? dv.getUint8(25) : (dv.byteLength >= 33 ? dv.getUint8(32) : 0);
+  const tofValid   = compactTelemetry ? !!(compactSensorFlags & 0x02) : (dv.byteLength >= 34 ? !!dv.getUint8(33) : false);
+  const baroCm     = !compactTelemetry && dv.byteLength >= 38 ? dv.getInt32(34, true) : altCm;
+  const altSource  = compactTelemetry ? dv.getUint8(26) : (dv.byteLength >= 39 ? dv.getUint8(38) : (tofWeight > 70 ? 1 : (tofWeight > 0 ? 2 : 0)));
+  const cbaroCm    = !compactTelemetry && dv.byteLength >= 43 ? dv.getInt32(39, true) : baroCm;
+  const fcDiagMask = compactTelemetry ? compactDiagMask : (dv.byteLength >= 45 ? dv.getUint16(43, true) : 0);
   const fcAccX     = dv.byteLength >= 47 ? dv.getInt16(45, true) : 0;
   const fcAccY     = dv.byteLength >= 49 ? dv.getInt16(47, true) : 0;
   const fcAccZ     = dv.byteLength >= 51 ? dv.getInt16(49, true) : 0;
@@ -579,7 +653,7 @@ function onTelemetry(e) {
   const fcRcAngle  = dv.byteLength >= 73 ? dv.getUint16(71, true) : 0;
   const fcVbat     = dv.byteLength >= 74 ? dv.getUint8(73) / 10 : 0;
   const fcAmps     = dv.byteLength >= 76 ? dv.getInt16(74, true) / 100 : 0;
-  const varioSource = dv.byteLength >= 77 ? dv.getUint8(76) : 0;
+  const varioSource = compactTelemetry ? dv.getUint8(27) : (dv.byteLength >= 77 ? dv.getUint8(76) : 0);
 
   const altM     = (altCm / 100).toFixed(2);
   const relValid = Math.abs(relCm) <= 10000000;
@@ -588,44 +662,66 @@ function onTelemetry(e) {
   const setptM   = setptCm / 100;
   const altErrM  = setptM - relMNum;
 
-  const isIdle    = stateId === 0;
+  const meta      = stateMeta(stateId);
+  const isIdle    = !!meta.isIdle;
   const isCal     = stateId === 7;
   const isAltHold = stateId === 10;
-  const isDone    = stateId === 9;
-  const isLanding = stateId === 8;
-  const isTestMode = stateId === 6 || stateId === 7 || stateId === 10;
-  const isMissionMode = stateId === 2 || stateId === 3 || stateId === 4 || stateId === 5;
-  const color     = STATE_COLORS[stateId] || 'var(--text)';
+  const isDone    = !!meta.isDone;
+  const isLanding = !!meta.isLanding;
+  const isTestMode = !!meta.isTest;
+  const isMissionMode = !!meta.isMission;
+  const isArmed   = !isIdle && !isDone;
+  const color     = phaseVar(meta.phase);
 
-  // ── State strip ─────────────────────────────────────
-  const strip = el('state-strip');
-  strip.classList.toggle('active', !isIdle && !isDone);
-  strip.classList.toggle('test-active', isTestMode);
-  strip.classList.toggle('mission-active', isMissionMode);
-  strip.classList.toggle('landing-active', isLanding);
-  strip.style.borderColor = isIdle ? '' : color;
-  el('strip-state').textContent = STATE_NAMES[stateId] || '?';
-  el('strip-state').style.color = color;
-  el('strip-alt').textContent   = relValid ? 'ALT ' + relM + ' m' : 'ALT ---';
-  el('strip-throt').textContent = stateId === 8
-    ? 'DESCENT ' + (varioCs / 100).toFixed(2) + ' m/s'
-    : 'THROT ' + throttle;
-  const stripLand = el('strip-land');
-  stripLand.disabled = !(isTestMode || isLanding);
-  stripLand.textContent = isLanding ? 'Landing' : (isMissionMode ? 'No Land' : 'Land');
+  // ── Mission stopwatch ────────────────────────────────
+  // Client-side only — starts when the state leaves IDLE/DONE, clears on
+  // return. Ticked independently of telemetry rate by renderElapsed() below.
+  if (isArmed && missionStartMs === null) missionStartMs = performance.now();
+  if (!isArmed) missionStartMs = null;
+
+  // ── Mission timeline ──────────────────────────────────
+  const timeline = el('mission-timeline');
+  timeline.classList.toggle('active', isArmed);
+  timeline.style.borderColor = isArmed ? color : '';
+  document.querySelectorAll('.mt-phase').forEach(p =>
+    p.classList.toggle('active', p.dataset.phase === meta.timeline));
+  el('mt-state').textContent = meta.name;
+  el('mt-state').style.color = color;
+  el('mt-time').textContent = formatElapsed(missionStartMs);
+  el('mt-throttle').textContent = isLanding
+    ? (varioCs / 100).toFixed(2) + ' m/s'
+    : throttle + ' µs';
+  const mtLand = el('mt-land');
+  mtLand.disabled = !(isTestMode || isLanding);
+  mtLand.textContent = isLanding ? 'Landing' : (isMissionMode ? 'No Land' : 'Land');
   el('btn-hover-test').disabled = !connected || (!isIdle && !isDone);
   el('btn-auto-hover').disabled = !connected || (!isIdle && !isDone);
   el('btn-alt-hold').disabled = !connected || (!isIdle && !isDone);
   el('btn-start-mission').disabled = !connected || (!isIdle && !isDone);
+  el('btn-mission-type').disabled = !connected || (!isIdle && !isDone);
   el('btn-disarm').disabled = !connected || isMissionMode;
   el('btn-kill').disabled = !connected;
+  el('btn-download-log').disabled = !connected || (!isIdle && !isDone);
+
+  // ── Judge View ────────────────────────────────────────
+  el('jv-phase').textContent = meta.name;
+  el('jv-phase').style.color = color;
+  const jvArmed = el('jv-armed');
+  jvArmed.textContent = isArmed ? 'ARMED' : 'DISARMED';
+  jvArmed.classList.toggle('is-armed', isArmed);
+  jvArmed.classList.toggle('is-safe', !isArmed);
+  el('jv-time').textContent = formatElapsed(missionStartMs);
+  el('jv-throttle').innerHTML = throttle + '<span class="jv-unit">µs</span>';
+  const judgeView = el('judge-view');
+  Array.from(judgeView.classList).forEach(c => { if (c.startsWith('phase-')) judgeView.classList.remove(c); });
+  judgeView.classList.add('phase-' + meta.phase);
 
   // ── Cal progress panel ───────────────────────────────
   el('cal-panel').classList.toggle('active', isCal);
   if (isCal) {
     const altFill = el('cal-alt-fill');
     altFill.style.width      = (Math.max(0, Math.min(relCm, 50)) / 50 * 100) + '%';
-    altFill.style.background = relCm >= CAL_LIFTOFF_CM ? 'var(--green)' : 'var(--cyan)';
+    altFill.style.background = relCm >= CAL_LIFTOFF_CM ? 'var(--safe)' : 'var(--live)';
     el('cal-alt-val').textContent   = relCm + ' cm';
     el('cal-throt-fill').style.width = Math.max(0, Math.min((throttle - CAL_MIN_THROT) / (CAL_MAX_THROT - CAL_MIN_THROT) * 100, 100)) + '%';
     el('cal-throt-val').textContent = throttle;
@@ -634,10 +730,10 @@ function onTelemetry(e) {
   // ── ALTITUDE section ─────────────────────────────────
   el('d-abs').textContent = altM;
   el('d-rel').textContent = relM;
-  el('d-abs').style.color = altCm !== 0 ? 'var(--green)' : 'var(--text-mid)';
-  el('d-rel').style.color = !relValid   ? 'var(--text-mid)' :
-                            relCm > 20  ? 'var(--green)' :
-                            relCm < -20 ? 'var(--amber)'  : '#fff';
+  el('d-abs').style.color = altCm !== 0 ? 'var(--safe)' : 'var(--ink-mid)';
+  el('d-rel').style.color = !relValid   ? 'var(--ink-mid)' :
+                            relCm > 20  ? 'var(--safe)' :
+                            relCm < -20 ? 'var(--caution)'  : 'var(--ink)';
 
   // Setpt / alt bars — ALT_HOLD only
   el('d-bars').style.display = isAltHold ? '' : 'none';
@@ -659,61 +755,66 @@ function onTelemetry(e) {
   el('d-vf').style.color = varColor(filtVarCs);
   el('d-vfc').style.color = varColor(fcVarioCs);
   el('d-vd').style.color = varColor(derivVarCs);
-  el('d-vsrc').style.color = varioSource === 2 ? 'var(--cyan)'
-                            : varioSource === 1 ? 'var(--green)' : 'var(--amber)';
-  el('d-tof').textContent = tofValid && tofCm >= 0 ? (tofCm / 100).toFixed(2) + 'm' : 'INVALID';
+  el('d-vsrc').style.color = varioSource === 2 ? 'var(--live)'
+                            : varioSource === 1 ? 'var(--safe)' : 'var(--caution)';
+  el('d-tof').textContent = compactTelemetry
+    ? (tofValid ? 'OK' : 'INVALID')
+    : (tofValid && tofCm >= 0 ? (tofCm / 100).toFixed(2) + 'm' : 'INVALID');
   el('d-tw').textContent = tofWeight + '%';
-  el('d-baro').textContent = (baroCm / 100).toFixed(2) + 'm';
+  el('d-baro').textContent = compactTelemetry ? 'LIVE' : (baroCm / 100).toFixed(2) + 'm';
   el('d-src').textContent = ALT_SOURCE_NAMES[altSource] || String(altSource);
-  el('d-cbaro').textContent = (cbaroCm / 100).toFixed(2) + 'm';
-  el('d-tof').style.color = tofValid ? 'var(--cyan)' : 'var(--text-dim)';
-  el('d-tw').style.color = tofWeight > 70 ? 'var(--cyan)'
-                         : tofWeight > 0  ? 'var(--amber)' : 'var(--text-dim)';
-  el('d-baro').style.color = tofWeight === 0 ? 'var(--green)' : 'var(--text-mid)';
-  el('d-src').style.color = altSource === 1 || altSource === 3 ? 'var(--cyan)'
-                          : altSource === 2 ? 'var(--amber)' : 'var(--green)';
-  el('d-cbaro').style.color = altSource === 0 ? 'var(--green)' : 'var(--text-mid)';
+  el('d-cbaro').textContent = compactTelemetry ? 'COMPACT' : (cbaroCm / 100).toFixed(2) + 'm';
+  el('d-tof').style.color = tofValid ? 'var(--live)' : 'var(--ink-dim)';
+  el('d-tw').style.color = tofWeight > 70 ? 'var(--live)'
+                         : tofWeight > 0  ? 'var(--caution)' : 'var(--ink-dim)';
+  el('d-baro').style.color = tofWeight === 0 ? 'var(--safe)' : 'var(--ink-mid)';
+  el('d-src').style.color = altSource === 1 || altSource === 3 ? 'var(--live)'
+                          : altSource === 2 ? 'var(--caution)' : 'var(--safe)';
+  el('d-cbaro').style.color = altSource === 0 ? 'var(--safe)' : 'var(--ink-mid)';
 
   // Alt error — shown in ALT_HOLD; "—" otherwise
   if (isAltHold) {
     const sign = altErrM >= 0 ? '+' : '';
     el('d-ae').textContent = sign + altErrM.toFixed(2) + 'm';
-    el('d-ae').style.color = Math.abs(altErrM) < 0.10 ? 'var(--green)'
-                           : Math.abs(altErrM) < 0.50 ? 'var(--amber)' : 'var(--red)';
+    el('d-ae').style.color = Math.abs(altErrM) < 0.10 ? 'var(--safe)'
+                           : Math.abs(altErrM) < 0.50 ? 'var(--caution)' : 'var(--armed)';
   } else {
     el('d-ae').textContent = '—';
-    el('d-ae').style.color = 'var(--text-dim)';
+    el('d-ae').style.color = 'var(--ink-dim)';
   }
 
   // ── CONTROL section ──────────────────────────────────
-  const hoverThrot = parseInt(el('slider-hover').value) || 1255;
+  const hoverThrot = parseInt(el('slider-hover').value) || 1230;
   const thrOff     = throttle - hoverThrot;
   el('d-thr').textContent  = throttle + 'µs';
   el('d-to').textContent   = (thrOff >= 0 ? '+' : '') + thrOff + 'µs';
   el('d-to').style.color   = thrOffColor(thrOff);
-  el('d-st').textContent   = STATE_NAMES[stateId] || String(stateId);
+  el('d-st').textContent   = meta.name;
   el('d-st').style.color   = color;
   el('d-ang').textContent  = angleAux + 'µs';
   el('d-am').textContent   = angleAux >= 1700 ? 'ON' : 'OFF';
-  el('d-am').style.color   = angleAux >= 1700 ? 'var(--cyan)' : 'var(--text-mid)';
+  el('d-am').style.color   = angleAux >= 1700 ? 'var(--live)' : 'var(--ink-mid)';
   const maskHex = '0x' + fcDiagMask.toString(16).padStart(2, '0');
   el('d-fc-msp').textContent = maskHex;
-  el('d-fc-msp').style.color = fcDiagMask === 0x1f ? 'var(--green)'
-                            : fcDiagMask ? 'var(--amber)' : 'var(--red)';
+  el('d-fc-msp').style.color = fcDiagMask === 0x1f ? 'var(--safe)'
+                            : fcDiagMask ? 'var(--caution)' : 'var(--armed)';
   el('d-fc-att').textContent = fcDiagMask & 0x02
-    ? fcRoll.toFixed(1) + ',' + fcPitch.toFixed(1) + ',' + fcYaw
+    ? (compactTelemetry ? 'ATT OK' : fcRoll.toFixed(1) + ',' + fcPitch.toFixed(1) + ',' + fcYaw)
     : 'NO ATT';
   el('d-fc-acc').textContent = fcDiagMask & 0x01
-    ? fcAccX + ',' + fcAccY + ',' + fcAccZ
+    ? (compactTelemetry ? 'IMU OK' : fcAccX + ',' + fcAccY + ',' + fcAccZ)
     : 'NO IMU';
   el('d-fc-gyro').textContent = fcDiagMask & 0x01
-    ? fcGyroX + ',' + fcGyroY + ',' + fcGyroZ
+    ? (compactTelemetry ? 'GYRO OK' : fcGyroX + ',' + fcGyroY + ',' + fcGyroZ)
     : 'NO GYRO';
   el('d-fc-rc').textContent = fcDiagMask & 0x10
-    ? fcRcThr + '/' + fcRcArm + '/' + fcRcAngle
+    ? (compactTelemetry ? 'RC OK' : fcRcThr + '/' + fcRcArm + '/' + fcRcAngle)
     : 'NO RC';
-  el('d-fc-status').textContent = (fcDiagMask & 0x04 ? fcCycle + 'us s=' + fcSensors.toString(16) + ' ' : 'NO STATUS ')
-    + (fcDiagMask & 0x08 ? fcVbat.toFixed(1) + 'V ' + fcAmps.toFixed(1) + 'A' : '');
+  el('d-fc-status').textContent = compactTelemetry
+    ? ((compactSensorFlags & 0x01 ? 'ALT OK ' : 'ALT STALE ')
+      + (compactSensorFlags & 0x04 ? 'ATT FRESH' : 'ATT STALE'))
+    : ((fcDiagMask & 0x04 ? fcCycle + 'us s=' + fcSensors.toString(16) + ' ' : 'NO STATUS ')
+      + (fcDiagMask & 0x08 ? fcVbat.toFixed(1) + 'V ' + fcAmps.toFixed(1) + 'A' : ''));
 
   // Guard phase pills — ALT_HOLD only
   el('d-phases').style.display = isAltHold ? '' : 'none';

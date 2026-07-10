@@ -223,23 +223,35 @@ def write_preview(path: Path, run: str, rows, output: Path, jump_threshold_m: fl
 <title>{html.escape(path.name)} preview</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
-body {{ margin: 0; font-family: system-ui, Segoe UI, Arial, sans-serif; background: #101316; color: #e8eef2; }}
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap');
+:root {{
+  --paper:   #f4f5f7;
+  --surface: #ffffff;
+  --border:  #d7dbe2;
+  --ink:     #161b22;
+  --ink-mid: #4b5563;
+  --ink-dim: #838c99;
+  --grid:    #e7eaee;
+  --font-ui:  'IBM Plex Sans', system-ui, sans-serif;
+  --font-val: 'IBM Plex Mono', 'Consolas', monospace;
+}}
+body {{ margin: 0; font-family: var(--font-ui); background: var(--paper); color: var(--ink); }}
 main {{ max-width: 1180px; margin: 0 auto; padding: 24px; }}
-h1 {{ margin: 0 0 6px; font-size: 22px; }}
-.run {{ color: #9fb0bd; margin-bottom: 18px; font-family: Consolas, monospace; font-size: 13px; }}
+h1 {{ margin: 0 0 6px; font-size: 20px; font-weight: 700; }}
+.run {{ color: var(--ink-dim); margin-bottom: 18px; font-family: var(--font-val); font-size: 12px; }}
 .grid {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }}
-.card {{ background: #171c20; border: 1px solid #2a343c; border-radius: 8px; padding: 10px 12px; }}
-.label {{ color: #91a1ad; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }}
-.value {{ font-size: 18px; margin-top: 3px; }}
-.plot {{ background: #151a1f; border: 1px solid #2a343c; border-radius: 8px; margin: 14px 0; padding: 12px; }}
-.plot-title {{ display: flex; justify-content: space-between; color: #cbd5dc; font-size: 13px; margin-bottom: 8px; }}
-.chart-wrap {{ height: 360px; background: #0d1115; border-radius: 4px; padding: 10px; }}
+.card {{ background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; box-shadow: 0 1px 2px rgba(22,27,34,0.05), 0 6px 16px rgba(22,27,34,0.06); }}
+.label {{ color: var(--ink-dim); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }}
+.value {{ font-family: var(--font-val); font-weight: 600; font-size: 17px; margin-top: 4px; color: var(--ink); }}
+.plot {{ background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 14px 0; padding: 14px; box-shadow: 0 1px 2px rgba(22,27,34,0.05), 0 6px 16px rgba(22,27,34,0.06); }}
+.plot-title {{ display: flex; justify-content: space-between; color: var(--ink-mid); font-size: 13px; font-weight: 600; margin-bottom: 8px; }}
+.chart-wrap {{ height: 360px; background: var(--surface); border-radius: 4px; padding: 6px; }}
 .chart-wrap.compact {{ height: 240px; }}
 canvas {{ width: 100% !important; height: 100% !important; }}
-.legend {{ display: flex; gap: 14px; flex-wrap: wrap; color: #9fb0bd; font-size: 12px; margin-top: 8px; }}
+.legend {{ display: flex; gap: 14px; flex-wrap: wrap; color: var(--ink-mid); font-size: 12px; margin-top: 8px; }}
 .key {{ display: inline-flex; align-items: center; gap: 6px; }}
 .sw {{ width: 18px; height: 3px; border-radius: 2px; }}
-.hint {{ color: #91a1ad; font-size: 12px; margin-top: 10px; }}
+.hint {{ color: var(--ink-dim); font-size: 12px; margin-top: 10px; }}
 @media (max-width: 760px) {{ .grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} main {{ padding: 14px; }} }}
 </style>
 </head>
@@ -268,7 +280,10 @@ canvas {{ width: 100% !important; height: 100% !important; }}
 </main>
 <script>
 const DATA = {payload_json};
-const COLORS = {{ alt:'#39d98a', tof:'#61dafb', baro:'#f7b955', cbaro:'#b084f5', setpt:'#fff', thr:'#ff6b6b', fV:'#61dafb', usedV:'#39d98a', desV:'#f7b955', src:'#39d98a', accX:'#61dafb', accY:'#f7b955', accZ:'#39d98a', roll:'#ffffff', pitch:'#b084f5', jump:'#ff4d4d' }};
+// Categorical line colors — validated colorblind-safe set (dataviz skill,
+// light-mode default order). Red is reserved for anomaly/jump markers only,
+// never reused as a plain series color, so it never reads as a false alarm.
+const COLORS = {{ alt:'#2a78d6', tof:'#1baf7a', baro:'#eda100', cbaro:'#4a3aa7', setpt:'#eb6834', thr:'#2a78d6', fV:'#1baf7a', usedV:'#008300', bfV:'#4a3aa7', desV:'#eb6834', src:'#2a78d6', accX:'#1baf7a', accY:'#eda100', accZ:'#2a78d6', roll:'#4a3aa7', pitch:'#e87ba4', jump:'#e34948' }};
 const pts = DATA.points;
 function finite(v) {{ return typeof v === 'number' && Number.isFinite(v); }}
 function seriesData(key, scale=1) {{
@@ -305,7 +320,7 @@ function chartOptions(yTitle, extraScales={{}}, jumpLines=false) {{
     maintainAspectRatio: false,
     interaction: {{ mode: 'index', intersect: false }},
     plugins: {{
-      legend: {{ labels: {{ color: '#cbd5dc', usePointStyle: true, boxWidth: 8 }} }},
+      legend: {{ labels: {{ color: '#4b5563', usePointStyle: true, boxWidth: 8 }} }},
       jumpLines: {{ enabled: jumpLines }},
       tooltip: {{
         callbacks: {{
@@ -315,14 +330,14 @@ function chartOptions(yTitle, extraScales={{}}, jumpLines=false) {{
     }},
     scales: Object.assign({{
       x: {{
-        title: {{ display: true, text: 'time s', color: '#91a1ad' }},
-        ticks: {{ color: '#91a1ad', maxTicksLimit: 10 }},
-        grid: {{ color: '#1f2930' }}
+        title: {{ display: true, text: 'time s', color: '#838c99' }},
+        ticks: {{ color: '#838c99', maxTicksLimit: 10 }},
+        grid: {{ color: '#e7eaee' }}
       }},
       y: {{
-        title: {{ display: true, text: yTitle, color: '#91a1ad' }},
-        ticks: {{ color: '#91a1ad' }},
-        grid: {{ color: '#1f2930' }}
+        title: {{ display: true, text: yTitle, color: '#838c99' }},
+        ticks: {{ color: '#838c99' }},
+        grid: {{ color: '#e7eaee' }}
       }}
     }}, extraScales)
   }};
@@ -358,7 +373,7 @@ function drawAltitudeChart() {{
     dataset('ToF', 'tof', COLORS.tof),
     dataset('Baro', 'baro', COLORS.baro),
     dataset('Corrected baro', 'cbaro', COLORS.cbaro),
-    dataset('Setpoint', 'setpt', COLORS.setpt)
+    dataset('Setpoint', 'setpt', COLORS.setpt, {{ borderDash: [6, 4] }})
   ], 'meters', {{ jumpLines: true }});
 }}
 function drawControlChart() {{
@@ -372,7 +387,7 @@ function drawControlChart() {{
         {{ label: 'Throttle', data: seriesData('thr'), yAxisID: 'thr', borderColor: COLORS.thr, backgroundColor: COLORS.thr, pointRadius: 0, borderWidth: 2, tension: 0.15 }},
         {{ label: 'Filtered vario', data: seriesData('fV'), yAxisID: 'v', borderColor: COLORS.fV, backgroundColor: COLORS.fV, pointRadius: 0, borderWidth: 2, tension: 0.15 }},
         {{ label: 'Used vario', data: seriesData('usedV', 0.01), yAxisID: 'v', borderColor: COLORS.usedV, backgroundColor: COLORS.usedV, pointRadius: 0, borderWidth: 2, tension: 0.15 }},
-        {{ label: 'BF vario', data: seriesData('bfV', 0.01), yAxisID: 'v', borderColor: '#b084f5', backgroundColor: '#b084f5', pointRadius: 0, borderWidth: 1.5, borderDash: [5, 4], tension: 0.15, hidden: true }},
+        {{ label: 'BF vario', data: seriesData('bfV', 0.01), yAxisID: 'v', borderColor: COLORS.bfV, backgroundColor: COLORS.bfV, pointRadius: 0, borderWidth: 1.5, borderDash: [5, 4], tension: 0.15, hidden: true }},
         {{ label: 'Desired speed', data: seriesData('desV'), yAxisID: 'v', borderColor: COLORS.desV, backgroundColor: COLORS.desV, pointRadius: 0, borderWidth: 2, tension: 0.15 }}
       ]
     }},
@@ -381,7 +396,7 @@ function drawControlChart() {{
       maintainAspectRatio: false,
       interaction: {{ mode: 'index', intersect: false }},
       plugins: {{
-        legend: {{ labels: {{ color: '#cbd5dc', usePointStyle: true, boxWidth: 8 }} }},
+        legend: {{ labels: {{ color: '#4b5563', usePointStyle: true, boxWidth: 8 }} }},
         tooltip: {{
           callbacks: {{
             title: items => items.length ? `t=${{items[0].label}}s` : '',
@@ -394,22 +409,22 @@ function drawControlChart() {{
       }},
       scales: {{
         x: {{
-          title: {{ display: true, text: 'time s', color: '#91a1ad' }},
-          ticks: {{ color: '#91a1ad', maxTicksLimit: 10 }},
-          grid: {{ color: '#1f2930' }}
+          title: {{ display: true, text: 'time s', color: '#838c99' }},
+          ticks: {{ color: '#838c99', maxTicksLimit: 10 }},
+          grid: {{ color: '#e7eaee' }}
         }},
         v: {{
           position: 'left',
-          title: {{ display: true, text: 'vertical speed m/s', color: '#91a1ad' }},
-          ticks: {{ color: '#91a1ad' }},
-          grid: {{ color: '#1f2930' }},
+          title: {{ display: true, text: 'vertical speed m/s', color: '#838c99' }},
+          ticks: {{ color: '#838c99' }},
+          grid: {{ color: '#e7eaee' }},
           suggestedMin: -1.5,
           suggestedMax: 1.5
         }},
         thr: {{
           position: 'right',
-          title: {{ display: true, text: 'throttle us', color: '#91a1ad' }},
-          ticks: {{ color: '#91a1ad' }},
+          title: {{ display: true, text: 'throttle us', color: '#838c99' }},
+          ticks: {{ color: '#838c99' }},
           grid: {{ drawOnChartArea: false }}
         }}
       }}
@@ -426,13 +441,13 @@ function drawSourceChart() {{
       y: {{
         min: -0.2,
         max: 3.2,
-        title: {{ display: true, text: 'source id', color: '#91a1ad' }},
+        title: {{ display: true, text: 'source id', color: '#838c99' }},
         ticks: {{
-          color: '#91a1ad',
+          color: '#838c99',
           stepSize: 1,
           callback: value => ({{0:'BARO',1:'TOF',2:'BLEND',3:'HOLD'}}[value] ?? value)
         }},
-        grid: {{ color: '#1f2930' }}
+        grid: {{ color: '#e7eaee' }}
       }}
     }}
   }});
@@ -448,14 +463,14 @@ function drawImuChart() {{
     scales: {{
       acc: {{
         position: 'left',
-        title: {{ display: true, text: 'raw accel', color: '#91a1ad' }},
-        ticks: {{ color: '#91a1ad' }},
-        grid: {{ color: '#1f2930' }}
+        title: {{ display: true, text: 'raw accel', color: '#838c99' }},
+        ticks: {{ color: '#838c99' }},
+        grid: {{ color: '#e7eaee' }}
       }},
       att: {{
         position: 'right',
-        title: {{ display: true, text: 'attitude deg', color: '#91a1ad' }},
-        ticks: {{ color: '#91a1ad' }},
+        title: {{ display: true, text: 'attitude deg', color: '#838c99' }},
+        ticks: {{ color: '#838c99' }},
         grid: {{ drawOnChartArea: false }}
       }}
     }}

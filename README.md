@@ -1,8 +1,8 @@
 # Quad Mission Controller
 
-Autonomous competition launch system for a 3" FPV quadcopter. The goal is to maximize total air time under a strict **8-second powered flight limit** and **60ft altitude requirement**.
+Autonomous competition launch system for a 4" FPV quadcopter. The goal is to maximize total air time under a strict **8-second powered flight limit** and **60ft altitude requirement**.
 
-The quad sprints to 60ft as fast as possible, holds altitude while the clock runs down, then punches full throttle in the final moments to build upward velocity before motor cut. Descent is handled by an onboard autorotation device that is pre-spun by a brushed DC motor during the climb. No RC transmitter or receiver is used — an ESP32-S3 acts as the flight controller's RC input via MSP over UART.
+The quad sprints toward 60ft, hands off to a cascaded altitude controller, then runs the selected final mission phase: powered landing for no-autorotor testing, or autorotor pre-spin plus motor cut for the real unpowered-descent profile. No RC transmitter or receiver is used — an ESP32-S3 acts as the flight controller's RC input via MSP over UART.
 
 ---
 
@@ -11,7 +11,7 @@ The quad sprints to 60ft as fast as possible, holds altitude while the clock run
 | Component | Role |
 |---|---|
 | Happymodel EX1404 4800KV (×4) | Propulsion |
-| HQProp T3×2×3 | Props |
+| 4" props | Current propulsion setup |
 | GNB 300mAh 2–3S 80C LiHV XT30 | Power |
 | BetaFPV F4 2-3S AIO | FC + ESC |
 | ESP32-S3 Super Mini | Mission controller |
@@ -55,8 +55,8 @@ NPN transistor circuit (brushed autorotation motor):
 
 | GPIO | Function |
 |---|---|
-| 4 | UART1 TX → FC RX (MSP UART) |
-| 5 | UART1 RX ← FC TX (MSP UART) |
+| 4 | ESP32 UART1 TX → FC RX pad (currently R6) |
+| 5 | ESP32 UART1 RX ← FC TX pad (currently T6) |
 | 6 | PWM → 2N2222 base (via 100Ω) |
 | 8 | Optional external status LED output |
 | 10 | I2C SDA → VL53L1X SDA |
@@ -79,7 +79,7 @@ Flash target: `BETAFPVF4` (select in Betaflight Configurator firmware flasher �
 
 **Ports tab**
 - Assign the UART connected to ESP32 GPIO4/5: MSP only — no Serial RX on this port
-- Verify which UART number is broken out on the BetaFPV F4 pads used for FC↔ESP32 wiring
+- Current wiring uses physical `T6/R6`, which is UART6 in Betaflight and CLI `serial 5`
 
 **Configuration tab**
 - Receiver mode: MSP (`feature RX_MSP`)
@@ -108,9 +108,9 @@ Flash target: `BETAFPVF4` (select in Betaflight Configurator firmware flasher �
 
 **CLI**
 ```
-# T1/R1 pads are UART1. Betaflight CLI serial port IDs are zero-based:
-# UART1 = 0, UART2 = 1, UART3 = 2, etc.
-serial 0 1 115200 57600 0 115200
+# T6/R6 pads are UART6. Betaflight CLI serial port IDs are zero-based:
+# UART1 = 0, UART2 = 1, ..., UART6 = 5.
+serial 5 1 115200 57600 0 115200
 
 # Board alignment — right-side up, arrow pointing forward
 set align_board_roll = 0
@@ -188,6 +188,8 @@ flowchart LR
         SPRINTING["SPRINTING\nfull climb throttle"]
         HOLDING["HOLDING\nPID at TARGET_ALT_M"]
         PUNCHING["PUNCHING\nfull throttle burst"]
+        MEND{"Mission Type"}
+        MLAND["LANDING\npowered descent"]
         CUT["CUT\ndisarm + zero"]
         DONE["DONE"]
     end
@@ -204,7 +206,10 @@ flowchart LR
 
     SPRINTING -->|alt >= SPRINT_CUTOFF_M| HOLDING
     HOLDING   -->|missionTime >= PUNCH_START_MS| PUNCHING
-    PUNCHING  -->|missionTime >= 8000ms| CUT
+    PUNCHING  -->|missionTime >= 8000ms / ceiling / timeout| MEND
+    MEND -->|Powered Land| MLAND
+    MEND -->|Autorotor Cut| CUT
+    MLAND -->|alt < 15cm or timeout| IDLE
     CUT --> DONE
 
     HOVER_TEST  -->|disarm cmd| LANDING
@@ -219,11 +224,11 @@ flowchart LR
 
 ```
 ARMING    1500ms settle — throttle held at 1000, AUX1 high
-SPRINT    Full SPRINT_THROTTLE until SPRINT_CUTOFF_M (~56ft)
-          Autorotation motor begins pre-spin on HOLDING entry
+SPRINT    Full SPRINT_THROTTLE until SPRINT_CUTOFF_M (~39ft)
+          Mission type selects powered landing or autorotor pre-spin/cut
 HOLD      PID controller (Kp/Ki/Kd) stations at TARGET_ALT_M (60ft)
-PUNCH     Full PUNCH_THROTTLE from PUNCH_START_MS until 8000ms
-CUT       FC disarms, motors stop, autorotation descent begins
+PUNCH     PUNCH_THROTTLE from PUNCH_START_MS until 8000ms
+END       Powered LANDING or CUT, based on selected mission type
 ```
 
 ---
@@ -259,14 +264,15 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 | Hover Test | Arms → fixed `HOVER_THROTTLE`. Adjust slider live to find neutral buoyancy. Uses `HOVER_TEST_ANGLE_MODE`, defaulting to Acro/rate mode. |
 | Auto Hover Cal | Arms → ramps throttle until 5 consecutive readings above 15cm → writes `HOVER_THROTTLE` with no automatic offset → stays in Hover Test. Uses `HOVER_TEST_ANGLE_MODE`. |
 | Alt Hold | Arms → PID holds `ALT_HOLD_TARGET_M`. BLE disconnect triggers auto-land. |
-| Start Mission | Arms → full sprint/hold/punch/cut sequence. BLE disconnect ignored during mission. |
-| Land | In test modes: smooth velocity-based landing. Hidden/disabled during mission because mission uses cut-only behavior. |
+| Mission Type | Idle-only toggle between `Powered Land` and `Autorotor Cut`. Powered Land is the default for no-autorotor testing. Autorotor Cut enables pre-spin at hold entry and cuts motors at mission end/ceiling/timeout. |
+| Start Mission | Arms -> max-throttle sprint -> cascaded hold/punch -> selected mission ending. BLE disconnect ignored during mission. |
+| Land | In test modes: smooth velocity-based landing. Hidden/disabled during mission. |
 | Kill Motors | Immediate motor cut from any state. Use this as the emergency stop. |
 | Sync Values | Re-reads all parameters from ESP32. |
 | Bench Mode | Simulates altitude for desk testing. Never fly with this on. |
 | Angle Mode | Drives AUX2 high/low for Betaflight Angle mode. Can be changed only while idle or done. |
 
-**Preflight panel** (always visible after connect) shows live absolute altitude, relative altitude, state, throttle, KF vario, filtered vario, Betaflight vario, derived fallback vario, active vario source, ToF altitude, ToF confidence, altitude source, raw baro, and corrected baro at ~10Hz via BLE notify.
+**Preflight panel** (always visible after connect) shows full altitude, vario, ToF, baro, and FC diagnostic values while idle/post-flight. During active flight it switches to a compact health packet at ~10Hz: altitude, state, throttle, vario, active sources, and MSP/ToF/attitude/RC health. This keeps BLE notifications small while MSP/RC timing is most important.
 
 **Active state strip** appears whenever not idle — shows state name, altitude, throttle, and a KILL button. During Auto Hover Cal an inline progress panel shows altitude bar (0–50cm with 15cm threshold marker) and throttle bar. On cal completion a notification shows the detected hover throttle and auto-syncs the slider.
 
@@ -278,9 +284,9 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 
 | Parameter | Default | Encoding | Description |
 |---|---|---|---|
-| `HOVER_THROTTLE` | 1570 µs | uint16 | Current measured break-ground/hover baseline with the autorotor installed. Fine-tune in Hover Test before altitude hold. |
-| `SPRINT_THROTTLE` | 1850 µs | uint16 | Full climb throttle during sprint. Higher = faster to 60ft = more punch time. |
-| `SPRINT_CUTOFF_M` | 17.0 m | float×100 | Altitude to stop sprinting. Keep below 18.3m to absorb baro lag. |
+| `HOVER_THROTTLE` | 1230 µs | uint16 | Current measured hover baseline for 4-inch props without the autorotation assembly. Fine-tune in Hover Test before altitude hold. |
+| `SPRINT_THROTTLE` | 2000 us | uint16 | Max-throttle open-loop climb before cascade handoff. |
+| `SPRINT_CUTOFF_M` | 12.0 m | float x100 | Altitude where sprint hands off to cascaded hold. Kept well below 18.3m target to leave braking room. |
 | `TARGET_ALT_M` | 18.3 m | float×10 | Mission hold target. 60ft = 18.3m. Used by `HOLDING` after sprint cutoff. |
 | `ALT_HOLD_TARGET_M` | 1.5 m | float×10 | Test target used only by the BLE `ALT_HOLD` command; firmware clamps active command to 0.5–10.0m. |
 | `HOLD_KP` | 0.8 | float×10 | Outer altitude P: altitude error (m) to desired vertical speed (m/s). |
@@ -291,7 +297,7 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 | `MAX_DESCENT_MPS_TEST` | 0.35 m/s | float×100 | Alt Hold test-mode descent-speed cap. Gives the controller enough authority to brake low-altitude overshoot. |
 | `BF_VARIO_GROUND_EFFECT_M` | 1.20 m | float×100 | Height below which the KF inflates Betaflight vario covariance to reduce ground-effect influence. Lower outdoors to trust BF vario earlier. |
 | `PUNCH_START_MS` | 7500 ms | uint32 | Mission clock time to begin final burst. Later = more exit velocity. |
-| `PUNCH_THROTTLE` | 2000 µs | uint16 | Max throttle for punch phase. |
+| `PUNCH_THROTTLE` | 1750 µs | uint16 | Final burst throttle. Set higher only for the actual autorotation mission after climb behavior is verified. |
 
 ---
 
@@ -339,11 +345,13 @@ Current default speed limits:
 
 The internal setpoint ramps at runtime `ALT_RAMP_RATE_MPS` and the Alt Hold test climb/descent caps are runtime `MAX_CLIMB_MPS_TEST` / `MAX_DESCENT_MPS_TEST`. The outer loop uses `ALT_HOLD_LOOKAHEAD_S = 0.30s` with velocity clamped to `ALT_HOLD_LOOKAHEAD_MAX_V_MPS = 1.0m/s`, so it controls against a short predicted altitude instead of waiting for the measured altitude to cross the target. In `ALT_HOLD` test mode, a capture assist keeps desired climb at least `ALT_HOLD_CAPTURE_MIN_CLIMB_MPS = 0.16 m/s` while altitude is more than `ALT_HOLD_CAPTURE_MARGIN_M = 0.25m` below target and used vario is still below the minimum climb rate. The throttle floor is intentionally weak: it only applies while climb rate is below `ALT_HOLD_CAPTURE_FLOOR_MAX_V_MPS = 0.05 m/s`, and then only forces `ALT_HOLD_CAPTURE_MIN_OFFSET_US = 10us` above hover. If it is already descending faster than `ALT_HOLD_RECOVERY_DESCENT_MPS = -0.08 m/s`, or raw Betaflight vario is below `ALT_HOLD_RECOVERY_BF_DESCENT_CMS = -80 cm/s` before the KF velocity catches up, the floor rises to `ALT_HOLD_RECOVERY_MIN_OFFSET_US = 70us` above hover so it can arrest a low-altitude drop before ground contact. Alt Hold now uses only a short `BARO_SETTLE_MS = 500ms` settle at `HOVER_THROTTLE - 80us` ramping upward at `80us/s`; immediately after settle, cascade takes over instead of waiting for ToF-confirmed liftoff. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 150us`). Throttle pull-down is intentionally asymmetric: negative speed errors use `HOLD_KD_DOWN_SCALE = 0.55`, Alt Hold lower authority is limited to `THR_DOWN_OFFSET_ALT_HOLD_US = 150us`, and throttle can only decrease by `THROTTLE_SLEW_DOWN_US = 25us` per cascade update while upward recovery can rise by `THROTTLE_SLEW_UP_US = 100us`. Mission `HOLDING` keeps `MIN_MISSION_THROTTLE_US = 1050us` and the wider mission throttle band to preserve attitude authority.
 
-For outdoor 10m tests with the autorotor installed, start from the proven defaults and change one layer at a time. A reasonable first field profile is `ALT_RAMP_RATE_MPS = 0.80`, `MAX_CLIMB_MPS_TEST = 0.60`, `MAX_DESCENT_MPS_TEST = 0.35`, and `BF_VARIO_GROUND_EFFECT_M = 0.80`. If the log still shows impossible ToF jumps above 1-2m, lower `BF_VARIO_GROUND_EFFECT_M` further or reduce ToF position trust above the low-altitude zone in the KF tuning.
+Current firmware defaults to the 4-inch/no-autorotor profile: `DEFAULT_MISSION_TYPE = 0`, meaning mission timeout/final punch/ceiling events transition to powered `LANDING`. The web UI exposes an idle-only **Mission Type** toggle. `Powered Land` is for no-autorotor testing. `Autorotor Cut` enables pre-spin at hold entry and transitions mission end/ceiling/timeout to `CUT`.
+
+For outdoor tests on the current 4-inch/no-autorotor setup, use `Mission: Powered Land`: max-throttle sprint to 12.0m, cascaded hold toward 18.3m, then powered landing. Move `SPRINT_CUTOFF_M` based on logs: lower it if the handoff still overshoots, raise it only if the controller has clear braking margin. If the log still shows impossible ToF jumps above 1-2m, lower `BF_VARIO_GROUND_EFFECT_M` further or reduce ToF position trust above the low-altitude zone in the KF tuning.
 
 **Landing** uses a velocity controller with flare, driven by the same raw KF vario used by Alt Hold. Above `LANDING_FLARE_ALT_M = 0.45m`, it targets `DESCENT_RATE_MPS = 0.35 m/s` downward. Below flare height it progressively slows, reaching `LANDING_FINAL_DESCENT_MPS = 0.07 m/s` below `LANDING_FINAL_ALT_M = 0.20m`, while also raising the base throttle closer to hover. Flare selection uses `LANDING_LOOKAHEAD_S = 0.25s`, so fast descent starts softening before the measured altitude reaches the threshold. Landing throttle ramps down over `LANDING_ENTRY_RAMP_MS = 900ms` instead of chopping immediately when Land is commanded during a climb. Below `LANDING_LOW_ALT_FLOOR_M = 0.65m`, descent-rate-dependent throttle floors keep enough thrust to avoid hitting the floor and rebounding before flare catches up. Motors cut when valid ToF sees `LANDING_GROUND_M = 0.06m`, when baro/fused altitude reaches ground after real descent, when landing starts already at ground height, or after a 30s timeout. `ALT_HOLD` and `LANDING` also disarm if fresh FC attitude exceeds `ATTITUDE_ABORT_DEG = 45` degrees roll or pitch, which catches net/contact/tip-over failures instead of continuing to drive the motors.
 
-During `ALT_HOLD`, the serial monitor prints a per-run CSV-style log:
+Each `ALT_HOLD` test or mission stores a per-run CSV-style log:
 
 ```
 [RUN] ALT_HOLD hover=...
@@ -363,7 +371,7 @@ The log also includes FC-side diagnostics when MSP replies are available:
 | `vbat`, `amps` | `MSP_ANALOG` |
 | `diag` | bitmask of received diagnostic groups: bit0 raw IMU, bit1 attitude, bit2 status, bit3 analog, bit4 RC |
 
-The same log is also stored in ESP32 RAM during the run. After landing, reconnect the web UI and click **Download Last Log** in the Params tab to save the latest run as a CSV. The buffer is `FLIGHT_LOG_BYTES = 32768`, enough for roughly one short Alt Hold test at the current 50ms sample interval; if it fills, the log ends with `[LOG] truncated`.
+The same log is also stored in ESP32 RAM during the run. After landing, reconnect the web UI and click **Download Last Log** in the Params tab to save the latest run as a CSV. Log download is disabled while the aircraft is armed/flying so BLE reads cannot compete with MSP/RC timing. The buffer is `FLIGHT_LOG_BYTES = 60000`, sized for a full 8s mission plus powered landing at the current 50ms sample interval; if it fills, the log ends with `[LOG] truncated`.
 
 Normal flight builds keep `SERIAL_FLIGHT_DEBUG = 0`, so high-rate flight diagnostics are not printed over USB serial. Use the BLE telemetry panel and **Download Last Log** for flight analysis. Set `SERIAL_FLIGHT_DEBUG = 1` only for tethered bench testing.
 
@@ -387,15 +395,15 @@ The preview is separate from the BLE web app. It writes `*.preview.html` beside 
 
 No extra Betaflight feature is required to read `MSP_RAW_IMU`, `MSP_ATTITUDE`, `MSP_STATUS`, `MSP_ANALOG`, or `MSP_RC`; they are normal MSP telemetry replies. The UART between the ESP32 and FC must have MSP enabled, and `RX_MSP` must remain enabled if the ESP32 is also sending RC commands.
 
-For the BetaFPV F4 on physical `T1/R1`, the expected CLI shape is:
+For the BetaFPV F4 on current physical `T6/R6`, the expected CLI shape is:
 
 ```text
 feature RX_MSP
-serial 0 1 115200 57600 0 115200
+serial 5 1 115200 57600 0 115200
 save
 ```
 
-`serial 0` is UART1 on this target. USB VCP usually appears as `serial 20`. In the Ports tab, this corresponds to enabling **MSP** on UART1 at 115200. Keep the receiver configured for MSP if this ESP32 is the RC source.
+`serial 5` is UART6 on this target. USB VCP usually appears as `serial 20`. In the Ports tab, this corresponds to enabling **MSP** on UART6 at 115200. Keep the receiver configured for MSP if this ESP32 is the RC source. If you move back to `T1/R1`, use `serial 0 1 115200 57600 0 115200` instead.
 
 ---
 
@@ -409,7 +417,7 @@ save
    - Steady sag/climb -> raise `HOLD_KI` only after the P/D response is stable
    - Sluggish response -> raise `HOLD_KP` first, then cautiously raise `HOLD_KD`
 5. **Sprint test** — low altitude, confirm climb rate and cutoff
-6. **Full mission dry run** — confirm sprint→hold→punch→cut timing
+6. **Full mission dry run** — confirm sprint→hold→punch→selected ending timing
 7. **Punch timing** — adjust `PUNCH_START_MS`: later = more exit velocity
 
 ---
@@ -443,7 +451,8 @@ flowchart LR
         W2["CBfloat\ncutoff / target alt / KP / KI / KD"]
         W3["CBu32\npunch start ms"]
         W4["CBcommand\nhover / cal / alt hold / mission / disarm"]
-        TEL["telemetryChar NOTIFY\nlive packet @10Hz\nalt, state, throttle, vario, angle, ToF + FC diagnostics"]
+        W5["CBmissionType\npowered land / autorotor cut"]
+        TEL["telemetryChar NOTIFY\ncompact active packet @10Hz\nfull diagnostics idle/post-flight"]
     end
 
     subgraph PARAMS["VOLATILE PARAMS"]
@@ -457,10 +466,11 @@ flowchart LR
         KD["HOLD_KD"]
         PS["PUNCH_START_MS"]
         PT["PUNCH_THROTTLE"]
+        MT["MISSION_TYPE"]
     end
 
     subgraph SENSOR["ALTITUDE SENSORS"]
-        MSPALT["MSP_ALTITUDE over UART1\nbaro alt_cm + Betaflight vario"]
+        MSPALT["MSP_ALTITUDE over UART6\nbaro alt_cm + Betaflight vario"]
         TOFALT["VL53L1X over I2C\nlow-altitude AGL"]
         ALT["getAltitude()\n2-state KF altitude + velocity\nbaro + ToF + BF/derived vario"]
     end
@@ -469,13 +479,15 @@ flowchart LR
         SPR["SPRINTING\nchannels[2] = ST"]
         HLD["HOLDING / ALT_HOLD\nPID(KP,KI,KD,KF vario)"]
         PUN["PUNCHING\nchannels[2] = PT"]
+        ENDSEL["Mission end\nLANDING or CUT"]
+        CUT["CUT\ndisarm + zero"]
         HVT["HOVER_TEST\nchannels[2] = HT"]
         AHC["AUTO_HOVER_CAL\nramp → liftoff → HT"]
         LND["LANDING\nvelocity ctrl 0.4 m/s"]
     end
 
     subgraph OUT["OUTPUTS"]
-        MSP_OUT["UART1 MSP_SET_RAW_RC"]
+        MSP_OUT["UART6 MSP_SET_RAW_RC"]
         PWM["GPIO6 PWM\nautorotation motor"]
         LED["GPIO8 optional status LED"]
     end
@@ -484,6 +496,7 @@ flowchart LR
     W2 --> SC & TA & KP & KI & KD
     W3 --> PS
     W4 -->|state transitions| SM
+    W5 --> MT
 
     MSPALT --> ALT
     TOFALT --> ALT
@@ -496,9 +509,13 @@ flowchart LR
     KP & KI & KD --> HLD
     PS --> HLD
     PT --> PUN
+    MT --> ENDSEL
 
     SM --> MSP_OUT
-    SM -->|HOLDING entry| PWM
+    HLD -->|MT = autorotor cut| PWM
+    PUN --> ENDSEL
+    ENDSEL --> LND
+    ENDSEL -->|MT = autorotor cut| CUT
     SM --> LED
     SM --> TEL
 ```

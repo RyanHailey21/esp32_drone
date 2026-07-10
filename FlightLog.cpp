@@ -65,5 +65,6 @@ uint16_t flightLogReadChunk(uint8_t* out, uint16_t maxLen) {
 
     uint16_t n = min(maxLen, (uint16_t)(flightLogLen - flightLogReadOffset));
     memcpy(out, flightLogBuf + flightLogReadOffset, n);
+    flightLogReadOffset += n;
     return n;
 }
