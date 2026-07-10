@@ -35,10 +35,9 @@ const STATE_META = [
   /* 4  PUNCHING       */ { name: 'PUNCHING',       phase: 'armed',         timeline: 'punch',   isMission: true },
   /* 5  CUT            */ { name: 'CUT',            phase: 'safe',         timeline: 'land',    isMission: true },
   /* 6  HOVER_TEST     */ { name: 'HOVER TEST',     phase: 'live',          timeline: null,      isTest: true },
-  /* 7  AUTO_HOVER_CAL */ { name: 'AUTO HOVER CAL', phase: 'live',          timeline: null,      isTest: true },
-  /* 8  LANDING        */ { name: 'LANDING',        phase: 'safe',         timeline: 'land',    isLanding: true },
-  /* 9  DONE           */ { name: 'DONE',           phase: 'neutral-phase', timeline: null,      isDone: true },
-  /* 10 ALT_HOLD       */ { name: 'ALT HOLD',       phase: 'live',          timeline: null,      isTest: true },
+  /* 7  LANDING        */ { name: 'LANDING',        phase: 'safe',          timeline: 'land',    isLanding: true },
+  /* 8  DONE           */ { name: 'DONE',           phase: 'neutral-phase', timeline: null,      isDone: true },
+  /* 9  ALT_HOLD       */ { name: 'ALT HOLD',       phase: 'live',          timeline: null,      isTest: true },
 ];
 function stateMeta(id) { return STATE_META[id] || STATE_META[0]; }
 function phaseVar(phase) { return 'var(--' + phase + ')'; }
@@ -50,13 +49,9 @@ const PARAM_PRESET_KEY = 'quad-tuner-param-preset-v4-4in-autorotor-1400';
 const CMD_HOVER_TEST     = 1;
 const CMD_START_MISSION  = 2;
 const CMD_DISARM         = 3;
-const CMD_AUTO_HOVER_CAL = 4;
 const CMD_ALT_HOLD       = 5;
 const CMD_KILL           = 6;
 
-const CAL_LIFTOFF_CM = 15;
-const CAL_MIN_THROT  = 1150;
-const CAL_MAX_THROT  = 1650;
 
 let chars = {};
 let device = null, connected = false;
@@ -405,8 +400,6 @@ function clearBrowserPreset() {
 document.getElementById('btn-hover-test').addEventListener('click', () =>
   sendCommand(CMD_HOVER_TEST, 'Hover test command sent'));
 
-document.getElementById('btn-auto-hover').addEventListener('click', () =>
-  sendCommand(CMD_AUTO_HOVER_CAL, 'Auto hover calibration command sent'));
 
 document.getElementById('btn-alt-hold').addEventListener('click', () =>
   sendCommand(CMD_ALT_HOLD, 'Alt hold command sent'));
@@ -583,7 +576,7 @@ function formatElapsed(startMs) {
   const rem = (s - m * 60).toFixed(1).padStart(4, '0');
   return m + ':' + rem;
 }
-// Ticks the elapsed-time readouts independently of the ~10Hz telemetry rate
+// Ticks elapsed-time readouts independently of the 5-10Hz telemetry rate
 // so the stopwatch reads smoothly instead of stepping in telemetry-sized jumps.
 setInterval(() => {
   if (missionStartMs === null) return;
@@ -669,8 +662,7 @@ function onTelemetry(e) {
 
   const meta      = stateMeta(stateId);
   const isIdle    = !!meta.isIdle;
-  const isCal     = stateId === 7;
-  const isAltHold = stateId === 10;
+  const isAltHold = stateId === 9;
   const isDone    = !!meta.isDone;
   const isLanding = !!meta.isLanding;
   const isTestMode = !!meta.isTest;
@@ -700,7 +692,6 @@ function onTelemetry(e) {
   mtLand.disabled = !(isTestMode || isLanding);
   mtLand.textContent = isLanding ? 'Landing' : (isMissionMode ? 'No Land' : 'Land');
   el('btn-hover-test').disabled = !connected || (!isIdle && !isDone);
-  el('btn-auto-hover').disabled = !connected || (!isIdle && !isDone);
   el('btn-alt-hold').disabled = !connected || (!isIdle && !isDone);
   el('btn-start-mission').disabled = !connected || (!isIdle && !isDone);
   el('btn-mission-type').disabled = !connected || (!isIdle && !isDone);
@@ -720,17 +711,6 @@ function onTelemetry(e) {
   const judgeView = el('judge-view');
   Array.from(judgeView.classList).forEach(c => { if (c.startsWith('phase-')) judgeView.classList.remove(c); });
   judgeView.classList.add('phase-' + meta.phase);
-
-  // ── Cal progress panel ───────────────────────────────
-  el('cal-panel').classList.toggle('active', isCal);
-  if (isCal) {
-    const altFill = el('cal-alt-fill');
-    altFill.style.width      = (Math.max(0, Math.min(relCm, 50)) / 50 * 100) + '%';
-    altFill.style.background = relCm >= CAL_LIFTOFF_CM ? 'var(--safe)' : 'var(--live)';
-    el('cal-alt-val').textContent   = relCm + ' cm';
-    el('cal-throt-fill').style.width = Math.max(0, Math.min((throttle - CAL_MIN_THROT) / (CAL_MAX_THROT - CAL_MIN_THROT) * 100, 100)) + '%';
-    el('cal-throt-val').textContent = throttle;
-  }
 
   // ── ALTITUDE section ─────────────────────────────────
   el('d-abs').textContent = altM;
@@ -839,21 +819,8 @@ function onTelemetry(e) {
   }
 
   // ── Tab auto-switch ───────────────────────────────────
-  if ((stateId === 10 || stateId === 7) && prevStateId !== stateId) {
+  if (stateId === 9 && prevStateId !== stateId) {
     switchTab('pane-flight');
-  }
-
-  // ── Cal result notification (7 → anything) ────────────
-  if (prevStateId === 7 && stateId !== 7) {
-    const hs = el('slider-hover');
-    if (hs) { hs.value = throttle; el('val-hover').textContent = throttle; updateFill(hs); }
-    el('cal-result-val').textContent = throttle + ' µs';
-    el('cal-result').classList.add('active');
-    el('d-hover').classList.add('live');
-  }
-  if (isIdle) {
-    el('cal-result').classList.remove('active');
-    el('d-hover').classList.remove('live');
   }
 
   prevStateId = stateId;

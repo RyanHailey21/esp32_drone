@@ -15,9 +15,6 @@ void setup() {
     fcSerial.begin(115200, SERIAL_8N1, FC_RX_PIN, FC_TX_PIN);
     setupTof();
 
-    ledcAttach(MOTOR_PWM_PIN, PWM_FREQ, PWM_RESOLUTION);
-    ledcWrite(MOTOR_PWM_PIN, 0);
-
     pinMode(STATUS_LED, OUTPUT);
 
     setupBLE();
@@ -28,6 +25,10 @@ void setup() {
 }
 
 void loop() {
+    uint32_t loopStartUs = micros();
     runMissionLoop();
-    delay(20);
+    uint32_t elapsedUs = micros() - loopStartUs;
+    if (elapsedUs < CONTROL_LOOP_PERIOD_US) {
+        delayMicroseconds(CONTROL_LOOP_PERIOD_US - elapsedUs);
+    }
 }

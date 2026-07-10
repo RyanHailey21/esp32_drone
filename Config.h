@@ -3,7 +3,6 @@
 // ── Pins ─────────────────────────────────────────────────────
 #define FC_TX_PIN       4
 #define FC_RX_PIN       5
-#define MOTOR_PWM_PIN   6
 #define STATUS_LED      8
 
 // ToF altitude sensor (VL53L1X, I2C address is 0x29 in 7-bit Arduino form;
@@ -35,11 +34,6 @@
 #define KF_R_BF_VARIO               0.3f
 #define KF_R_BF_VARIO_GROUND_MULT   2.0f
 #define KF_R_DER_VARIO              0.6f
-
-// ── Brushed Motor PWM ────────────────────────────────────────
-#define PWM_FREQ        25000
-#define PWM_RESOLUTION  8
-#define MOTOR_DUTY      255
 
 // ── MSP Commands ─────────────────────────────────────────────
 #define MSP_STATUS      101
@@ -95,6 +89,14 @@
 #define FLIGHT_LOG_BYTES       60000
 #define FLIGHT_LOG_CHUNK_BYTES 220
 
+// BLE UI notifications are deliberately slower in flight so radio work cannot
+// compete with MSP acquisition and the control loop. Idle telemetry remains
+// faster for responsive preflight sensor checks.
+#define BLE_TELEMETRY_ACTIVE_PERIOD_MS 200
+#define BLE_TELEMETRY_IDLE_PERIOD_MS   100
+#define BLE_TELEMETRY_CONTROL_BUDGET_US 12000
+#define CONTROL_LOOP_PERIOD_US           20000
+
 // Serial output is not useful during flight and can add timing jitter. Keep
 // flight data in the BLE telemetry packet and downloadable in-memory CSV.
 #define SERIAL_FLIGHT_DEBUG    0
@@ -103,18 +105,8 @@
 #define CMD_HOVER_TEST      1
 #define CMD_START_MISSION   2
 #define CMD_DISARM          3
-#define CMD_AUTO_HOVER_CAL  4
 #define CMD_ALT_HOLD        5
 #define CMD_KILL            6
-
-// ── Auto Hover Calibration Constants ─────────────────────────
-#define CAL_START_THROTTLE  1150
-#define CAL_MAX_THROTTLE    1650
-#define CAL_STEP_US         5
-#define CAL_STEP_MS         250
-#define CAL_LIFTOFF_M       0.15f
-#define CAL_GE_OFFSET_US    0    // no automatic hover bump; tune free-air offset explicitly from logs
-#define CAL_TIMEOUT_MS      30000
 
 // ── Landing Constants ────────────────────────────────────────
 #define LANDING_GROUND_M    0.06f  // altitude threshold → cut motors
@@ -140,10 +132,11 @@
 #define BENCH_SPRINT_RATE_MPS     9.0f
 #define BENCH_PUNCH_RATE_MPS      7.0f
 #define BENCH_HOVER_LIFTOFF_US    1325
-#define BENCH_HOVER_CAL_RATE_MPS  0.8f
 
 // ── Arming Settle Time ────────────────────────────────────────
-#define ARMING_MS  1500
+#define ARMING_MS              1500
+#define ARM_CONFIRM_TIMEOUT_MS 5000
+#define FC_STATUS_FRESH_MS      750
 
 // ── Hover Test Throttle Ramp ──────────────────────────────────
 // µs added per loop iteration (~20ms) when ramping from arm-throttle to HOVER_THROTTLE.

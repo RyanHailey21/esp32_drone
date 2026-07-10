@@ -24,6 +24,13 @@ static uint32_t lastAltitudeRequestMs = 0;
 static uint32_t lastDiagRequestMs = 0;
 static uint8_t nextDiagSlot = 0;
 
+static uint32_t readU32(const uint8_t* p) {
+    return (uint32_t)p[0]
+         | ((uint32_t)p[1] << 8)
+         | ((uint32_t)p[2] << 16)
+         | ((uint32_t)p[3] << 24);
+}
+
 enum MspParseState : uint8_t {
     MSP_WAIT_DOLLAR,
     MSP_WAIT_M,
@@ -199,6 +206,20 @@ static void handleMspFrame(uint8_t cmd, const uint8_t* payload, uint8_t len) {
                 lastFcCycleTimeUs = readU16(payload + 0);
                 lastFcI2cErrors = readU16(payload + 2);
                 lastFcSensorsMask = readU16(payload + 4);
+                if (len >= 10) {
+                    lastFcFlightModeFlags = readU32(payload + 6);
+                    lastFcArmed = (lastFcFlightModeFlags & 0x01u) != 0;
+                    lastFcStatusMs = nowMs;
+                }
+                // Betaflight 4.4 appends a variable-length mode mask followed
+                // by the arming-disable flag count and 32-bit flags.
+                if (len >= 17) {
+                    uint8_t extraModeBytes = payload[15] & 0x0F;
+                    uint8_t disableFlagsOffset = 17 + extraModeBytes;
+                    if (disableFlagsOffset + 4 <= len) {
+                        lastFcArmingDisableFlags = readU32(payload + disableFlagsOffset);
+                    }
+                }
                 lastFcDiagMask |= 1 << 2;
                 lastFcDiagMs = nowMs;
             }
@@ -457,14 +478,6 @@ float getAltitude() {
         case ARMING:
         case HOVER_TEST:
             benchAlt = launchAlt;
-            break;
-
-        case AUTO_HOVER_CAL:
-            if (calThrottle >= BENCH_HOVER_LIFTOFF_US) {
-                benchAlt += BENCH_HOVER_CAL_RATE_MPS * dt;
-            } else {
-                benchAlt = launchAlt;
-            }
             break;
 
         case SPRINTING:

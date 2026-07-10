@@ -9,6 +9,5 @@ void     primeCascadeController(float currentAlt);
 void disarmToIdle(const char* reason);
 void startHoverTest();
 void startMission();
-void startAutoHoverCal();
 void startAltHold();
 void startLanding(float currentAlt);

@@ -2,7 +2,7 @@
 
 Autonomous competition launch system for a 4" FPV quadcopter. The goal is to maximize total air time under a strict **8-second powered flight limit** and **60ft altitude requirement**.
 
-The quad sprints toward 60ft, hands off to a cascaded altitude controller, then runs the selected final mission phase: powered landing for validation flights, or autorotor pre-spin plus motor cut for the real unpowered-descent profile. No RC transmitter or receiver is used — an ESP32-S3 acts as the flight controller's RC input via MSP over UART.
+The quad sprints toward 60ft while commanding clockwise yaw to spin the mechanical autorotor through its one-way bearing, hands off to a cascaded altitude controller, then runs the selected final phase: powered landing for validation flights or motor cut for the real unpowered descent. No RC transmitter or receiver is used — an ESP32-S3 acts as the flight controller's RC input via MSP over UART.
 
 ---
 
@@ -16,8 +16,6 @@ The quad sprints toward 60ft, hands off to a cascaded altitude controller, then 
 | BetaFPV F4 2-3S AIO | FC + ESC |
 | ESP32-S3 Super Mini | Mission controller |
 | VL53L1X ToF sensor | Low-altitude AGL altitude reference |
-| Brushed DC motor (3–12V) | Autorotation pre-spin |
-| 2N2222 NPN transistor + 1N4148 + 100Ω | Brushed motor driver |
 
 ---
 
@@ -32,8 +30,7 @@ BetaFPV F4 2-3S
   ├── 5V pad  → ESP32 VIN
   ├── GND pad → ESP32 GND
   ├── UARTx TX → ESP32 GPIO5  (x = whichever UART pad is used; note for CLI serial command)
-  ├── UARTx RX → ESP32 GPIO4
-  └── 5V or 9V pad → Brushed motor (+)  (check available BEC voltage on this board)
+  └── UARTx RX → ESP32 GPIO4
 
 VL53L1X ToF sensor
   ├── VIN/VCC → ESP32 3V3  (sensor operating range is 2.6–3.5V; do not power a bare LGA sensor from 5V)
@@ -43,12 +40,6 @@ VL53L1X ToF sensor
   ├── INT     → not connected
   └── SHUT    → not connected by default (`TOF_SHUT_PIN = -1`)
 
-NPN transistor circuit (brushed autorotation motor):
-  ESP32 GPIO6 → 100Ω → 2N2222 base
-  2N2222 emitter → GND
-  2N2222 collector → Brushed motor (-)
-  1N4148 flyback: anode→collector, cathode→9V pad
-  100µF cap across 9V pad and GND
 ```
 
 **ESP32-S3 Super Mini Pin Assignment**
@@ -57,7 +48,6 @@ NPN transistor circuit (brushed autorotation motor):
 |---|---|
 | 4 | ESP32 UART1 TX → FC RX pad (currently R6) |
 | 5 | ESP32 UART1 RX ← FC TX pad (currently T6) |
-| 6 | PWM → 2N2222 base (via 100Ω) |
 | 8 | Optional external status LED output |
 | 10 | I2C SDA → VL53L1X SDA |
 | 11 | I2C SCL → VL53L1X SCL |
@@ -172,16 +162,13 @@ flowchart LR
     BOOT(("BOOT")) --> IDLE
 
     IDLE -->|hover test cmd| ARMING_HT
-    IDLE -->|auto hover cal cmd| ARMING_AC
     IDLE -->|alt hold cmd| ARMING_AH
     IDLE -->|start mission cmd| ARMING_M
 
     subgraph TEST["TEST MODES  —  BLE disconnect → LANDING"]
         ARMING_HT["ARMING\nhover path"]
-        ARMING_AC["ARMING\nauto cal path"]
         ARMING_AH["ARMING\nalt hold path"]
         HOVER_TEST["HOVER_TEST\nfixed HOVER_THROTTLE"]
-        AUTO_HOVER_CAL["AUTO_HOVER_CAL\nramp until liftoff"]
         ALT_HOLD["ALT_HOLD\nPID at ALT_HOLD_TARGET_M"]
     end
 
@@ -199,12 +186,8 @@ flowchart LR
     LANDING["LANDING\nvelocity descent\n0.4 m/s target"]
 
     ARMING_HT -->|1500ms| HOVER_TEST
-    ARMING_AC -->|1500ms| AUTO_HOVER_CAL
     ARMING_AH -->|1500ms| ALT_HOLD
     ARMING_M  -->|1500ms| SPRINTING
-
-    AUTO_HOVER_CAL -->|liftoff 5× confirmed| HOVER_TEST
-    AUTO_HOVER_CAL -->|timeout / max throttle| IDLE
 
     SPRINTING -->|alt >= SPRINT_CUTOFF_M| HOLDING
     HOLDING   -->|missionTime >= PUNCH_START_MS| PUNCHING
@@ -216,7 +199,6 @@ flowchart LR
 
     HOVER_TEST  -->|disarm cmd| LANDING
     ALT_HOLD    -->|disarm cmd| LANDING
-    AUTO_HOVER_CAL -->|disarm cmd| LANDING
     LANDING -->|alt < 15cm or timeout| IDLE
 ```
 
@@ -245,7 +227,6 @@ END       Powered LANDING or CUT, based on selected mission type
 | Rapid strobe (100ms) | SPRINTING |
 | Solid on | HOLDING |
 | Very fast strobe (50ms) | PUNCHING |
-| Medium blink (300ms) | AUTO HOVER CAL |
 | Medium blink (500ms) | HOVER TEST / ALT HOLD |
 | Slow strobe (200ms, short on) | LANDING |
 | Rapid double blink | DONE |
@@ -265,9 +246,8 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 | Button | Behavior |
 |---|---|
 | Hover Test | Arms → fixed `HOVER_THROTTLE`. Adjust slider live to find neutral buoyancy. Uses `HOVER_TEST_ANGLE_MODE`, defaulting to Acro/rate mode. |
-| Auto Hover Cal | Arms → ramps throttle until 5 consecutive readings above 15cm → writes `HOVER_THROTTLE` with no automatic offset → stays in Hover Test. Uses `HOVER_TEST_ANGLE_MODE`. |
 | Alt Hold | Arms → PID holds `ALT_HOLD_TARGET_M`. BLE disconnect triggers auto-land. |
-| Mission Type | Idle-only toggle between `Powered Land` and `Autorotor Cut`. Powered Land is the default for validation flights. Autorotor Cut adds clockwise sprint yaw, enables pre-spin at hold entry, and cuts motors at mission end/ceiling/timeout. |
+| Mission Type | Idle-only toggle between `Powered Land` and `Autorotor Cut`. Powered Land is the default for validation flights. Autorotor Cut adds clockwise sprint yaw and cuts the flight motors at mission end/ceiling/timeout. |
 | Start Mission | Arms -> max-throttle sprint -> cascaded hold/punch -> selected mission ending. BLE disconnect ignored during mission. |
 | Land | In test modes: smooth velocity-based landing. Hidden/disabled during mission. |
 | Kill Motors | Immediate motor cut from any state. Use this as the emergency stop. |
@@ -277,7 +257,7 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 
 **Preflight panel** (always visible after connect) shows full altitude, vario, ToF, baro, and FC diagnostic values while idle/post-flight. During active flight it switches to a compact health packet at ~10Hz: altitude, state, throttle, vario, active sources, and MSP/ToF/attitude/RC health. This keeps BLE notifications small while MSP/RC timing is most important.
 
-**Active state strip** appears whenever not idle — shows state name, altitude, throttle, and a KILL button. During Auto Hover Cal an inline progress panel shows altitude bar (0–50cm with 15cm threshold marker) and throttle bar. On cal completion a notification shows the detected hover throttle and auto-syncs the slider.
+**Active state strip** appears whenever not idle — shows state name, altitude, throttle, and a KILL button.
 
 ---
 
@@ -349,7 +329,7 @@ Current default speed limits:
 
 The Alt Hold test setpoint ramps at runtime `ALT_RAMP_RATE_MPS`, and its climb/descent caps are runtime `MAX_CLIMB_MPS_TEST` / `MAX_DESCENT_MPS_TEST`. Mission `HOLDING` does not use that slow test ramp: after the open-loop sprint it immediately captures `TARGET_ALT_M`, allowing the velocity loop to brake the real ascent and then continue toward 18.3m before Punch. The outer loop uses `ALT_HOLD_LOOKAHEAD_S = 0.30s` with velocity clamped to `ALT_HOLD_LOOKAHEAD_MAX_V_MPS = 1.0m/s`, so it controls against a short predicted altitude instead of waiting for the measured altitude to cross the target. In `ALT_HOLD` test mode, a capture assist keeps desired climb at least `ALT_HOLD_CAPTURE_MIN_CLIMB_MPS = 0.16 m/s` while altitude is more than `ALT_HOLD_CAPTURE_MARGIN_M = 0.25m` below target and used vario is still below the minimum climb rate. The throttle floor is intentionally weak: it only applies while climb rate is below `ALT_HOLD_CAPTURE_FLOOR_MAX_V_MPS = 0.05 m/s`, and then only forces `ALT_HOLD_CAPTURE_MIN_OFFSET_US = 10us` above hover. If it is already descending faster than `ALT_HOLD_RECOVERY_DESCENT_MPS = -0.08 m/s`, or raw Betaflight vario is below `ALT_HOLD_RECOVERY_BF_DESCENT_CMS = -80 cm/s` before the KF velocity catches up, the floor rises to `ALT_HOLD_RECOVERY_MIN_OFFSET_US = 70us` above hover so it can arrest a low-altitude drop before ground contact. Alt Hold uses a short `BARO_SETTLE_MS = 500ms` settle at `HOVER_THROTTLE - 80us`; immediately after settle, cascade takes over. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 150us`). Throttle pull-down is intentionally asymmetric: negative speed errors use `HOLD_KD_DOWN_SCALE = 0.55`, Alt Hold lower authority is limited to `THR_DOWN_OFFSET_ALT_HOLD_US = 150us`, and throttle can only decrease by `THROTTLE_SLEW_DOWN_US = 25us` per cascade update while upward recovery can rise by `THROTTLE_SLEW_UP_US = 100us`. Mission `HOLDING` keeps `MIN_MISSION_THROTTLE_US = 1050us` and the wider mission throttle band to preserve attitude authority.
 
-The current hover baseline is the full 4-inch autorotation assembly at `1400us`. Firmware still defaults to `DEFAULT_MISSION_TYPE = 0` as the safer powered-landing selection after reboot; select `Autorotor Cut` explicitly for the real mission. `Autorotor Cut` commands `SPRINT_YAW` during the sprint, enables the separate pre-spin output at hold entry, and transitions mission end/ceiling/timeout to `CUT`. Entering `CUT` now stops both the Betaflight flight motors and the separate pre-spin PWM output, so the descent is unpowered. The sprint yaw defaults to `1700us`, which is right/clockwise aircraft yaw viewed from above with the required `AETR1234` channel map. At each non-sprint loop iteration the firmware explicitly restores yaw to `1500us`, so the command cannot leak into hold, punch, landing, or test modes.
+The current hover baseline is the full 4-inch autorotation assembly at `1400us`. Firmware still defaults to `DEFAULT_MISSION_TYPE = 0` as the safer powered-landing selection after reboot; select `Autorotor Cut` explicitly for the real mission. `Autorotor Cut` commands `SPRINT_YAW` during the sprint so the one-way bearing mechanically spins the autorotor, then transitions mission end/ceiling/timeout to `CUT`. There is no separate autorotor motor or PWM output. The sprint yaw defaults to `1700us`, which is right/clockwise aircraft yaw viewed from above with the required `AETR1234` channel map. At each non-sprint loop iteration the firmware explicitly restores yaw to `1500us`, so the command cannot leak into hold, punch, landing, or test modes.
 
 Sprint velocity is expected to exceed the low-altitude test envelope. Raw BF/derived vario inputs and the fused control state therefore use a `10m/s` plausibility envelope (`VARIO_MEAS_MAX_CMS` / `VARIO_CONTROL_MAX_CMS`). A bad or stale estimate must persist for `CASCADE_INVALID_GRACE_MS = 300ms` before ending control. Persistent failure starts powered Landing in test/powered modes, but selects `CUT` in Autorotor Cut mode instead of unexpectedly entering powered Landing.
 
@@ -418,25 +398,16 @@ save
 ## Tuning Sequence
 
 1. **Accelerometer calibration** — drone flat and still, Betaflight Setup → Calibrate Accelerometer
-2. **Auto Hover Cal** — gets a first-pass `HOVER_THROTTLE` automatically
-3. **Hover Test** — fine-tune `HOVER_THROTTLE` until neutrally buoyant. Auto Hover Cal only provides a first-pass liftoff value.
-4. **Alt Hold test** — command a low target (e.g. 1.0m), verify PID holds it. Tune `HOLD_KP/KI/KD`:
+2. **Hover Test** — fine-tune `HOVER_THROTTLE` until neutrally buoyant with the complete flight assembly installed.
+3. **Alt Hold test** — command a low target (e.g. 1.0m), verify PID holds it. Tune `HOLD_KP/KI/KD`:
    - Oscillating or bouncing through the target -> lower `HOLD_KD`, lower speed caps, or lower `HOLD_KP`
    - Steady sag/climb -> raise `HOLD_KI` only after the P/D response is stable
    - Sluggish response -> raise `HOLD_KP` first, then cautiously raise `HOLD_KD`
-5. **Sprint test** — low altitude, confirm climb rate and cutoff
-6. **Full mission dry run** — confirm sprint→hold→punch→selected ending timing
-7. **Punch timing** — adjust `PUNCH_START_MS`: later = more exit velocity
+4. **Sprint test** — low altitude, confirm climb rate and cutoff
+5. **Full mission dry run** — confirm sprint→hold→punch→selected ending timing
+6. **Punch timing** — adjust `PUNCH_START_MS`: later = more exit velocity
 
 ---
-
-## Auto Hover Calibration Detail
-
-- Starts at `CAL_START_THROTTLE = 1150 µs`, steps up 5µs every 250ms
-- Liftoff confirmed after **5 consecutive readings** above 15cm (debounce against baro noise)
-- Final `HOVER_THROTTLE = calThrottle`; any free-air offset should be tuned explicitly in Hover Test.
-- `launchAlt` is set at the ARMING→CAL transition (after 1500ms motor settle), not before, to avoid baro drift pre-triggering the threshold
-- Cal times out after 30s or at `CAL_MAX_THROTTLE = 1650 µs`
 
 `ALT_HOLD` test mode has only a short settle guard. For the first 500ms after entering `ALT_HOLD`, `launchAlt` is refreshed while sensors settle and throttle starts below hover. After that, cascade starts immediately and stays active; it no longer waits for 12cm ToF-confirmed liftoff. This avoids the old pre-liftoff ramp that could build excess upward energy and then bounce when closed-loop finally engaged.
 
@@ -444,7 +415,7 @@ save
 
 ## BLE Safety
 
-- **Test states** (`HOVER_TEST`, `ALT_HOLD`, `AUTO_HOVER_CAL`) and their arming delay: BLE disconnect triggers velocity-based landing immediately
+- **Test states** (`HOVER_TEST`, `ALT_HOLD`) and their arming delay: BLE disconnect triggers velocity-based landing immediately
 - **Mission states** (`SPRINTING`, `HOLDING`, `PUNCHING`): BLE disconnect is ignored — the mission runs to completion autonomously
 - On reconnect, the ESP32 restarts advertising automatically; reconnect from the browser to resume monitoring
 
@@ -458,9 +429,9 @@ flowchart LR
         W1["CBu16\nhover / sprint / punch throttle / sprint yaw"]
         W2["CBfloat\ncutoff / target alt / KP / KI / KD"]
         W3["CBu32\npunch start ms"]
-        W4["CBcommand\nhover / cal / alt hold / mission / disarm"]
+        W4["CBcommand\nhover / alt hold / mission / land / kill"]
         W5["CBmissionType\npowered land / autorotor cut"]
-        TEL["telemetryChar NOTIFY\ncompact active packet @10Hz\nfull diagnostics idle/post-flight"]
+        TEL["telemetryChar NOTIFY\ncompact active packet @5Hz\nfull diagnostics idle/post-flight @10Hz"]
     end
 
     subgraph PARAMS["VOLATILE PARAMS"]
@@ -491,13 +462,11 @@ flowchart LR
         ENDSEL["Mission end\nLANDING or CUT"]
         CUT["CUT\ndisarm + zero"]
         HVT["HOVER_TEST\nchannels[2] = HT"]
-        AHC["AUTO_HOVER_CAL\nramp → liftoff → HT"]
         LND["LANDING\nvelocity ctrl 0.4 m/s"]
     end
 
     subgraph OUT["OUTPUTS"]
         MSP_OUT["UART6 MSP_SET_RAW_RC"]
-        PWM["GPIO6 PWM\nautorotation motor"]
         LED["GPIO8 optional status LED"]
     end
 
@@ -509,9 +478,9 @@ flowchart LR
 
     MSPALT --> ALT
     TOFALT --> ALT
-    ALT -->|altitude m + KF vario cm/s| HLD & AHC & LND & SPR
+    ALT -->|altitude m + KF vario cm/s| HLD & LND & SPR
 
-    HT --> HLD & HVT & AHC
+    HT --> HLD & HVT
     ST --> SPR
     SY --> SPR
     SC --> SPR
@@ -522,7 +491,6 @@ flowchart LR
     MT --> SPR & ENDSEL
 
     SM --> MSP_OUT
-    HLD -->|MT = autorotor cut| PWM
     PUN --> ENDSEL
     ENDSEL --> LND
     ENDSEL -->|MT = autorotor cut| CUT
@@ -534,13 +502,13 @@ flowchart LR
 
 ## Bench Mode
 
-Toggle from `quad_tuner.html` while idle. Simulates altitude so mission flow and auto hover cal can be tested on the desk without a flight controller connected. Defaults off on every boot — never fly with it on.
+Toggle from `quad_tuner.html` while idle. Simulates altitude so mission and Alt Hold state flow can be tested on the desk without a flight controller connected. Defaults off on every boot — never fly with it on.
 
 ---
 
 ## Angle Mode Toggle
 
-The tuner exposes a BLE `Angle Mode` button that controls AUX2 (`CH_ANGLE`) for Alt Hold, Landing, and Mission states. `Angle Mode: On` sends 1800us; `Angle Mode: Off` sends 1000us. Hover Test and Auto Hover Cal use compile-time `HOVER_TEST_ANGLE_MODE`, defaulting to Acro/rate mode to avoid Angle-mode ground kick during fixed-throttle tests. The firmware rejects UI Angle changes unless the state is `IDLE` or `DONE`.
+The tuner exposes a BLE `Angle Mode` button that controls AUX2 (`CH_ANGLE`) for Alt Hold, Landing, and Mission states. `Angle Mode: On` sends 1800us; `Angle Mode: Off` sends 1000us. Hover Test uses compile-time `HOVER_TEST_ANGLE_MODE`, defaulting to Acro/rate mode to avoid Angle-mode ground kick during fixed-throttle tests. The firmware rejects UI Angle changes unless the state is `IDLE` or `DONE`.
 
 The boot default is `DEFAULT_ANGLE_MODE = 1`, so autonomous test modes and the mission start with Betaflight Angle mode enabled unless the web UI toggle is changed while idle.
 

@@ -14,24 +14,19 @@ enum MissionState {
     PUNCHING,      // max throttle final burst
     CUT,
     HOVER_TEST,
-    AUTO_HOVER_CAL,
     LANDING,
     DONE,
     ALT_HOLD       // PID holds ALT_HOLD_TARGET_M (test mode, BLE-safe)
 };
 
 // ── Arm Target ───────────────────────────────────────────────
-enum ArmTarget { ARM_MISSION, ARM_HOVER_TEST, ARM_AUTO_HOVER_CAL, ARM_ALT_HOLD };
+enum ArmTarget { ARM_MISSION, ARM_HOVER_TEST, ARM_ALT_HOLD };
 
 // ── Runtime State ────────────────────────────────────────────
 extern MissionState state;
 extern ArmTarget    armTarget;
 extern uint32_t     launchTime;
 extern uint32_t     armTime;
-extern uint32_t     calTime;
-extern uint32_t     calStepTime;
-extern uint16_t     calThrottle;
-extern uint8_t      calLiftoffCount;
 extern float        launchAlt;
 extern float        currentRelAlt;
 extern int16_t      lastVario;
@@ -55,6 +50,10 @@ extern uint32_t     lastFcAttitudeMs;
 extern uint16_t     lastFcCycleTimeUs;
 extern uint16_t     lastFcI2cErrors;
 extern uint16_t     lastFcSensorsMask;
+extern uint32_t     lastFcFlightModeFlags;
+extern uint32_t     lastFcArmingDisableFlags;
+extern uint32_t     lastFcStatusMs;
+extern bool         lastFcArmed;
 extern uint16_t     lastFcRcThrottle;
 extern uint16_t     lastFcRcArm;
 extern uint16_t     lastFcRcAngle;
@@ -96,6 +95,7 @@ extern uint32_t     landingStartMs;
 extern float        landingStartAlt;
 extern volatile bool bleSafetyLand;
 extern volatile bool bleRequestedLand;
+extern volatile uint8_t pendingBleCommand;
 
 // ── Tunable Parameters (BLE-writable) ────────────────────────
 extern volatile uint16_t HOVER_THROTTLE;

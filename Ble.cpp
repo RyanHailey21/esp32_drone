@@ -68,43 +68,9 @@ public:
 
         uint8_t cmd = c->getValue()[0];
         Serial.printf("[BLE] COMMAND = %d\n", cmd);
-
-        switch (cmd) {
-            case CMD_HOVER_TEST:
-                if (state == IDLE || state == DONE) startHoverTest();
-                else Serial.println("[BLE] Ignored hover test command: not idle");
-                break;
-
-            case CMD_START_MISSION:
-                if (state == IDLE || state == DONE) startMission();
-                else Serial.println("[BLE] Ignored mission command: not idle");
-                break;
-
-            case CMD_DISARM:
-                if (state == HOVER_TEST || state == ALT_HOLD || state == AUTO_HOVER_CAL)
-                    bleRequestedLand = true;
-                else
-                    disarmToIdle("[BLE] Disarm command");
-                break;
-
-            case CMD_KILL:
-                disarmToIdle("[BLE] Kill command");
-                break;
-
-            case CMD_AUTO_HOVER_CAL:
-                if (state == IDLE || state == DONE) startAutoHoverCal();
-                else Serial.println("[BLE] Ignored auto hover calibration command: not idle");
-                break;
-
-            case CMD_ALT_HOLD:
-                if (state == IDLE || state == DONE) startAltHold();
-                else Serial.println("[BLE] Ignored alt hold command: not idle");
-                break;
-
-            default:
-                Serial.println("[BLE] Unknown command");
-                break;
-        }
+        // NimBLE callbacks run on a different task. The main control loop owns
+        // state transitions and all flight-controller UART writes.
+        __atomic_store_n(&pendingBleCommand, cmd, __ATOMIC_RELEASE);
     }
 };
 
@@ -114,8 +80,8 @@ class ServerCB : public NimBLEServerCallbacks {
         NimBLEDevice::startAdvertising();
         // Test states land on BLE loss. Mission states continue autonomously.
         bool armingTestMode = state == ARMING
-            && (armTarget == ARM_HOVER_TEST || armTarget == ARM_AUTO_HOVER_CAL || armTarget == ARM_ALT_HOLD);
-        if (state == HOVER_TEST || state == ALT_HOLD || state == AUTO_HOVER_CAL || armingTestMode) {
+            && (armTarget == ARM_HOVER_TEST || armTarget == ARM_ALT_HOLD);
+        if (state == HOVER_TEST || state == ALT_HOLD || armingTestMode) {
             bleSafetyLand = true;
         }
     }

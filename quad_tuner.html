@@ -69,33 +69,6 @@
   <!-- ══════════════════════════════════════════════════ -->
   <div class="tab-pane active" id="pane-flight">
 
-    <!-- ── AUTO HOVER CAL PROGRESS ─────────────────── -->
-    <div class="cal-panel" id="cal-panel">
-      <div class="cal-panel-title">AUTO HOVER CAL — LIFTOFF DETECTION</div>
-      <div class="cal-bar-row">
-        <div class="cal-bar-lbl">ALT</div>
-        <div class="cal-bar-track">
-          <div class="cal-bar-fill" id="cal-alt-fill"></div>
-          <div class="cal-threshold"></div>
-        </div>
-        <div class="cal-bar-val" id="cal-alt-val">0 cm</div>
-      </div>
-      <div class="cal-bar-row">
-        <div class="cal-bar-lbl">THROT</div>
-        <div class="cal-bar-track">
-          <div class="cal-bar-fill" id="cal-throt-fill" style="background:var(--caution)"></div>
-        </div>
-        <div class="cal-bar-val" id="cal-throt-val">1150</div>
-      </div>
-    </div>
-
-    <!-- ── CAL RESULT NOTIFICATION ─────────────────── -->
-    <div class="cal-result" id="cal-result">
-      <div class="cal-result-head">HOVER THROTTLE DETECTED</div>
-      <div class="cal-result-val" id="cal-result-val">— µs</div>
-      <div class="cal-result-sub">Value synced · Drone settling to hover test</div>
-    </div>
-
     <div id="ble-warning"></div>
     <button id="connect-btn">Connect to Quad-Tuner</button>
 
@@ -301,7 +274,6 @@
       <button class="cmd-btn wide" id="btn-angle-mode">Angle Mode: Off</button>
       <button class="cmd-btn wide" id="btn-mission-type">Mission: Powered Land</button>
       <button class="cmd-btn" id="btn-hover-test">Hover Test</button>
-      <button class="cmd-btn" id="btn-auto-hover">Auto Hover Cal</button>
       <button class="cmd-btn" id="btn-alt-hold">Alt Hold</button>
       <button class="cmd-btn primary wide" id="btn-start-mission">Start Mission</button>
       <button class="cmd-btn land" id="btn-disarm" disabled>Land</button>

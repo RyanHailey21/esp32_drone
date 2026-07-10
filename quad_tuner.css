@@ -447,8 +447,7 @@ input[type=range]::-moz-range-thumb {
   line-height: 1.5;
 }
 
-/* Active param highlight — lit after Auto Hover Cal syncs a value, or
-   while a state-conditional section is the live/relevant one. */
+/* Active param highlight for a live state-conditional section. */
 .param.live, .dash-sec.live {
   border-color: var(--live);
   box-shadow: inset 0 0 0 1px var(--live), var(--shadow-card);
@@ -588,107 +587,6 @@ input[type=range]::-moz-range-thumb {
   color: var(--armed);
 }
 .mt-kill:hover { background: #f6d9d7; }
-
-/* ── CAL PROGRESS PANEL ─────────────────────────────── */
-.cal-panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 10px;
-  display: none;
-  box-shadow: var(--shadow-card);
-}
-.cal-panel.active { display: block; }
-
-.cal-panel-title {
-  font-family: var(--font-val);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  color: var(--ink-dim);
-  margin-bottom: 16px;
-  text-transform: uppercase;
-}
-
-.cal-bar-row {
-  display: flex; align-items: center; gap: 10px;
-  margin-bottom: 14px;
-}
-.cal-bar-lbl {
-  font-family: var(--font-val);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  color: var(--ink-dim);
-  width: 36px; flex-shrink: 0;
-}
-.cal-bar-track {
-  flex: 1; height: 6px;
-  background: var(--surface-sunken);
-  border-radius: 3px;
-  position: relative;
-}
-.cal-bar-fill {
-  height: 100%;
-  border-radius: 3px;
-  background: var(--live);
-  width: 0%;
-  transition: width 0.15s, background 0.3s;
-}
-.cal-threshold {
-  position: absolute;
-  top: -6px; bottom: -6px;
-  width: 2px;
-  background: var(--armed);
-  left: 30%;
-}
-.cal-threshold::after {
-  content: '15cm';
-  position: absolute;
-  top: -15px; left: 50%;
-  transform: translateX(-50%);
-  font-family: var(--font-val);
-  font-size: 8px;
-  color: var(--armed);
-  white-space: nowrap;
-}
-.cal-bar-val {
-  font-family: var(--font-val);
-  font-size: 11px;
-  color: var(--ink);
-  width: 46px; text-align: right; flex-shrink: 0;
-}
-
-/* ── CAL RESULT NOTIFICATION ────────────────────────── */
-.cal-result {
-  background: var(--safe-tint);
-  border: 1px solid var(--safe);
-  border-radius: 8px;
-  padding: 14px 16px;
-  margin-bottom: 10px;
-  display: none;
-}
-.cal-result.active { display: block; }
-.cal-result-head {
-  font-family: var(--font-hd);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--safe);
-  margin-bottom: 6px;
-  text-transform: uppercase;
-}
-.cal-result-val {
-  font-family: var(--font-val);
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--ink);
-  margin-bottom: 4px;
-}
-.cal-result-sub {
-  font-family: var(--font-val);
-  font-size: 10px;
-  color: var(--ink-dim);
-}
 
 /* ── FLIGHT INSTRUMENT PANEL ────────────────────────── */
 .dash { margin-bottom: 16px; }

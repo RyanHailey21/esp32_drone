@@ -8,10 +8,6 @@ ArmTarget    armTarget = ARM_MISSION;
 // ── Runtime State ────────────────────────────────────────────
 uint32_t launchTime      = 0;
 uint32_t armTime         = 0;
-uint32_t calTime         = 0;
-uint32_t calStepTime     = 0;
-uint16_t calThrottle     = CAL_START_THROTTLE;
-uint8_t  calLiftoffCount = 0;
 float    launchAlt       = 0;
 float    currentRelAlt   = 0;
 int16_t  lastVario       = 0;
@@ -35,6 +31,10 @@ uint32_t lastFcAttitudeMs = 0;
 uint16_t lastFcCycleTimeUs = 0;
 uint16_t lastFcI2cErrors = 0;
 uint16_t lastFcSensorsMask = 0;
+uint32_t lastFcFlightModeFlags = 0;
+uint32_t lastFcArmingDisableFlags = 0;
+uint32_t lastFcStatusMs = 0;
+bool     lastFcArmed = false;
 uint16_t lastFcRcThrottle = 0;
 uint16_t lastFcRcArm     = 0;
 uint16_t lastFcRcAngle   = 0;
@@ -76,6 +76,7 @@ uint32_t landingStartMs  = 0;
 float    landingStartAlt = 0;
 volatile bool bleSafetyLand = false;
 volatile bool bleRequestedLand = false;
+volatile uint8_t pendingBleCommand = 0;
 
 // ── Tunable Parameters (BLE-writable) ────────────────────────
 volatile uint16_t HOVER_THROTTLE  = (uint16_t)(AltitudeParameters::HOVER_THROTTLE + 0.5f);

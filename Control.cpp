@@ -72,7 +72,6 @@ uint16_t holdCascaded(float altitude, bool isMission) {
         if (!invalidPersisted) return fallbackThrottle;
 
         if (isMission && MISSION_TYPE == 1) {
-            ledcWrite(MOTOR_PWM_PIN, 0);
             state = CUT;
             return 1000;
         }
@@ -209,14 +208,6 @@ void startMission() {
     Serial.println("[STATE] -> ARMING");
 }
 
-void startAutoHoverCal() {
-    calThrottle = CAL_START_THROTTLE;
-    armTime     = millis();
-    armTarget   = ARM_AUTO_HOVER_CAL;
-    state       = ARMING;
-    Serial.println("[STATE] -> ARMING (auto hover cal)");
-}
-
 void startAltHold() {
     armTime   = millis();
     armTarget = ARM_ALT_HOLD;
@@ -233,7 +224,6 @@ void startLanding(float currentAlt) {
 }
 
 void disarmToIdle(const char* reason) {
-    ledcWrite(MOTOR_PWM_PIN, 0);
     channels[CH_ARM]      = 1000;
     channels[CH_ANGLE]    = 1000;
     channels[CH_THROTTLE] = 1000;

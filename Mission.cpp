@@ -26,11 +26,11 @@ static bool attitudeAbortActive() {
 }
 
 static bool testModeOrTestArming() {
-    if (state == HOVER_TEST || state == ALT_HOLD || state == AUTO_HOVER_CAL || state == LANDING) {
+    if (state == HOVER_TEST || state == ALT_HOLD || state == LANDING) {
         return true;
     }
     return state == ARMING
-        && (armTarget == ARM_HOVER_TEST || armTarget == ARM_AUTO_HOVER_CAL || armTarget == ARM_ALT_HOLD);
+        && (armTarget == ARM_HOVER_TEST || armTarget == ARM_ALT_HOLD);
 }
 
 static void finishMissionOrLand(float altitude, const char* reason) {
@@ -148,9 +148,23 @@ static void logFlightSample(uint32_t elapsedMs, const char* phase, float altitud
 
 static void pushTelemetry(float rawAlt, float altitude) {
     if (!telemetryChar) return;
-    static uint8_t tick = 0;
-    if (++tick < 5) return;
-    tick = 0;
+
+    bool activeFlight = state == ARMING
+                     || state == SPRINTING
+                     || state == HOLDING
+                     || state == PUNCHING
+                     || state == HOVER_TEST
+                     || state == LANDING
+                     || state == ALT_HOLD;
+
+    static uint32_t lastTelemetryMs = 0;
+    uint32_t nowMs = millis();
+    uint32_t periodMs = activeFlight
+                      ? BLE_TELEMETRY_ACTIVE_PERIOD_MS
+                      : BLE_TELEMETRY_IDLE_PERIOD_MS;
+    if (nowMs - lastTelemetryMs < periodMs) return;
+    lastTelemetryMs = nowMs;
+
     int32_t altCm     = (int32_t)(rawAlt * 100.0f);
     int32_t relCm     = (int32_t)(altitude * 100.0f);
     int16_t filtVarCs = (int16_t)constrain(filteredVario    * 100.0f, -32768.0f, 32767.0f);
@@ -158,15 +172,6 @@ static void pushTelemetry(float rawAlt, float altitude) {
     int16_t tofCm     = lastTofValid ? (int16_t)constrain(lastTofAltM * 100.0f, -32768.0f, 32767.0f) : -1;
     int32_t baroCm    = (int32_t)(lastBaroAltM * 100.0f);
     uint8_t tofValid  = lastTofValid ? 1 : 0;
-
-    bool activeFlight = state == ARMING
-                     || state == SPRINTING
-                     || state == HOLDING
-                     || state == PUNCHING
-                     || state == HOVER_TEST
-                     || state == AUTO_HOVER_CAL
-                     || state == LANDING
-                     || state == ALT_HOLD;
 
     if (activeFlight) {
         uint16_t diagMask = lastFcDiagMask;
@@ -239,7 +244,38 @@ static void pushTelemetry(float rawAlt, float altitude) {
     telemetryChar->notify();
 }
 
+static void processPendingBleCommand() {
+    uint8_t cmd = __atomic_exchange_n(&pendingBleCommand, 0, __ATOMIC_ACQ_REL);
+    if (cmd == 0) return;
+
+    switch (cmd) {
+        case CMD_HOVER_TEST:
+            if (state == IDLE || state == DONE) startHoverTest();
+            else Serial.println("[BLE] Ignored hover test command: not idle");
+            break;
+        case CMD_START_MISSION:
+            if (state == IDLE || state == DONE) startMission();
+            else Serial.println("[BLE] Ignored mission command: not idle");
+            break;
+        case CMD_DISARM:
+            if (state == HOVER_TEST || state == ALT_HOLD) bleRequestedLand = true;
+            else disarmToIdle("[BLE] Disarm command");
+            break;
+        case CMD_KILL:
+            disarmToIdle("[BLE] Kill command");
+            break;
+        case CMD_ALT_HOLD:
+            if (state == IDLE || state == DONE) startAltHold();
+            else Serial.println("[BLE] Ignored alt hold command: not idle");
+            break;
+        default:
+            Serial.println("[BLE] Unknown command");
+            break;
+    }
+}
+
 void runMissionLoop() {
+    uint32_t loopStartUs = micros();
     float    rawAlt      = getAltitude();
     float    altitude    = rawAlt - launchAlt;
     currentRelAlt        = altitude;
@@ -248,8 +284,6 @@ void runMissionLoop() {
     // Yaw is opt-in only during the autorotor sprint. Reset it every loop so
     // every transition, abort, test mode, and landing immediately returns to neutral.
     channels[CH_YAW] = RC_NEUTRAL_US;
-
-    pushTelemetry(rawAlt, altitude);
 
     // Keep vario filter current every loop so LANDING and other states see fresh data.
     // Use a time-based filter so smoothing does not change with loop-rate jitter.
@@ -298,6 +332,8 @@ void runMissionLoop() {
         }
     }
 
+    processPendingBleCommand();
+
     if ((state == SPRINTING || state == HOLDING || state == PUNCHING) && missionCeilingExceeded(altitude)) {
         finishMissionOrLand(altitude, "[MISSION] altitude ceiling exceeded");
     }
@@ -312,28 +348,27 @@ void runMissionLoop() {
             break;
 
         // ── ARMING ───────────────────────────────────────────
-        case ARMING:
+        case ARMING: {
             channels[CH_ARM]      = 1800;
             channels[CH_ANGLE]    = angleModeChannelValue();
             channels[CH_THROTTLE] = 1000;
             sendRC();
             digitalWrite(STATUS_LED, millis() % 200 < 100);
 
-            if (millis() - armTime > ARMING_MS) {
+            if (millis() - armTime > ARM_CONFIRM_TIMEOUT_MS
+                && !BENCH_MODE_ENABLED
+                && (!lastFcArmed || millis() - lastFcStatusMs > FC_STATUS_FRESH_MS)) {
+                disarmToIdle("[ARM] Betaflight did not confirm armed before timeout");
+                break;
+            }
+
+            bool fcArmConfirmed = BENCH_MODE_ENABLED
+                               || (lastFcArmed && millis() - lastFcStatusMs <= FC_STATUS_FRESH_MS);
+            if (millis() - armTime > ARMING_MS && fcArmConfirmed) {
                 switch (armTarget) {
                     case ARM_HOVER_TEST:
                         state = HOVER_TEST;
                         Serial.println("[STATE] → HOVER TEST");
-                        break;
-
-                    case ARM_AUTO_HOVER_CAL:
-                        resetAltitudeFusion();
-                        launchAlt       = getAltitude();
-                        calTime         = millis();
-                        calStepTime     = millis();
-                        calLiftoffCount = 0;
-                        state = AUTO_HOVER_CAL;
-                        Serial.printf("[STATE] → AUTO HOVER CAL (launchAlt=%.2fm)\n", launchAlt);
                         break;
 
                     case ARM_ALT_HOLD:
@@ -361,6 +396,7 @@ void runMissionLoop() {
             break;
 
         // ── SPRINTING ────────────────────────────────────────
+        }
         case SPRINTING:
             channels[CH_ANGLE]    = angleModeChannelValue();
             channels[CH_THROTTLE] = SPRINT_THROTTLE;
@@ -390,9 +426,6 @@ void runMissionLoop() {
             }
 
             if (altitude >= SPRINT_CUTOFF_M) {
-                if (MISSION_TYPE == 1) {
-                    ledcWrite(MOTOR_PWM_PIN, MOTOR_DUTY);
-                }
                 resetCascadeController(altitude);
                 state = HOLDING;
                 Serial.printf("[STATE] → HOLDING at %.2fm (target %.2fm)\n",
@@ -457,7 +490,6 @@ void runMissionLoop() {
 
         // ── CUT ──────────────────────────────────────────────
         case CUT:
-            ledcWrite(MOTOR_PWM_PIN, 0);
             channels[CH_ARM]      = 1000;
             channels[CH_THROTTLE] = 1000;
             sendRC();
@@ -487,44 +519,6 @@ void runMissionLoop() {
             Serial.printf("[HOVER] throttle=%d  target=%d  angleAux=%d\n",
                 channels[CH_THROTTLE], (int)HOVER_THROTTLE, channels[CH_ANGLE]);
 #endif
-            break;
-
-        // ── AUTO HOVER CAL ───────────────────────────────────
-        case AUTO_HOVER_CAL:
-            channels[CH_ARM]      = 1800;
-            channels[CH_ANGLE]    = hoverTestAngleModeChannelValue();
-            channels[CH_THROTTLE] = calThrottle;
-            sendRC();
-            digitalWrite(STATUS_LED, millis() % 300 < 150);
-
-            if (millis() - calStepTime >= CAL_STEP_MS) {
-                calStepTime = millis();
-                if (calThrottle < CAL_MAX_THROTTLE) calThrottle += CAL_STEP_US;
-            }
-
-#if SERIAL_FLIGHT_DEBUG
-            Serial.printf("[AUTO_HOVER] alt=%.2fm  throttle=%d\n", altitude, calThrottle);
-#endif
-
-            if (altitude >= CAL_LIFTOFF_M) calLiftoffCount++;
-            else                            calLiftoffCount = 0;
-
-            if (calLiftoffCount >= 5) {
-                HOVER_THROTTLE = constrain(calThrottle + CAL_GE_OFFSET_US, 1200, 1600);
-                if (hoverChar) hoverChar->setValue((uint8_t*)&HOVER_THROTTLE, 2);
-                channels[CH_THROTTLE] = HOVER_THROTTLE;
-                sendRC();
-                state = HOVER_TEST;
-#if SERIAL_FLIGHT_DEBUG
-                Serial.printf("[AUTO_HOVER] liftoff confirmed (%d counts), HOVER_THROTTLE=%d -> HOVER TEST\n",
-                    calLiftoffCount, HOVER_THROTTLE);
-#endif
-                break;
-            }
-
-            if (calThrottle >= CAL_MAX_THROTTLE || millis() - calTime >= CAL_TIMEOUT_MS) {
-                disarmToIdle("[AUTO_HOVER] Calibration failed -> IDLE");
-            }
             break;
 
         // ── ALT HOLD ─────────────────────────────────────────
@@ -692,5 +686,11 @@ void runMissionLoop() {
             sendRC();
             digitalWrite(STATUS_LED, millis() % 100 < 50);
             break;
+    }
+
+    // BLE is best-effort. MSP parsing, control, and this cycle's RC frame have
+    // already completed; skip telemetry whenever the control work ran late.
+    if (micros() - loopStartUs <= BLE_TELEMETRY_CONTROL_BUDGET_US) {
+        pushTelemetry(rawAlt, altitude);
     }
 }
