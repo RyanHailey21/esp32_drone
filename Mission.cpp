@@ -58,16 +58,16 @@ static uint16_t takeoffGuardThrottle(uint32_t timeInAltHoldMs, bool tofReady) {
 
 static void printFlightLogHeader(const char* label, float targetM) {
     flightLogReset();
-    flightLogAppendf("[RUN] %s type=%u hover=%u sprintThr=%u sprintYaw=%u cutoff=%.2f target=%.2f punchStart=%lu punchThr=%u kp=%.2f ki=%.2f kd=%.2f tofFull=%.2f tofZero=%.2f\n",
+    flightLogAppendf("[RUN] %s type=%u hover=%u sprintThr=%u sprintYaw=%u cutoff=%.2f target=%.2f punchStart=%lu punchThr=%u punchYaw=%u kp=%.2f ki=%.2f kd=%.2f tofFull=%.2f tofZero=%.2f\n",
         label, MISSION_TYPE, HOVER_THROTTLE, SPRINT_THROTTLE, SPRINT_YAW,
-        (float)SPRINT_CUTOFF_M, targetM, (unsigned long)PUNCH_START_MS, PUNCH_THROTTLE,
+        (float)SPRINT_CUTOFF_M, targetM, (unsigned long)PUNCH_START_MS, PUNCH_THROTTLE, PUNCH_YAW,
         (float)HOLD_KP, (float)HOLD_KI,
         (float)HOLD_KD, (float)TOF_BLEND_FULL_M, (float)TOF_BLEND_ZERO_M);
     flightLogAppend("[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,usedV,bfV,derV,vsrc,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat,accX,accY,accZ,gyroX,gyroY,gyroZ,roll,pitch,yaw,cycle,sensors,rcThr,cmdYaw,rcArm,rcAngle,vbat,amps,diag,tofRaw,tofReadOk,tofReject,tofDt,tofStatus,tofI2c\n");
 #if SERIAL_FLIGHT_DEBUG
-    Serial.printf("[RUN] %s type=%u hover=%u sprintThr=%u sprintYaw=%u cutoff=%.2f target=%.2f punchStart=%lu punchThr=%u kp=%.2f ki=%.2f kd=%.2f tofFull=%.2f tofZero=%.2f\n",
+    Serial.printf("[RUN] %s type=%u hover=%u sprintThr=%u sprintYaw=%u cutoff=%.2f target=%.2f punchStart=%lu punchThr=%u punchYaw=%u kp=%.2f ki=%.2f kd=%.2f tofFull=%.2f tofZero=%.2f\n",
         label, MISSION_TYPE, HOVER_THROTTLE, SPRINT_THROTTLE, SPRINT_YAW,
-        (float)SPRINT_CUTOFF_M, targetM, (unsigned long)PUNCH_START_MS, PUNCH_THROTTLE,
+        (float)SPRINT_CUTOFF_M, targetM, (unsigned long)PUNCH_START_MS, PUNCH_THROTTLE, PUNCH_YAW,
         (float)HOLD_KP, (float)HOLD_KI,
         (float)HOLD_KD, (float)TOF_BLEND_FULL_M, (float)TOF_BLEND_ZERO_M);
     Serial.println("[FLT] ms,state,phase,alt,lowRel,tof,tofW,baro,cbaro,src,setpt,fV,usedV,bfV,derV,vsrc,desV,aErr,vErr,P,I,rawThr,thr,minThr,maxThr,sat,accX,accY,accZ,gyroX,gyroY,gyroZ,roll,pitch,yaw,cycle,sensors,rcThr,cmdYaw,rcArm,rcAngle,vbat,amps,diag,tofRaw,tofReadOk,tofReject,tofDt,tofStatus,tofI2c");
@@ -426,7 +426,9 @@ void runMissionLoop() {
             }
 
             if (altitude >= SPRINT_CUTOFF_M) {
-                resetCascadeController(altitude);
+                // Preserve sprint output so the cascade slew limiter controls
+                // the handoff instead of stepping directly to hover throttle.
+                primeMissionHandoff(altitude, channels[CH_THROTTLE]);
                 state = HOLDING;
                 Serial.printf("[STATE] → HOLDING at %.2fm (target %.2fm)\n",
                     altitude, (float)TARGET_ALT_M);
@@ -468,6 +470,9 @@ void runMissionLoop() {
         case PUNCHING:
             channels[CH_ANGLE]    = angleModeChannelValue();
             channels[CH_THROTTLE] = PUNCH_THROTTLE;
+            channels[CH_YAW] = constrain((uint16_t)PUNCH_YAW,
+                                         (uint16_t)PUNCH_YAW_MIN_US,
+                                         (uint16_t)PUNCH_YAW_MAX_US);
             markOpenLoopControl(channels[CH_THROTTLE]);
             sendRC();
             logFlightSample(missionTime, "punch", altitude, altitude, channels[CH_THROTTLE]);
@@ -504,6 +509,9 @@ void runMissionLoop() {
         case HOVER_TEST:
             channels[CH_ARM]   = 1800;
             channels[CH_ANGLE] = hoverTestAngleModeChannelValue();
+            channels[CH_YAW]   = constrain((uint16_t)HOVER_TEST_YAW,
+                                           (uint16_t)PUNCH_YAW_MIN_US,
+                                           (uint16_t)PUNCH_YAW_MAX_US);
             // Ramp toward HOVER_THROTTLE at ~200 µs/s so a rapid step from the
             // ARMING low-throttle doesn't trigger Betaflight's ANTI_GRAVITY I-term boost.
             if (channels[CH_THROTTLE] < (uint16_t)HOVER_THROTTLE) {

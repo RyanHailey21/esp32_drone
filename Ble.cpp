@@ -207,6 +207,14 @@ void setupBLE() {
         new CBu16Range(&SPRINT_YAW, "SPRINT_YAW", SPRINT_YAW_MIN_US, SPRINT_YAW_MAX_US),
         (uint8_t*)&SPRINT_YAW, 2);
 
+    makeChar(svc, PUNCH_YAW_UUID,
+        new CBu16Range(&PUNCH_YAW, "PUNCH_YAW", PUNCH_YAW_MIN_US, PUNCH_YAW_MAX_US),
+        (uint8_t*)&PUNCH_YAW, 2);
+
+    makeChar(svc, HOVER_TEST_YAW_UUID,
+        new CBu16Range(&HOVER_TEST_YAW, "HOVER_TEST_YAW", PUNCH_YAW_MIN_US, PUNCH_YAW_MAX_US),
+        (uint8_t*)&HOVER_TEST_YAW, 2);
+
     makeFloat(svc, SPRINT_CUTOFF_UUID, &SPRINT_CUTOFF_M, "SPRINT_CUTOFF_M", 100.0f);
     makeFloat(svc, TARGET_ALT_UUID,    &TARGET_ALT_M,    "TARGET_ALT_M",    10.0f);
     makeFloat(svc, ALT_HOLD_TARGET_UUID, &ALT_HOLD_TARGET_M, "ALT_HOLD_TARGET_M", 10.0f);

@@ -82,7 +82,9 @@ volatile uint8_t pendingBleCommand = 0;
 volatile uint16_t HOVER_THROTTLE  = (uint16_t)(AltitudeParameters::HOVER_THROTTLE + 0.5f);
 volatile uint16_t SPRINT_THROTTLE = 2000;
 volatile uint16_t SPRINT_YAW      = DEFAULT_SPRINT_YAW_US;
-volatile float    SPRINT_CUTOFF_M = 12.0f;
+volatile uint16_t PUNCH_YAW       = DEFAULT_PUNCH_YAW_US;
+volatile uint16_t HOVER_TEST_YAW  = DEFAULT_HOVER_TEST_YAW_US;
+volatile float    SPRINT_CUTOFF_M = 15.8f;
 volatile float    TARGET_ALT_M    = 18.3f;
 volatile float    ALT_HOLD_TARGET_M = 1.5f;
 volatile float    HOLD_KP         = AltitudeParameters::HOLD_KP;
@@ -92,8 +94,8 @@ volatile float    ALT_RAMP_RATE_MPS = DEFAULT_ALT_RAMP_RATE_MPS;
 volatile float    MAX_CLIMB_MPS_TEST = DEFAULT_MAX_CLIMB_MPS_TEST;
 volatile float    MAX_DESCENT_MPS_TEST = DEFAULT_MAX_DESCENT_MPS_TEST;
 volatile float    BF_VARIO_GROUND_EFFECT_M = DEFAULT_BF_VARIO_GROUND_EFFECT_M;
-volatile uint32_t PUNCH_START_MS  = 7500;
-volatile uint16_t PUNCH_THROTTLE  = 1750;
+volatile uint32_t PUNCH_START_MS  = 7000;
+volatile uint16_t PUNCH_THROTTLE  = 2000;
 
 // Runtime BLE-controlled bench mode
 volatile uint8_t  BENCH_MODE_ENABLED = 0;

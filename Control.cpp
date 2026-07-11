@@ -35,6 +35,15 @@ void primeCascadeController(float currentAlt) {
     lastClampedThrottle = HOVER_THROTTLE;
 }
 
+void primeMissionHandoff(float currentAlt, uint16_t currentThrottle) {
+    internalSetpoint = currentAlt;
+    vspeedIntegral = 0.0f;
+    vspeedLastMs = millis();
+    cascadeInvalidSinceMs = 0;
+    lastRawThrottle = currentThrottle;
+    lastClampedThrottle = currentThrottle;
+}
+
 uint16_t holdCascaded(float altitude, bool isMission) {
     uint32_t now = millis();
     float dt = (now - vspeedLastMs) / 1000.0f;

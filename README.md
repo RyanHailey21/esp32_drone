@@ -88,7 +88,7 @@ Flash target: `BETAFPVF4` (select in Betaflight Configurator firmware flasher �
 - Use the per-motor **Reversed** direction checkboxes in the Motors tab to correct any motors spinning the wrong way — this sends a persistent DShot direction command to the ESC
 - Motor test (props off, battery on): spin each motor one at a time and confirm it drives the correct physical corner in the correct direction before first flight
 - Props must match motor direction: CW motor → CW prop, CCW motor → CCW prop (CCW props are typically marked with an "R" suffix)
-- Before a powered autorotor test, remove the props and confirm the Receiver tab shows yaw above `1500` only during an Autorotor Cut sprint. Then verify the assembled aircraft/rotor turns clockwise viewed from above at restrained power; the motor diagram confirms mixer layout, but cannot confirm the one-way bearing installation.
+- Before a powered autorotor test, remove the props and use Hover Test yaw to confirm the commanded yaw channel and direction. Then verify the assembled aircraft/rotor turns clockwise viewed from above at restrained power; the motor diagram confirms mixer layout, but cannot confirm the one-way bearing installation.
 
 **Modes tab**
 - AUX1 HIGH (>1700) → Arm
@@ -208,7 +208,7 @@ flowchart LR
 
 ```
 ARMING    1500ms settle — throttle held at 1000, AUX1 high
-SPRINT    Full SPRINT_THROTTLE until SPRINT_CUTOFF_M (~39ft)
+SPRINT    Full SPRINT_THROTTLE until SPRINT_CUTOFF_M (~49ft)
           Autorotor Cut mode also commands SPRINT_YAW clockwise (viewed from above)
           to start the one-way-bearing rotor in the descent direction
 HOLD      PID controller (Kp/Ki/Kd) stations at TARGET_ALT_M (60ft)
@@ -255,7 +255,7 @@ start chrome C:\Users\ryanh\esp32_drone\quad_tuner.html
 | Bench Mode | Simulates altitude for desk testing. Never fly with this on. |
 | Angle Mode | Drives AUX2 high/low for Betaflight Angle mode. Can be changed only while idle or done. |
 
-**Preflight panel** (always visible after connect) shows full altitude, vario, ToF, baro, and FC diagnostic values while idle/post-flight. During active flight it switches to a compact health packet at ~10Hz: altitude, state, throttle, vario, active sources, and MSP/ToF/attitude/RC health. This keeps BLE notifications small while MSP/RC timing is most important.
+**Preflight panel** (always visible after connect) shows full altitude, vario, ToF, baro, and FC diagnostic values while idle/post-flight. During active flight it switches to a compact health packet at 5Hz: altitude, state, throttle, vario, active sources, and MSP/ToF/attitude/RC health. MSP parsing, control, and RC output run before best-effort BLE telemetry; late cycles skip the notification. This keeps BLE work from delaying flight control.
 
 **Active state strip** appears whenever not idle — shows state name, altitude, throttle, and a KILL button.
 
@@ -270,7 +270,9 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 | `HOVER_THROTTLE` | 1400 µs | uint16 | Current measured hover baseline for 4-inch props with the full autorotation assembly. Fine-tune in Hover Test whenever the flight mass changes. |
 | `SPRINT_THROTTLE` | 2000 us | uint16 | Max-throttle open-loop climb before cascade handoff. |
 | `SPRINT_YAW` | 1700 us | uint16 | Right/clockwise yaw command during `SPRINTING`, viewed from above. Used only by `Autorotor Cut`; `1500` is neutral. |
-| `SPRINT_CUTOFF_M` | 12.0 m | float x100 | Altitude where sprint hands off to cascaded hold. Kept well below 18.3m target to leave braking room. |
+| `PUNCH_YAW` | 2000 us | uint16 | Maximum clockwise yaw command during the final kick in both Powered Land and Autorotor Cut missions. |
+| `HOVER_TEST_YAW` | 1500 us | uint16 | Manual Hover Test yaw command. Defaults neutral; move deliberately toward 1900 to verify the kick direction and authority. |
+| `SPRINT_CUTOFF_M` | 15.8 m | float x100 | Altitude where sprint hands off to cascaded hold, tuned from the 17.54m peak in the previous 15.0m-cutoff run. |
 | `TARGET_ALT_M` | 18.3 m | float×10 | Mission hold target. 60ft = 18.3m. Used by `HOLDING` after sprint cutoff. |
 | `ALT_HOLD_TARGET_M` | 1.5 m | float×10 | Test target used only by the BLE `ALT_HOLD` command; firmware clamps active command to 0.5–10.0m. |
 | `HOLD_KP` | 0.8 | float×10 | Outer altitude P: altitude error (m) to desired vertical speed (m/s). |
@@ -280,8 +282,8 @@ All parameters are writable live over BLE. Changes take effect immediately and p
 | `MAX_CLIMB_MPS_TEST` | 0.25 m/s | float×100 | Alt Hold test-mode climb-speed cap. This was the main limit in the first 10m outdoor attempt. |
 | `MAX_DESCENT_MPS_TEST` | 0.35 m/s | float×100 | Alt Hold test-mode descent-speed cap. Gives the controller enough authority to brake low-altitude overshoot. |
 | `BF_VARIO_GROUND_EFFECT_M` | 1.20 m | float×100 | Height below which the KF inflates Betaflight vario covariance to reduce ground-effect influence. Lower outdoors to trust BF vario earlier. |
-| `PUNCH_START_MS` | 7500 ms | uint32 | Mission clock time to begin final burst. Later = more exit velocity. |
-| `PUNCH_THROTTLE` | 1750 µs | uint16 | Final burst throttle. Set higher only for the actual autorotation mission after climb behavior is verified. |
+| `PUNCH_START_MS` | 7000 ms | uint32 | Mission clock time to begin the full-throttle/full-yaw final second before cutoff. |
+| `PUNCH_THROTTLE` | 2000 µs | uint16 | Full-throttle final kick from `PUNCH_START_MS` until the 8-second cutoff. |
 
 ---
 
@@ -329,11 +331,11 @@ Current default speed limits:
 
 The Alt Hold test setpoint ramps at runtime `ALT_RAMP_RATE_MPS`, and its climb/descent caps are runtime `MAX_CLIMB_MPS_TEST` / `MAX_DESCENT_MPS_TEST`. Mission `HOLDING` does not use that slow test ramp: after the open-loop sprint it immediately captures `TARGET_ALT_M`, allowing the velocity loop to brake the real ascent and then continue toward 18.3m before Punch. The outer loop uses `ALT_HOLD_LOOKAHEAD_S = 0.30s` with velocity clamped to `ALT_HOLD_LOOKAHEAD_MAX_V_MPS = 1.0m/s`, so it controls against a short predicted altitude instead of waiting for the measured altitude to cross the target. In `ALT_HOLD` test mode, a capture assist keeps desired climb at least `ALT_HOLD_CAPTURE_MIN_CLIMB_MPS = 0.16 m/s` while altitude is more than `ALT_HOLD_CAPTURE_MARGIN_M = 0.25m` below target and used vario is still below the minimum climb rate. The throttle floor is intentionally weak: it only applies while climb rate is below `ALT_HOLD_CAPTURE_FLOOR_MAX_V_MPS = 0.05 m/s`, and then only forces `ALT_HOLD_CAPTURE_MIN_OFFSET_US = 10us` above hover. If it is already descending faster than `ALT_HOLD_RECOVERY_DESCENT_MPS = -0.08 m/s`, or raw Betaflight vario is below `ALT_HOLD_RECOVERY_BF_DESCENT_CMS = -80 cm/s` before the KF velocity catches up, the floor rises to `ALT_HOLD_RECOVERY_MIN_OFFSET_US = 70us` above hover so it can arrest a low-altitude drop before ground contact. Alt Hold uses a short `BARO_SETTLE_MS = 500ms` settle at `HOVER_THROTTLE - 80us`; immediately after settle, cascade takes over. The vertical-speed integrator is limited by output authority (`VSPEED_I_MAX_US = 150us`). Throttle pull-down is intentionally asymmetric: negative speed errors use `HOLD_KD_DOWN_SCALE = 0.55`, Alt Hold lower authority is limited to `THR_DOWN_OFFSET_ALT_HOLD_US = 150us`, and throttle can only decrease by `THROTTLE_SLEW_DOWN_US = 25us` per cascade update while upward recovery can rise by `THROTTLE_SLEW_UP_US = 100us`. Mission `HOLDING` keeps `MIN_MISSION_THROTTLE_US = 1050us` and the wider mission throttle band to preserve attitude authority.
 
-The current hover baseline is the full 4-inch autorotation assembly at `1400us`. Firmware still defaults to `DEFAULT_MISSION_TYPE = 0` as the safer powered-landing selection after reboot; select `Autorotor Cut` explicitly for the real mission. `Autorotor Cut` commands `SPRINT_YAW` during the sprint so the one-way bearing mechanically spins the autorotor, then transitions mission end/ceiling/timeout to `CUT`. There is no separate autorotor motor or PWM output. The sprint yaw defaults to `1700us`, which is right/clockwise aircraft yaw viewed from above with the required `AETR1234` channel map. At each non-sprint loop iteration the firmware explicitly restores yaw to `1500us`, so the command cannot leak into hold, punch, landing, or test modes.
+The current hover baseline is the full 4-inch autorotation assembly at `1400us`. Firmware still defaults to `DEFAULT_MISSION_TYPE = 0` as the safer powered-landing selection after reboot; select `Autorotor Cut` explicitly for the real mission. `Autorotor Cut` commands `SPRINT_YAW` during sprint, and both mission types command `PUNCH_YAW` during the final kick. There is no separate autorotor motor or PWM output. Sprint yaw defaults to `1700us` and punch yaw to `2000us`, both right/clockwise aircraft yaw viewed from above with the required `AETR1234` channel map. Every other mission state explicitly restores yaw to `1500us`; Hover Test uses its separate manual yaw value, which also defaults to `1500us`.
 
 Sprint velocity is expected to exceed the low-altitude test envelope. Raw BF/derived vario inputs and the fused control state therefore use a `10m/s` plausibility envelope (`VARIO_MEAS_MAX_CMS` / `VARIO_CONTROL_MAX_CMS`). A bad or stale estimate must persist for `CASCADE_INVALID_GRACE_MS = 300ms` before ending control. Persistent failure starts powered Landing in test/powered modes, but selects `CUT` in Autorotor Cut mode instead of unexpectedly entering powered Landing.
 
-For a powered outdoor validation with the assembly installed, keep `HOVER_THROTTLE = 1400` and select `Mission: Powered Land`: sprint to 12.0m, capture 18.3m, then land under power. For the actual unpowered-descent test, explicitly select `Mission: Autorotor Cut`. Move `SPRINT_CUTOFF_M` based on logs: lower it if the handoff still overshoots, and raise it only if the controller has clear braking margin.
+For a powered outdoor validation with the assembly installed, keep `HOVER_THROTTLE = 1400` and select `Mission: Powered Land`: sprint to 15.8m, capture toward 18.3m, execute the final kick from 7.0s, then land under power. For the actual unpowered-descent test, explicitly select `Mission: Autorotor Cut`. Move `SPRINT_CUTOFF_M` based on logs: lower it if the handoff overshoots, and raise it only if the controller has clear braking margin.
 
 **Landing** uses a velocity controller with flare, driven by the same raw KF vario used by Alt Hold. Above `LANDING_FLARE_ALT_M = 0.45m`, it targets `DESCENT_RATE_MPS = 0.35 m/s` downward. Below flare height it progressively slows, reaching `LANDING_FINAL_DESCENT_MPS = 0.07 m/s` below `LANDING_FINAL_ALT_M = 0.20m`, while also raising the base throttle closer to hover. Flare selection uses `LANDING_LOOKAHEAD_S = 0.25s`, so fast descent starts softening before the measured altitude reaches the threshold. Landing throttle ramps down over `LANDING_ENTRY_RAMP_MS = 900ms` instead of chopping immediately when Land is commanded during a climb. Below `LANDING_LOW_ALT_FLOOR_M = 0.65m`, descent-rate-dependent throttle floors keep enough thrust to avoid hitting the floor and rebounding before flare catches up. Motors cut when valid ToF sees `LANDING_GROUND_M = 0.06m`, when baro/fused altitude reaches ground after real descent, when landing starts already at ground height, or after a 30s timeout. `ALT_HOLD` and `LANDING` also disarm if fresh FC attitude exceeds `ATTITUDE_ABORT_DEG = 45` degrees roll or pitch, which catches net/contact/tip-over failures instead of continuing to drive the motors.
 
@@ -346,7 +348,7 @@ Each `ALT_HOLD` test or mission stores a per-run CSV-style log:
 
 Use `rawThr` versus `thr` plus `sat` to see throttle limiting. `sat=-1` means the controller wanted less throttle than the configured lower clamp; `sat=1` means it wanted more than the upper clamp. `lowRel` is retained as a CSV compatibility column and currently mirrors the fused control altitude. `tofW` confirms whether ToF is contributing to state-machine confidence (`100=fresh`, `80=recent held`, `0=unavailable`) or the KF is falling back toward corrected baro. `src` is `0=baro`, `1=fresh ToF`, `2=blend`, `3=recent held ToF`; `cbaro` is the learned-offset corrected baro altitude. `vsrc` is normally `2=KF`; `bfV` and `derV` are the independent velocity measurements feeding it. `tofRaw` is the direct sensor range in meters, `tofReadOk` is the accepted fresh-read flag, `tofReject` is the firmware wrapper rejection reason (`0` fresh ok, `1` not ready/disabled, `2` `dataReady()` false, `3` timeout, `4` over range, `5` sensor-reader step gate, `6` fusion/KF gate, `7` VL53L1X range-status fail), and `tofDt` is milliseconds since the previous ToF poll attempt. A row may show `tofReject=2` while `tof` is still valid; that means the firmware is using a recent held sample, not a new measurement. `tofStatus` is the Pololu VL53L1X library `ranging_data.range_status` from the last completed read (`0=valid`, `1=sigma fail`, `2=signal fail`, `4=out of bounds`, `7=wrap target fail`, `13=min range fail`, `255=no update`); `tofI2c` is the library's last I2C transmission status.
 
-`cmdYaw` records the ESP32 yaw command. It should be `1700` (or the selected `SPRINT_YAW`) only in autorotor `sprint` rows and `1500` everywhere else. The FC attitude `yaw` column records heading, not the command.
+`cmdYaw` records the ESP32 yaw command. Autorotor Cut uses `SPRINT_YAW` during sprint; both mission types use `PUNCH_YAW` during punch and neutral yaw during hold/landing/cut. Hover Test applies the separately controlled `HOVER_TEST_YAW`, which defaults neutral. The FC attitude `yaw` column records heading, not the command.
 
 The log also includes FC-side diagnostics when MSP replies are available:
 

@@ -78,12 +78,18 @@
 #define BF_GROUND_EFFECT_UUID  "ab0828c7-198e-4351-b779-901fa0e0371e"
 #define MISSION_TYPE_UUID      "ab0828c8-198e-4351-b779-901fa0e0371e"
 #define SPRINT_YAW_UUID        "ab0828c9-198e-4351-b779-901fa0e0371e"
+#define PUNCH_YAW_UUID         "ab0828ca-198e-4351-b779-901fa0e0371e"
+#define HOVER_TEST_YAW_UUID     "ab0828cb-198e-4351-b779-901fa0e0371e"
 
 // Mission hardware mode default. 0=powered landing, 1=autorotor pre-spin + motor cut.
 #define DEFAULT_MISSION_TYPE         0
 #define DEFAULT_SPRINT_YAW_US        1700  // right/CW aircraft yaw viewed from above
 #define SPRINT_YAW_MIN_US            RC_NEUTRAL_US
 #define SPRINT_YAW_MAX_US            1900
+#define DEFAULT_PUNCH_YAW_US         2000
+#define PUNCH_YAW_MIN_US             RC_NEUTRAL_US
+#define PUNCH_YAW_MAX_US             2000
+#define DEFAULT_HOVER_TEST_YAW_US    RC_NEUTRAL_US
 
 // BLE flight-log dump
 #define FLIGHT_LOG_BYTES       60000
