@@ -83,9 +83,9 @@
 
 // Mission hardware mode default. 0=powered landing, 1=autorotor yaw pre-spin + motor cut.
 #define DEFAULT_MISSION_TYPE         1
-#define DEFAULT_SPRINT_YAW_US        1700  // right/CW aircraft yaw viewed from above
+#define DEFAULT_SPRINT_YAW_US        2000  // maximum right/CW aircraft yaw viewed from above
 #define SPRINT_YAW_MIN_US            RC_NEUTRAL_US
-#define SPRINT_YAW_MAX_US            1900
+#define SPRINT_YAW_MAX_US            2000
 #define DEFAULT_PUNCH_YAW_US         2000
 #define PUNCH_YAW_MIN_US             RC_NEUTRAL_US
 #define PUNCH_YAW_MAX_US             2000
