@@ -59,7 +59,7 @@ let chars = {};
 let device = null, connected = false;
 let benchMode = 0;
 let angleMode = 0;
-let missionType = 0;
+let missionType = 1;
 let prevStateId = -1;
 let suppressPresetAutosave = false;
 let missionStartMs = null; // performance.now() timestamp; null while not armed
@@ -199,7 +199,7 @@ function onDisconnected() {
   connected = false; chars = {};
   benchMode = 0;
   angleMode = 0;
-  missionType = 0;
+  missionType = 1;
   _bleQ = Promise.resolve();
   setBenchButton();
   setAngleButton();

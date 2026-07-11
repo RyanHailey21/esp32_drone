@@ -81,14 +81,15 @@
 #define PUNCH_YAW_UUID         "ab0828ca-198e-4351-b779-901fa0e0371e"
 #define HOVER_TEST_YAW_UUID     "ab0828cb-198e-4351-b779-901fa0e0371e"
 
-// Mission hardware mode default. 0=powered landing, 1=autorotor pre-spin + motor cut.
-#define DEFAULT_MISSION_TYPE         0
+// Mission hardware mode default. 0=powered landing, 1=autorotor yaw pre-spin + motor cut.
+#define DEFAULT_MISSION_TYPE         1
 #define DEFAULT_SPRINT_YAW_US        1700  // right/CW aircraft yaw viewed from above
 #define SPRINT_YAW_MIN_US            RC_NEUTRAL_US
 #define SPRINT_YAW_MAX_US            1900
 #define DEFAULT_PUNCH_YAW_US         2000
 #define PUNCH_YAW_MIN_US             RC_NEUTRAL_US
 #define PUNCH_YAW_MAX_US             2000
+#define MISSION_YAW_SPIN_START_MS    6000
 #define DEFAULT_HOVER_TEST_YAW_US    RC_NEUTRAL_US
 
 // BLE flight-log dump
