@@ -100,7 +100,6 @@ extern volatile uint8_t pendingBleCommand;
 // ── Tunable Parameters (BLE-writable) ────────────────────────
 extern volatile uint16_t HOVER_THROTTLE;
 extern volatile uint16_t SPRINT_THROTTLE;
-extern volatile uint16_t SPRINT_YAW;
 extern volatile uint16_t PUNCH_YAW;
 extern volatile uint16_t HOVER_TEST_YAW;
 extern volatile float    SPRINT_CUTOFF_M;

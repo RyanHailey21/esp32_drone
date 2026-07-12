@@ -203,10 +203,6 @@ void setupBLE() {
         new CBu16(&SPRINT_THROTTLE, "SPRINT_THROTTLE"),
         (uint8_t*)&SPRINT_THROTTLE, 2);
 
-    makeChar(svc, SPRINT_YAW_UUID,
-        new CBu16Range(&SPRINT_YAW, "SPRINT_YAW", SPRINT_YAW_MIN_US, SPRINT_YAW_MAX_US),
-        (uint8_t*)&SPRINT_YAW, 2);
-
     makeChar(svc, PUNCH_YAW_UUID,
         new CBu16Range(&PUNCH_YAW, "PUNCH_YAW", PUNCH_YAW_MIN_US, PUNCH_YAW_MAX_US),
         (uint8_t*)&PUNCH_YAW, 2);

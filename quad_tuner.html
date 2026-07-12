@@ -328,18 +328,6 @@
       <div class="param-desc">Open-loop sprint throttle before cascade handoff. Current profile uses max throttle with an early cutoff.</div>
     </div>
 
-    <div class="param" id="param-sprint-yaw">
-      <div class="param-head">
-        <span class="param-label">Sprint CW Yaw</span>
-        <div class="param-readout">
-          <span class="param-value" id="val-sprint-yaw">2000</span><span class="param-unit">µs</span>
-        </div>
-      </div>
-      <input type="range" class="sprint" id="slider-sprint-yaw" min="1500" max="2000" value="2000" step="10">
-      <div class="param-bounds"><span>1500 neutral</span><span>2000 max CW</span></div>
-      <div class="param-desc">Clockwise aircraft yaw viewed from above during Sprint. Applied only in Autorotor Cut mode; all other phases force yaw neutral.</div>
-    </div>
-
     <div class="param" id="param-cutoff">
       <div class="param-head">
         <span class="param-label">Sprint Cutoff</span>
@@ -502,10 +490,10 @@
       <div class="param-head">
         <span class="param-label">Punch CW Yaw</span>
         <div class="param-readout">
-          <span class="param-value" id="val-punch-yaw">2000</span><span class="param-unit">µs</span>
+          <span class="param-value" id="val-punch-yaw">1900</span><span class="param-unit">µs</span>
         </div>
       </div>
-      <input type="range" class="punch" id="slider-punch-yaw" min="1500" max="2000" value="2000" step="10">
+      <input type="range" class="punch" id="slider-punch-yaw" min="1500" max="2000" value="1900" step="10">
       <div class="param-bounds"><span>1500 neutral</span><span>2000 max CW</span></div>
       <div class="param-desc">Yaw command during the autorotor kick. Use the separate Hover Test yaw control to verify direction and authority.</div>
     </div>

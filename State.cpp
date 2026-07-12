@@ -81,7 +81,6 @@ volatile uint8_t pendingBleCommand = 0;
 // ── Tunable Parameters (BLE-writable) ────────────────────────
 volatile uint16_t HOVER_THROTTLE  = (uint16_t)(AltitudeParameters::HOVER_THROTTLE + 0.5f);
 volatile uint16_t SPRINT_THROTTLE = 2000;
-volatile uint16_t SPRINT_YAW      = DEFAULT_SPRINT_YAW_US;
 volatile uint16_t PUNCH_YAW       = DEFAULT_PUNCH_YAW_US;
 volatile uint16_t HOVER_TEST_YAW  = DEFAULT_HOVER_TEST_YAW_US;
 volatile float    SPRINT_CUTOFF_M = 15.8f;

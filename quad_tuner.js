@@ -20,7 +20,6 @@ const MAX_CLIMB_TEST_UUID    = 'ab0828c5-198e-4351-b779-901fa0e0371e';
 const MAX_DESCENT_TEST_UUID  = 'ab0828c6-198e-4351-b779-901fa0e0371e';
 const BF_GROUND_EFFECT_UUID  = 'ab0828c7-198e-4351-b779-901fa0e0371e';
 const MISSION_TYPE_UUID      = 'ab0828c8-198e-4351-b779-901fa0e0371e';
-const SPRINT_YAW_UUID        = 'ab0828c9-198e-4351-b779-901fa0e0371e';
 const PUNCH_YAW_UUID         = 'ab0828ca-198e-4351-b779-901fa0e0371e';
 const HOVER_TEST_YAW_UUID     = 'ab0828cb-198e-4351-b779-901fa0e0371e';
 
@@ -112,7 +111,7 @@ function setStatus(s, t) {
 }
 
 function enableAll(on) {
-  ['sprint','sprint-yaw','cutoff','target-alt','alt-hold-target','kp','ki','kd','alt-ramp','max-climb','max-descent','bf-ground-effect','punch-start','punch-throt','punch-yaw'].forEach(id => {
+  ['sprint','cutoff','target-alt','alt-hold-target','kp','ki','kd','alt-ramp','max-climb','max-descent','bf-ground-effect','punch-start','punch-throt','punch-yaw'].forEach(id => {
     const el = document.getElementById('param-' + id);
     if (el) el.classList.toggle('enabled', on);
   });
@@ -147,7 +146,6 @@ async function connect() {
 
     chars.hover      = await service.getCharacteristic(HOVER_UUID);
     chars.sprint     = await service.getCharacteristic(SPRINT_THROT_UUID);
-    chars.sprintYaw  = await service.getCharacteristic(SPRINT_YAW_UUID);
     chars.punchYaw   = await service.getCharacteristic(PUNCH_YAW_UUID);
     chars.hoverTestYaw = await service.getCharacteristic(HOVER_TEST_YAW_UUID);
     chars.cutoff     = await service.getCharacteristic(SPRINT_CUTOFF_UUID);
@@ -220,7 +218,6 @@ async function readAll() {
   try {
     const hover      = new DataView((await chars.hover.readValue()).buffer).getUint16(0, true);
     const sprint     = new DataView((await chars.sprint.readValue()).buffer).getUint16(0, true);
-    const sprintYaw  = new DataView((await chars.sprintYaw.readValue()).buffer).getUint16(0, true);
     const punchYaw   = new DataView((await chars.punchYaw.readValue()).buffer).getUint16(0, true);
     const hoverTestYaw = new DataView((await chars.hoverTestYaw.readValue()).buffer).getUint16(0, true);
     const cutoffRaw  = new DataView((await chars.cutoff.readValue()).buffer).getUint16(0, true);
@@ -241,7 +238,6 @@ async function readAll() {
 
     setParam('hover',       hover,      v => v,                   v => v);
     setParam('sprint',      sprint,     v => v,                   v => v);
-    setParam('sprint-yaw',  sprintYaw,  v => v,                   v => v);
     setParam('punch-yaw',   punchYaw,   v => v,                   v => v);
     setParam('hover-yaw',   hoverTestYaw, v => v,                 v => v);
     setParam('cutoff',      cutoffRaw,  v => (v/100).toFixed(1),  v => v);
@@ -539,7 +535,6 @@ const SLIDERS = [
   { id: 'bf-ground-effect', char: 'bfGroundEffect', enc: v => u16buf(v), fmt: v => (v/100).toFixed(2), label: v => 'BF_GROUND_EFFECT -> ' + (v/100).toFixed(2) + 'm', ms: 150 },
   { id: 'hover',       char: 'hover',      enc: v => u16buf(v),  fmt: v => String(v),           label: v => 'HOVER_THROTTLE → ' + v,                        ms: 30  },
   { id: 'sprint',      char: 'sprint',     enc: v => u16buf(v),  fmt: v => String(v),           label: v => 'SPRINT_THROTTLE → ' + v,                       ms: 150 },
-  { id: 'sprint-yaw',  char: 'sprintYaw',  enc: v => u16buf(v),  fmt: v => String(v),           label: v => 'SPRINT_YAW → ' + v + ' (CW)',                 ms: 150 },
   { id: 'punch-yaw',   char: 'punchYaw',   enc: v => u16buf(v),  fmt: v => String(v),           label: v => 'PUNCH_YAW → ' + v + ' (CW)',                  ms: 100 },
   { id: 'cutoff',      char: 'cutoff',     enc: v => u16buf(v),  fmt: v => (v/100).toFixed(1),  label: v => 'SPRINT_CUTOFF → ' + (v/100).toFixed(1) + 'm', ms: 150 },
   { id: 'target-alt',  char: 'targetAlt',  enc: v => u16buf(v),  fmt: v => (v/10).toFixed(1),   label: v => 'TARGET_ALT → ' + (v/10).toFixed(1) + 'm',     ms: 150 },
